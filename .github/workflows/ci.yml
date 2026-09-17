@@ -1,0 +1,14 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ci-stub:
+    name: CI Stub
+    runs-on: ubuntu-latest
+    steps:
+      - name: Stub check
+        run: echo "CI stub placeholder"

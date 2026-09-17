@@ -1,0 +1,31 @@
+name: Story
+description: Create a user story.
+title: "[Epic Title] Title"
+labels: ["story"]
+projects: ["CFdefense/projects/4"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Describe the feature or requirement from a user perspective.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance Criteria
+      description: Define what must be true for this story to be considered complete.
+      value: |
+        - [ ] Criteria 1
+        - [ ] Criteria 2
+        - [ ] Criteria 3
+    validations:
+      required: true
+  - type: textarea
+    id: dev-notes
+    attributes:
+      label: Developer Notes
+      description: (Optional) Additional notes, considerations, or specific details for implementation
+    validations:
+      required: false
