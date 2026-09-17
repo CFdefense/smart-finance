@@ -6,8 +6,8 @@ on:
   pull_request:
 
 jobs:
-  ci-stub:
-    name: CI Stub
+  cicd:
+    name: CICD
     runs-on: ubuntu-latest
     steps:
       - name: Stub check
