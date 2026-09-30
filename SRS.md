@@ -47,7 +47,7 @@ Plain-language goals, written so anyone (not just developers) can check them.
 - **FR-2.2** \[M\] A user can see their connected accounts and balances.
 - **FR-2.3** \[N\] A user can disconnect a bank.
 - **FR-2.4** \[M\] The system syncs new transactions when the user presses Refresh.
-- **FR-2.5** \[L\] The system syncs automatically when Plaid sends a webhook.
+- **FR-2.5** \[M\] The system syncs automatically when Plaid sends a webhook.
 
 ### FR-3 Budgets and Goals
 
@@ -73,7 +73,7 @@ Plain-language goals, written so anyone (not just developers) can check them.
 
 - **FR-6.1** \[M\] A user can see this month’s spending by category.
 - **FR-6.2** \[N\] A user can see how spending changed month to month.
-- **FR-6.3** \[N\] A user can see money in vs. money out for a chosen month.
+- **FR-6.3** \[M\] A user can see money in vs. money out for a chosen month.
 - **FR-6.4** \[L\] A user can see projected spending for the rest of the month.
 
 ### FR-7 AI Chat Assistant
