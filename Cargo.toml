@@ -1,0 +1,44 @@
+[package]
+name = "smart-finance"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.80"
+authors = ["Smart Finance Contributors"]
+description = "Personal finance management API"
+license = "MIT"
+repository = "https://github.com/cfarrell/smart-finance"
+readme = "README.md"
+keywords = ["finance", "api", "web"]
+categories = ["web-programming::http-server"]
+publish = false
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+unused_import_braces = "warn"
+unused_qualifications = "warn"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+missing_errors_doc = "allow"
+
+[dependencies]
+
+[dev-dependencies]
+
+[profile.dev]
+opt-level = 0
+debug = true
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+panic = "abort"
+
+[profile.test]
+opt-level = 1
