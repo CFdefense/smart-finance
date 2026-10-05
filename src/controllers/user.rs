@@ -25,12 +25,15 @@ use crate::{
 };
 
 /// `OpenAPI` doc for user authentication routes.
+///
+/// Constructed only by the `#[openapi]` macro and the root [`crate::swagger::ApiDoc`].
 #[derive(OpenApi)]
 #[openapi(
     paths(api_signup, api_login, api_logout),
     info(title = "User Routes", description = "Authentication endpoints."),
     tags((name = "User"))
 )]
+#[allow(dead_code)]
 pub struct UserApiDoc;
 
 /// Abstracts cookie writing so handlers can be tested without a real cookie jar.

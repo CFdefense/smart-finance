@@ -2,16 +2,24 @@
 
 #![allow(unused_qualifications)] // utoipa nest!() macro forces qualified paths
 
-use axum::Router;
-use std::{fs, io::Write, path::PathBuf};
 use utoipa::{
     openapi::security::{ApiKey, ApiKeyValue, SecurityScheme},
     Modify, OpenApi,
 };
+
+#[cfg(all(not(test), debug_assertions))]
+use axum::Router;
+#[cfg(all(not(test), debug_assertions))]
+use std::{fs, io::Write, path::PathBuf};
+#[cfg(all(not(test), debug_assertions))]
 use utoipa_axum::router::OpenApiRouter;
+#[cfg(all(not(test), debug_assertions))]
 use utoipa_swagger_ui::SwaggerUi;
 
 /// Security scheme modifier — adds the `auth-token` cookie scheme to the `OpenAPI` spec.
+///
+/// Constructed only by the `#[openapi(modifiers(...))]` macro on [`ApiDoc`].
+#[allow(dead_code)]
 pub struct SecurityAddon;
 
 impl Modify for SecurityAddon {
@@ -29,6 +37,8 @@ impl Modify for SecurityAddon {
 }
 
 /// Root `OpenAPI` document for the Smart Finance API.
+///
+/// Constructed only by the `#[openapi]` macro and [`crate::bin::gen_openapi`].
 #[derive(OpenApi)]
 #[openapi(
     modifiers(&SecurityAddon),
@@ -44,6 +54,7 @@ impl Modify for SecurityAddon {
         (url = "http://localhost:3001", description = "Local development server")
     )
 )]
+#[allow(dead_code)]
 pub struct ApiDoc;
 
 /// Merges Swagger UI into the router and writes `docs/openapi.json` to disk.
