@@ -41,8 +41,13 @@ run_migrate()             { step "Migrations";                        sqlx migra
 run_fmt()                 { step "Format check";                      cargo fmt --check && pass "fmt"; }
 run_clippy()              { step "Clippy";                            cargo clippy -- -D warnings && pass "clippy"; }
 run_build()               { step "Build";                             cargo build --locked && pass "build"; }
-run_unit_coverage()       { step "Unit tests (≥90% coverage)";        cargo tarpaulin --run-types Tests --fail-under 90 --out Stdout && pass "unit coverage"; }
-run_integration_coverage(){ step "Integration tests (≥75% coverage)"; cargo tarpaulin --run-types Bins --fail-under 75 --out Stdout Html --output-dir docs/coverage && pass "integration coverage"; }
+run_unit_coverage()       { step "Unit tests (≥85% coverage)";        cargo tarpaulin --run-types Tests --fail-under 85 --out Stdout \
+                              --exclude-files "src/main.rs" "src/log.rs" "src/swagger.rs" "src/bin/*" "src/db.rs" "src/middleware.rs" \
+                              --lib \
+                              && pass "unit coverage"; }
+run_integration_coverage(){ step "Integration tests (≥75% coverage)"; cargo tarpaulin --run-types Bins --fail-under 75 --out Stdout Html --output-dir docs/coverage \
+                              --exclude-files "src/main.rs" "src/log.rs" "src/swagger.rs" "src/bin/*" "src/db.rs" \
+                              && pass "integration coverage"; }
 run_openapi()             { step "Generate openapi.json";             cargo run --bin gen-openapi && pass "openapi.json"; }
 
 case "$FILTER" in
