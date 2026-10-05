@@ -19,6 +19,20 @@ pub struct AuthUser {
     pub id: i32,
 }
 
+/// Parses a raw `auth-token` value into `(user_id, expiry_unix_seconds)`.
+///
+/// Expected format: `user-<id>.<exp>.sign`
+/// Returns `None` if the token is malformed.
+pub fn parse_auth_token(token: &str) -> Option<(i32, i64)> {
+    let parts: Vec<&str> = token.split('.').collect();
+    if parts.len() != 3 || parts[2] != "sign" || !parts[0].starts_with("user-") {
+        return None;
+    }
+    let user_id: i32 = parts[0][5..].parse().ok()?;
+    let exp: i64 = parts[1].parse().ok()?;
+    Some((user_id, exp))
+}
+
 /// Axum middleware that authenticates requests via a private `auth-token` cookie.
 ///
 /// Decrypts the cookie with the `Key` from request extensions, validates the
@@ -40,19 +54,9 @@ pub async fn middleware_auth(cookies: Cookies, mut req: Request, next: Next) -> 
     };
     let token = decrypted.value().to_string();
 
-    // Expected format: user-<id>.<exp>.sign
-    let parts: Vec<&str> = token.split('.').collect();
-    if parts.len() != 3 || parts[2] != "sign" || !parts[0].starts_with("user-") {
-        return AppError::Unauthorized.into_response();
-    }
-
-    let user_id: i32 = match parts[0][5..].parse() {
-        Ok(v) => v,
-        Err(_) => return AppError::Unauthorized.into_response(),
-    };
-    let exp: i64 = match parts[1].parse() {
-        Ok(v) => v,
-        Err(_) => return AppError::Unauthorized.into_response(),
+    let (user_id, exp) = match parse_auth_token(&token) {
+        Some(v) => v,
+        None => return AppError::Unauthorized.into_response(),
     };
 
     let now = Utc::now().timestamp();
@@ -99,4 +103,47 @@ pub async fn middleware_auth(cookies: Cookies, mut req: Request, next: Next) -> 
 
     req.extensions_mut().insert(AuthUser { id: user_id });
     next.run(req).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_valid_token() {
+        assert_eq!(
+            parse_auth_token("user-42.9999999999.sign"),
+            Some((42, 9_999_999_999))
+        );
+    }
+
+    #[test]
+    fn parse_wrong_suffix() {
+        assert_eq!(parse_auth_token("user-42.9999999999.nope"), None);
+    }
+
+    #[test]
+    fn parse_missing_user_prefix() {
+        assert_eq!(parse_auth_token("42.9999999999.sign"), None);
+    }
+
+    #[test]
+    fn parse_non_numeric_id() {
+        assert_eq!(parse_auth_token("user-abc.9999999999.sign"), None);
+    }
+
+    #[test]
+    fn parse_non_numeric_exp() {
+        assert_eq!(parse_auth_token("user-42.abc.sign"), None);
+    }
+
+    #[test]
+    fn parse_wrong_part_count() {
+        assert_eq!(parse_auth_token("user-42.sign"), None);
+    }
+
+    #[test]
+    fn parse_empty_string() {
+        assert_eq!(parse_auth_token(""), None);
+    }
 }
