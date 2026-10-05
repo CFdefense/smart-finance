@@ -4,6 +4,8 @@ use sqlx::{postgres::PgPoolOptions, PgPool};
 
 /// Creates a Postgres connection pool from the `DATABASE_URL` environment variable.
 ///
+/// # Panics
+///
 /// Panics if `DATABASE_URL` is not set or if the connection cannot be established.
 pub async fn create_pool() -> PgPool {
     let database_url =

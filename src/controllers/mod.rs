@@ -1,7 +1,7 @@
 //! API controllers.
 //!
 //! In dev builds, [`AxumRouter`] is an [`utoipa_axum::router::OpenApiRouter`] so
-//! that route handlers can register OpenAPI metadata. In test and release builds
+//! that route handlers can register `OpenAPI` metadata. In test and release builds
 //! it is a plain [`axum::Router`].
 
 pub mod user;

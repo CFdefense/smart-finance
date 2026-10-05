@@ -1,17 +1,17 @@
-//! Swagger / OpenAPI documentation configuration.
+//! Swagger / `OpenAPI` documentation configuration.
+
+#![allow(unused_qualifications)] // utoipa nest!() macro forces qualified paths
 
 use axum::Router;
 use std::{fs, io::Write, path::PathBuf};
 use utoipa::{
-    Modify, OpenApi,
     openapi::security::{ApiKey, ApiKeyValue, SecurityScheme},
+    Modify, OpenApi,
 };
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_swagger_ui::SwaggerUi;
 
-use crate::controllers::user::UserApiDoc;
-
-/// Security scheme modifier — adds the `auth-token` cookie scheme to the OpenAPI spec.
+/// Security scheme modifier — adds the `auth-token` cookie scheme to the `OpenAPI` spec.
 pub struct SecurityAddon;
 
 impl Modify for SecurityAddon {
@@ -28,7 +28,7 @@ impl Modify for SecurityAddon {
     }
 }
 
-/// Root OpenAPI document for the Smart Finance API.
+/// Root `OpenAPI` document for the Smart Finance API.
 #[derive(OpenApi)]
 #[openapi(
     modifiers(&SecurityAddon),
@@ -38,7 +38,7 @@ impl Modify for SecurityAddon {
         description = "The public API documentation for the Smart Finance web application."
     ),
     nest(
-        (path = "/api/user", api = UserApiDoc)
+        (path = "/api/user", api = crate::controllers::user::UserApiDoc)
     ),
     servers(
         (url = "http://localhost:3001", description = "Local development server")
@@ -49,14 +49,18 @@ pub struct ApiDoc;
 /// Merges Swagger UI into the router and writes `docs/openapi.json` to disk.
 ///
 /// Only compiled in non-test debug builds.
+///
+/// # Panics
+///
+/// Panics if the docs directory or `openapi.json` file cannot be created or written.
 #[cfg(all(not(test), debug_assertions))]
 pub fn merge_swagger(router: OpenApiRouter) -> Router {
     let doc = ApiDoc::openapi();
 
     let docs_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("docs");
     fs::create_dir_all(&docs_path).expect("Could not create docs directory");
-    let mut file = fs::File::create(docs_path.join("openapi.json"))
-        .expect("Could not create openapi.json");
+    let mut file =
+        fs::File::create(docs_path.join("openapi.json")).expect("Could not create openapi.json");
     file.write_all(
         doc.to_pretty_json()
             .expect("Could not serialise OpenAPI doc")
@@ -64,6 +68,8 @@ pub fn merge_swagger(router: OpenApiRouter) -> Router {
     )
     .expect("Could not write openapi.json");
 
-    let (router, api) = OpenApiRouter::with_openapi(doc).merge(router).split_for_parts();
+    let (router, api) = OpenApiRouter::with_openapi(doc)
+        .merge(router)
+        .split_for_parts();
     router.merge(SwaggerUi::new("/swagger").url("/docs/openapi.json", api))
 }

@@ -18,12 +18,16 @@ static INIT_LOG: Once = Once::new();
 /// Installs a panic hook that writes a crash log to `logs/crash.log`.
 ///
 /// Sets `RUST_BACKTRACE=full` so the captured backtrace is complete.
+///
+/// # Panics
+///
+/// Panics if the log directory cannot be created or the crash log file cannot be written.
 pub fn init_panic_handler() {
     std::env::set_var("RUST_BACKTRACE", "full");
     std::panic::set_hook(Box::new(move |panic_info| {
         const WRITE_ERR: &str = "Could not write to crash log";
         error!("{}", panic_info);
-        println!("{}", panic_info);
+        println!("{panic_info}");
 
         fs::create_dir_all(LOG_DIR).expect("Could not create log dir for crash log");
         let file = File::create(Path::new(LOG_DIR).join(CRASH_LOG))

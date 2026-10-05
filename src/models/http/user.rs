@@ -53,10 +53,10 @@ impl SignupRequest {
         if password.len() > 128 {
             return Err("Password must be 128 characters or less".to_string());
         }
-        if !password.chars().any(|c| c.is_uppercase()) {
+        if !password.chars().any(char::is_uppercase) {
             return Err("Password must contain at least one uppercase letter".to_string());
         }
-        if !password.chars().any(|c| c.is_lowercase()) {
+        if !password.chars().any(char::is_lowercase) {
             return Err("Password must contain at least one lowercase letter".to_string());
         }
         if !password.chars().any(|c| c.is_ascii_digit()) {

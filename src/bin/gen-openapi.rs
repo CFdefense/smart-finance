@@ -1,6 +1,6 @@
 //! Standalone binary that generates `docs/openapi.json` from the live API definition.
 //!
-//! Used in CI to produce the OpenAPI spec for GitHub Pages deployment.
+//! Used in CI to produce the `OpenAPI` spec for GitHub Pages deployment.
 //! Requires no database, no environment variables, and no running server.
 
 use smart_finance::swagger::ApiDoc;

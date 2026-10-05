@@ -7,7 +7,6 @@ pub struct UserRow {
     /// Primary key.
     pub id: i32,
     /// Unique email address.
-    #[allow(dead_code)]
     pub email: String,
     /// Argon2 hashed password.
     pub password_hash: String,

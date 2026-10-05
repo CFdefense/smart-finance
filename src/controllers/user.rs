@@ -21,9 +21,10 @@ use crate::{
     error::{ApiResult, AppError},
     middleware::{middleware_auth, AuthUser},
     models::http::user::{LoginRequest, SignupRequest},
+    models::sql::user::UserRow,
 };
 
-/// OpenAPI doc for user authentication routes.
+/// `OpenAPI` doc for user authentication routes.
 #[derive(OpenApi)]
 #[openapi(
     paths(api_signup, api_login, api_logout),
@@ -48,11 +49,11 @@ impl CookieStore for Cookies {
 ///
 /// Token format: `user-<id>.<exp_unix_seconds>.sign`.
 /// Expiry: 3 days from now, or `UNIX_EPOCH` when `expired = true`.
-fn set_cookie(user_id: i32, expired: bool, cookies: &mut impl CookieStore, key: &Key) {
+fn set_cookie(user_id: i32, is_expired: bool, cookies: &mut impl CookieStore, key: &Key) {
     let domain = option_env!("DOMAIN").unwrap_or("localhost");
     let on_production = option_env!("APP_ENV").unwrap_or("development") == "production";
 
-    let (expires, max_age) = if expired {
+    let (expires, max_age) = if is_expired {
         (OffsetDateTime::UNIX_EPOCH, Duration::days(0))
     } else {
         let age = Duration::seconds(crate::global::SESSION_DURATION_SECS);
@@ -178,25 +179,30 @@ pub async fn api_login(
 ) -> ApiResult<()> {
     debug!("HANDLER ->> POST /api/user/login email={}", payload.email);
 
-    let row: Option<(i32, String)> =
-        sqlx::query_as("SELECT id, password_hash FROM users WHERE email = $1")
-            .bind(&payload.email)
-            .fetch_optional(&pool)
-            .await
-            .map_err(AppError::from)?;
+    let user_result = sqlx::query_as!(
+        UserRow,
+        "SELECT id, email, password_hash FROM users WHERE email = $1",
+        payload.email
+    )
+    .fetch_optional(&pool)
+    .await;
 
-    let (user_id, stored_hash) =
-        row.ok_or_else(|| AppError::BadRequest("invalid credentials".to_string()))?;
+    match user_result {
+        Ok(Some(user)) => {
+            debug!("login: found user id={} email={}", user.id, user.email);
 
-    let parsed = PasswordHash::new(&stored_hash)
-        .map_err(|e| AppError::Internal(format!("hash parse error: {e:?}")))?;
+            let parsed = PasswordHash::new(&user.password_hash)
+                .map_err(|e| AppError::Internal(format!("hash parse error: {e:?}")))?;
 
-    Argon2::default()
-        .verify_password(payload.password.as_bytes(), &parsed)
-        .map_err(|_| AppError::BadRequest("invalid credentials".to_string()))?;
+            Argon2::default()
+                .verify_password(payload.password.as_bytes(), &parsed)
+                .map_err(|_| AppError::BadRequest("invalid credentials".to_string()))?;
 
-    set_cookie(user_id, false, &mut cookies, &key);
-    Ok(())
+            set_cookie(user.id, false, &mut cookies, &key);
+            Ok(())
+        }
+        Ok(None) | Err(_) => Err(AppError::BadRequest("invalid credentials".to_string())),
+    }
 }
 
 /// Log out the current user.

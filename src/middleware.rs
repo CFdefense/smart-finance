@@ -48,15 +48,13 @@ pub async fn middleware_auth(cookies: Cookies, mut req: Request, next: Next) -> 
         None => return AppError::Unauthorized.into_response(),
     };
 
-    let decrypted = match cookies.private(&key).get("auth-token") {
-        Some(c) => c,
-        None => return AppError::Unauthorized.into_response(),
+    let Some(decrypted) = cookies.private(&key).get("auth-token") else {
+        return AppError::Unauthorized.into_response();
     };
     let token = decrypted.value().to_string();
 
-    let (user_id, exp) = match parse_auth_token(&token) {
-        Some(v) => v,
-        None => return AppError::Unauthorized.into_response(),
+    let Some((user_id, exp)) = parse_auth_token(&token) else {
+        return AppError::Unauthorized.into_response();
     };
 
     let now = Utc::now().timestamp();

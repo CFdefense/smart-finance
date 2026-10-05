@@ -12,7 +12,7 @@ use tracing::error;
 
 /// Convenience alias — controllers return `ApiResult<T>` instead of `Result<T, AppError>`.
 #[cfg(not(tarpaulin_include))]
-pub type ApiResult<T> = std::result::Result<T, AppError>;
+pub type ApiResult<T> = Result<T, AppError>;
 
 /// All error conditions the API can surface to a caller.
 #[derive(Debug)]
@@ -24,7 +24,8 @@ pub enum AppError {
     BadRequest(String),
     /// The caller is not authenticated.
     Unauthorized,
-    /// The requested resource does not exist.
+    /// The requested resource does not exist — returned by future resource endpoints.
+    #[allow(dead_code)]
     NotFound,
     /// The operation conflicts with existing state.
     Conflict(String),
@@ -37,8 +38,7 @@ impl AppError {
     /// Maps this error to its HTTP status code.
     pub fn status_code(&self) -> StatusCode {
         match self {
-            AppError::Validation(_) => StatusCode::BAD_REQUEST,
-            AppError::BadRequest(_) => StatusCode::BAD_REQUEST,
+            AppError::Validation(_) | AppError::BadRequest(_) => StatusCode::BAD_REQUEST,
             AppError::Unauthorized => StatusCode::UNAUTHORIZED,
             AppError::NotFound => StatusCode::NOT_FOUND,
             AppError::Conflict(_) => StatusCode::CONFLICT,
@@ -50,22 +50,22 @@ impl AppError {
     pub fn log(&self) {
         match self {
             AppError::Validation(m) => {
-                error!(target: "api_error", kind = "validation", message = %m)
+                error!(target: "api_error", kind = "validation", message = %m);
             }
             AppError::BadRequest(m) => {
-                error!(target: "api_error", kind = "bad_request", message = %m)
+                error!(target: "api_error", kind = "bad_request", message = %m);
             }
             AppError::Unauthorized => {
-                error!(target: "api_error", kind = "unauthorized")
+                error!(target: "api_error", kind = "unauthorized");
             }
             AppError::NotFound => {
-                error!(target: "api_error", kind = "not_found")
+                error!(target: "api_error", kind = "not_found");
             }
             AppError::Conflict(m) => {
-                error!(target: "api_error", kind = "conflict", message = %m)
+                error!(target: "api_error", kind = "conflict", message = %m);
             }
             AppError::Internal(m) => {
-                error!(target: "api_error", kind = "internal", message = %m)
+                error!(target: "api_error", kind = "internal", message = %m);
             }
         }
     }
