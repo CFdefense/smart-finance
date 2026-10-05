@@ -17,6 +17,7 @@ unsafe_code = "forbid"
 missing_docs = "warn"
 unused_import_braces = "warn"
 unused_qualifications = "warn"
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tarpaulin_include)'] }
 
 [lints.clippy]
 all = { level = "warn", priority = -1 }
@@ -46,6 +47,8 @@ argon2 = "0.5"
 regex = "1"
 
 [dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
 
 [profile.dev]
 opt-level = 0
