@@ -19,3 +19,6 @@ anomaly/
 
 # Tarpaulin LLVM coverage raw profile data
 *.profraw
+
+# Generated OpenAPI spec (produced by cargo run --bin gen-openapi)
+docs/openapi.json
