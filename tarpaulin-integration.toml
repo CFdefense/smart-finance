@@ -1,0 +1,22 @@
+# tarpaulin-integration.toml — integration test coverage profile.
+# Covers the full binary via tests in src/tests.rs against a real Postgres DB.
+# Excludes infrastructure files not exercised by HTTP handler tests.
+# Usage: cargo tarpaulin --config tarpaulin-integration.toml
+
+[run]
+run-types = ["Bins"]
+all-features = true
+skip-clean = true
+locked = true
+fail-under = 75
+exclude-files = [
+    "src/main.rs",
+    "src/log.rs",
+    "src/swagger.rs",
+    "src/db.rs",
+    "src/bin/*",
+]
+
+[report]
+output-dir = "docs/coverage"
+out = ["Stdout", "Html"]
