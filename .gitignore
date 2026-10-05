@@ -3,3 +3,6 @@
 # Added by cargo
 
 /target
+
+# Environment — copy .env.example and fill in values
+.env
