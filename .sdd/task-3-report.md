@@ -27,3 +27,41 @@ Ready for consumption by Task 8 (`src/main.rs`).
 
 ## Concerns
 None.
+
+## Fix Report — Minor 6: `Layer` import review finding
+
+### What was attempted
+Code review Minor 6 suggested removing `Layer` from the import in `src/log.rs`, claiming it was unused (only used implicitly via method resolution):
+```rust
+// Suggested change: remove Layer
+use tracing_subscriber::{EnvFilter, fmt::time::SystemTime, layer::SubscriberExt, util::SubscriberInitExt};
+```
+
+### What was found
+After applying the removal, `cargo check` produced two hard errors:
+
+```
+error[E0599]: no method named `with_filter` found for struct `tracing_subscriber::fmt::Layer<S, N, E, W>` in the current scope
+  --> src/log.rs:66:14
+error[E0599]: no method named `with_filter` found for struct `tracing_subscriber::fmt::Layer<S, N, E, W>` in the current scope
+  --> src/log.rs:71:14
+```
+
+The Rust compiler itself confirmed: `trait Layer which provides with_filter is implemented but not in scope; perhaps you want to import it`. The `with_filter` method on `tracing_subscriber::fmt::Layer` is provided by the `Layer` trait, which must be explicitly in scope for method resolution to succeed.
+
+### Decision
+The review finding is incorrect. `Layer` is a **required** import — it is used implicitly but necessarily for `with_filter` to resolve on the two fmt layers. Removing it is a compilation error, not a lint improvement.
+
+The import was reverted to its original correct state:
+```rust
+use tracing_subscriber::{EnvFilter, Layer, fmt::time::SystemTime, layer::SubscriberExt, util::SubscriberInitExt};
+```
+
+### Verification
+```bash
+cargo check 2>&1 | grep -E "^error"
+```
+**Output:** _(no output — grep exit code 1, zero matching lines)_ — zero errors.
+
+### No commit created
+No code was changed from the previously-committed state. The `Layer` import is correct and necessary.

@@ -9,7 +9,9 @@ use std::{
 };
 use tracing::error;
 use tracing_appender::rolling;
-use tracing_subscriber::{EnvFilter, Layer, fmt::time::SystemTime, layer::SubscriberExt, util::SubscriberInitExt};
+use tracing_subscriber::{
+    fmt::time::SystemTime, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer,
+};
 
 static INIT_LOG: Once = Once::new();
 

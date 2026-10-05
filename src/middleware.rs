@@ -5,11 +5,11 @@ use axum::{extract::Request, middleware::Next, response::IntoResponse};
 use chrono::Utc;
 use sqlx::PgPool;
 use tower_cookies::{
-    Cookies,
     cookie::{
-        Cookie, Key, SameSite,
         time::{Duration, OffsetDateTime},
+        Cookie, Key, SameSite,
     },
+    Cookies,
 };
 
 /// Inserted into request extensions on authenticated requests.
@@ -24,11 +24,7 @@ pub struct AuthUser {
 /// Decrypts the cookie with the `Key` from request extensions, validates the
 /// embedded expiry and that the user exists in the database, then inserts
 /// [`AuthUser`] into extensions. Returns 401 on any failure.
-pub async fn middleware_auth(
-    cookies: Cookies,
-    mut req: Request,
-    next: Next,
-) -> impl IntoResponse {
+pub async fn middleware_auth(cookies: Cookies, mut req: Request, next: Next) -> impl IntoResponse {
     let key = match req.extensions().get::<Key>() {
         Some(k) => k.clone(),
         None => return AppError::Unauthorized.into_response(),
@@ -77,7 +73,11 @@ pub async fn middleware_auth(
             .path("/")
             .secure(on_production)
             .http_only(true)
-            .same_site(if on_production { SameSite::Strict } else { SameSite::Lax })
+            .same_site(if on_production {
+                SameSite::Strict
+            } else {
+                SameSite::Lax
+            })
             .expires(OffsetDateTime::now_utc().saturating_add(Duration::hours(1)))
             .max_age(Duration::hours(1))
             .build();
@@ -87,12 +87,11 @@ pub async fn middleware_auth(
 
     // Verify the user exists in the database
     // Note: update table name to match your users migration
-    let exists: (bool,) =
-        sqlx::query_as("SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)")
-            .bind(user_id)
-            .fetch_one(&pool)
-            .await
-            .unwrap_or((false,));
+    let exists: (bool,) = sqlx::query_as("SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)")
+        .bind(user_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap_or((false,));
 
     if !exists.0 {
         return AppError::Unauthorized.into_response();

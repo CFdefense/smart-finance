@@ -1,7 +1,7 @@
-mod global;
 mod controllers;
 mod db;
 mod error;
+mod global;
 mod log;
 mod middleware;
 mod models;

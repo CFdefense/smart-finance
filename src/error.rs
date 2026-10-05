@@ -1,7 +1,10 @@
 //! Unified API error type and result alias.
 
 #[cfg(not(tarpaulin_include))]
-use axum::{http::StatusCode, response::{IntoResponse, Response}};
+use axum::{
+    http::StatusCode,
+    response::{IntoResponse, Response},
+};
 #[cfg(not(tarpaulin_include))]
 use std::fmt;
 #[cfg(not(tarpaulin_include))]
