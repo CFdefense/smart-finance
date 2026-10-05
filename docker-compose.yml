@@ -1,35 +1,18 @@
 services:
-  postgres:
+  db:
     image: postgres:16
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: smart_finance_test
+    container_name: smart-finance-postgres
+    env_file:
+      - .env
     ports:
-      - "5433:5432"    # 5433 on host to avoid clashing with local Postgres
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER}"]
+      interval: 5s
       timeout: 5s
       retries: 5
 
-  ci:
-    build:
-      context: .
-      dockerfile: Dockerfile.ci
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      DATABASE_URL: postgres://postgres:postgres@postgres:5432/smart_finance_test
-      FRONTEND_URL: http://localhost:3000
-      BIND_ADDRESS: 127.0.0.1:3001
-    volumes:
-      - .:/app
-      - cargo-cache:/usr/local/cargo/registry
-      - target-cache:/app/target
-    working_dir: /app
-
 volumes:
-  cargo-cache:
-  target-cache:
+  postgres-data:
