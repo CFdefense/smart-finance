@@ -7,7 +7,6 @@ use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
-use http_body_util::BodyExt;
 use serde_json::json;
 use sqlx::PgPool;
 use tower::ServiceExt;
@@ -290,16 +289,23 @@ async fn logout_success() {
         .get("set-cookie")
         .expect("signup must set a cookie")
         .to_str()
+        .unwrap();
+
+    // Extract "auth-token=<value>" — everything before the first ";"
+    let cookie_header = set_cookie
+        .split(';')
+        .next()
         .unwrap()
+        .trim()
         .to_string();
 
-    // Forward the raw cookie header — same app instance means same Key, so decryption succeeds
+    // Forward the cookie name=value pair — same app instance means same Key, so decryption succeeds
     let response = app
         .oneshot(
             Request::builder()
                 .method("POST")
                 .uri("/api/user/logout")
-                .header("cookie", &set_cookie)
+                .header("cookie", &cookie_header)
                 .body(Body::empty())
                 .unwrap(),
         )
