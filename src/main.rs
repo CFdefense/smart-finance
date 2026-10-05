@@ -13,10 +13,10 @@ mod swagger;
 mod tests;
 
 use axum::Extension;
-use controllers::{AxumRouter, user::user_routes};
-use http::{Method, header::HeaderValue};
+use controllers::{user::user_routes, AxumRouter};
+use http::{header::HeaderValue, Method};
 use std::{env, net::SocketAddr, str::FromStr};
-use tower_cookies::{CookieManagerLayer, cookie::Key};
+use tower_cookies::{cookie::Key, CookieManagerLayer};
 use tower_http::cors::CorsLayer;
 
 #[tokio::main]

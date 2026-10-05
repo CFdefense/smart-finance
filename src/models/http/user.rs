@@ -6,9 +6,8 @@ use regex::Regex;
 use serde::Deserialize;
 use utoipa::ToSchema;
 
-static EMAIL_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$").unwrap()
-});
+static EMAIL_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$").unwrap());
 
 /// Request payload for `POST /api/user/login`.
 #[derive(Debug, Deserialize, ToSchema)]

@@ -12,7 +12,7 @@ use sqlx::PgPool;
 use tower::ServiceExt;
 use tower_cookies::{cookie::Key, CookieManagerLayer};
 
-use crate::{controllers::AxumRouter, controllers::user::user_routes, db};
+use crate::{controllers::user::user_routes, controllers::AxumRouter, db};
 
 /// Builds the full application router for testing.
 ///
@@ -292,12 +292,7 @@ async fn logout_success() {
         .unwrap();
 
     // Extract "auth-token=<value>" — everything before the first ";"
-    let cookie_header = set_cookie
-        .split(';')
-        .next()
-        .unwrap()
-        .trim()
-        .to_string();
+    let cookie_header = set_cookie.split(';').next().unwrap().trim().to_string();
 
     // Forward the cookie name=value pair — same app instance means same Key, so decryption succeeds
     let response = app
