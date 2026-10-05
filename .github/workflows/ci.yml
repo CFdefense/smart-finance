@@ -6,9 +6,125 @@ on:
   pull_request:
 
 jobs:
-  cicd:
-    name: CICD
+  ci:
+    name: Build, Lint, Test & Coverage
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: smart_finance_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/smart_finance_test
+      FRONTEND_URL: http://localhost:3000
+      BIND_ADDRESS: 127.0.0.1:3001
+
     steps:
-      - name: Stub check
-        run: echo "CI stub placeholder"
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache Rust build artefacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-tarpaulin
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-tarpaulin
+
+      - name: Install sqlx-cli
+        run: cargo install sqlx-cli --no-default-features --features postgres --locked
+
+      - name: Run database migrations
+        run: sqlx migrate run
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy -- -D warnings
+
+      - name: Build
+        run: cargo build --locked
+
+      - name: Unit tests with coverage (90% gate)
+        run: >
+          cargo tarpaulin
+          --run-types Tests
+          --fail-under 90
+          --out Xml
+          --output-dir docs/coverage
+
+      - name: Integration tests with coverage (75% gate)
+        run: >
+          cargo tarpaulin
+          --run-types Bins
+          --fail-under 75
+          --out Xml Html
+          --output-dir docs/coverage
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: docs/coverage/
+
+  deploy:
+    name: Deploy Swagger UI to GitHub Pages
+    runs-on: ubuntu-latest
+    needs: ci
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    permissions:
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build artefacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Generate openapi.json
+        run: cargo run --bin gen-openapi
+        env:
+          SQLX_OFFLINE: "true"
+
+      - name: Assemble Pages artifact
+        run: |
+          mkdir -p _site
+          cp -r docs/swagger/. _site/
+          cp docs/openapi.json _site/openapi.json
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
