@@ -16,3 +16,6 @@ docs/tarpaulin-report.html
 docs/plans/
 agent/
 anomaly/
+
+# Tarpaulin LLVM coverage raw profile data
+*.profraw
