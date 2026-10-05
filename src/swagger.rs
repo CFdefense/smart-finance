@@ -28,6 +28,7 @@ impl Modify for SecurityAddon {
     }
 }
 
+/// Root OpenAPI document for the Smart Finance API.
 #[derive(OpenApi)]
 #[openapi(
     modifiers(&SecurityAddon),
@@ -43,7 +44,7 @@ impl Modify for SecurityAddon {
         (url = "http://localhost:3001", description = "Local development server")
     )
 )]
-struct ApiDoc;
+pub struct ApiDoc;
 
 /// Merges Swagger UI into the router and writes `docs/openapi.json` to disk.
 ///
