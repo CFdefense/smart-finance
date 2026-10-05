@@ -80,3 +80,102 @@ impl SignupRequest {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn req(email: &str, password: &str) -> SignupRequest {
+        SignupRequest {
+            email: email.to_string(),
+            password: password.to_string(),
+        }
+    }
+
+    // --- validate_email ---
+
+    #[test]
+    fn valid_email() {
+        assert!(SignupRequest::validate_email("alice@example.com"));
+    }
+
+    #[test]
+    fn email_no_at_symbol() {
+        assert!(!SignupRequest::validate_email("notanemail"));
+    }
+
+    #[test]
+    fn email_no_domain() {
+        assert!(!SignupRequest::validate_email("alice@"));
+    }
+
+    #[test]
+    fn email_no_tld() {
+        assert!(!SignupRequest::validate_email("alice@example"));
+    }
+
+    #[test]
+    fn email_empty() {
+        assert!(!SignupRequest::validate_email(""));
+    }
+
+    // --- validate_password ---
+
+    #[test]
+    fn valid_password() {
+        assert!(SignupRequest::validate_password("Secret_123").is_ok());
+    }
+
+    #[test]
+    fn password_too_short() {
+        assert!(SignupRequest::validate_password("Ab1").is_err());
+    }
+
+    #[test]
+    fn password_no_uppercase() {
+        assert!(SignupRequest::validate_password("secret_123").is_err());
+    }
+
+    #[test]
+    fn password_no_lowercase() {
+        assert!(SignupRequest::validate_password("SECRET_123").is_err());
+    }
+
+    #[test]
+    fn password_no_digit() {
+        assert!(SignupRequest::validate_password("Secret_abc").is_err());
+    }
+
+    #[test]
+    fn password_non_ascii() {
+        assert!(SignupRequest::validate_password("Sécret_123").is_err());
+    }
+
+    #[test]
+    fn password_too_long() {
+        let long = "A1a".repeat(50); // 150 chars
+        assert!(SignupRequest::validate_password(&long).is_err());
+    }
+
+    // --- validate (combined) ---
+
+    #[test]
+    fn validate_success() {
+        assert!(req("alice@example.com", "Secret_123").validate().is_ok());
+    }
+
+    #[test]
+    fn validate_empty_email() {
+        assert!(req("", "Secret_123").validate().is_err());
+    }
+
+    #[test]
+    fn validate_invalid_email() {
+        assert!(req("notanemail", "Secret_123").validate().is_err());
+    }
+
+    #[test]
+    fn validate_bad_password() {
+        assert!(req("alice@example.com", "weak").validate().is_err());
+    }
+}
