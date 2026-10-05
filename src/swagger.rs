@@ -1,7 +1,7 @@
 //! Swagger / OpenAPI documentation configuration.
 
 use axum::Router;
-use std::{fs, fs::File, io::Write, path::PathBuf};
+use std::{fs, io::Write, path::PathBuf};
 use utoipa::{
     Modify, OpenApi,
     openapi::security::{ApiKey, ApiKeyValue, SecurityScheme},
@@ -47,13 +47,14 @@ struct ApiDoc;
 
 /// Merges Swagger UI into the router and writes `docs/openapi.json` to disk.
 ///
-/// Should only be called in dev builds (`#[cfg(all(not(test), debug_assertions))]`).
+/// Only compiled in non-test debug builds.
+#[cfg(all(not(test), debug_assertions))]
 pub fn merge_swagger(router: OpenApiRouter) -> Router {
     let doc = ApiDoc::openapi();
 
     let docs_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("docs");
     fs::create_dir_all(&docs_path).expect("Could not create docs directory");
-    let mut file = File::create(docs_path.join("openapi.json"))
+    let mut file = fs::File::create(docs_path.join("openapi.json"))
         .expect("Could not create openapi.json");
     file.write_all(
         doc.to_pretty_json()
