@@ -60,10 +60,10 @@ pub async fn middleware_auth(cookies: Cookies, mut req: Request, next: Next) -> 
         return AppError::Unauthorized.into_response();
     }
 
-    // Refresh cookie if it expires within the next hour
-    let one_hour: i64 = 3600;
-    if exp - now < one_hour {
-        let new_exp = now + one_hour;
+    // Refresh cookie if it expires within the next session window
+    let session_secs = crate::global::SESSION_DURATION_SECS;
+    if exp - now < session_secs {
+        let new_exp = now + session_secs;
         let new_token = format!("user-{user_id}.{new_exp}.sign");
         let domain = option_env!("DOMAIN").unwrap_or("localhost");
         let on_production = option_env!("APP_ENV").unwrap_or("development") == "production";
@@ -78,8 +78,8 @@ pub async fn middleware_auth(cookies: Cookies, mut req: Request, next: Next) -> 
             } else {
                 SameSite::Lax
             })
-            .expires(OffsetDateTime::now_utc().saturating_add(Duration::hours(1)))
-            .max_age(Duration::hours(1))
+            .expires(OffsetDateTime::now_utc().saturating_add(Duration::seconds(session_secs)))
+            .max_age(Duration::seconds(session_secs))
             .build();
 
         cookies.private(&key).add(new_cookie);

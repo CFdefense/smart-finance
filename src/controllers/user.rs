@@ -55,7 +55,7 @@ fn set_cookie(user_id: i32, expired: bool, cookies: &mut impl CookieStore, key: 
     let (expires, max_age) = if expired {
         (OffsetDateTime::UNIX_EPOCH, Duration::days(0))
     } else {
-        let age = Duration::days(3);
+        let age = Duration::seconds(crate::global::SESSION_DURATION_SECS);
         (OffsetDateTime::now_utc() + age, age)
     };
 
@@ -116,13 +116,14 @@ pub async fn api_signup(
         return Err(AppError::Validation(e));
     }
 
+    let email = payload.email.trim().to_lowercase();
+
     // Check email uniqueness
-    let existing: Option<(i32,)> =
-        sqlx::query_as("SELECT id FROM users WHERE email = $1")
-            .bind(&payload.email)
-            .fetch_optional(&pool)
-            .await
-            .map_err(AppError::from)?;
+    let existing: Option<(i32,)> = sqlx::query_as("SELECT id FROM users WHERE email = $1")
+        .bind(&email)
+        .fetch_optional(&pool)
+        .await
+        .map_err(AppError::from)?;
 
     if existing.is_some() {
         return Err(AppError::Conflict("email already exists".to_string()));
@@ -136,14 +137,13 @@ pub async fn api_signup(
         .to_string();
 
     // Insert user
-    let row: (i32,) = sqlx::query_as(
-        "INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id",
-    )
-    .bind(&payload.email)
-    .bind(&password_hash)
-    .fetch_one(&pool)
-    .await
-    .map_err(AppError::from)?;
+    let row: (i32,) =
+        sqlx::query_as("INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id")
+            .bind(&email)
+            .bind(&password_hash)
+            .fetch_one(&pool)
+            .await
+            .map_err(AppError::from)?;
 
     set_cookie(row.0, false, &mut cookies, &key);
     Ok(())
@@ -185,8 +185,8 @@ pub async fn api_login(
             .await
             .map_err(AppError::from)?;
 
-    let (user_id, stored_hash) = row
-        .ok_or_else(|| AppError::BadRequest("invalid credentials".to_string()))?;
+    let (user_id, stored_hash) =
+        row.ok_or_else(|| AppError::BadRequest("invalid credentials".to_string()))?;
 
     let parsed = PasswordHash::new(&stored_hash)
         .map_err(|e| AppError::Internal(format!("hash parse error: {e:?}")))?;

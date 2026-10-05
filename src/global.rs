@@ -8,3 +8,6 @@ pub const CRASH_LOG: &str = "crash.log";
 
 /// File name for the rolling application log.
 pub const LATEST_LOG: &str = "latest.log";
+
+/// Session duration in seconds (3 days). Used for both cookie issuance and refresh.
+pub const SESSION_DURATION_SECS: i64 = 60 * 60 * 24 * 3; // 3 days
