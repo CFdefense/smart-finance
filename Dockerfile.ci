@@ -2,12 +2,18 @@ FROM rust:latest
 
 # Install system deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    pkg-config libssl-dev && \
+    pkg-config libssl-dev curl && \
     rm -rf /var/lib/apt/lists/*
 
-# Install CI tools (same versions as workflow)
-RUN cargo install sqlx-cli --no-default-features --features postgres --locked && \
-    cargo install cargo-tarpaulin --locked
+# sqlx-cli — prebuilt binary from GitHub releases
+RUN curl -L --proto '=https' --tlsv1.2 -sSf \
+    https://github.com/launchbadge/sqlx/releases/latest/download/sqlx-x86_64-unknown-linux-musl.tar.gz \
+    | tar -xz -C /usr/local/bin sqlx
+
+# cargo-tarpaulin — prebuilt binary from GitHub releases
+RUN curl -L --proto '=https' --tlsv1.2 -sSf \
+    https://github.com/xd009642/tarpaulin/releases/latest/download/cargo-tarpaulin-x86_64-unknown-linux-musl.tar.gz \
+    | tar -xz -C /usr/local/bin cargo-tarpaulin
 
 WORKDIR /app
 
