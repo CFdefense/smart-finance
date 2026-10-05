@@ -33,7 +33,7 @@ use crate::{
     info(title = "User Routes", description = "Authentication endpoints."),
     tags((name = "User"))
 )]
-#[allow(dead_code)]
+#[allow(dead_code)] // only instantiated by the #[derive(OpenApi)] macro — never constructed directly
 pub struct UserApiDoc;
 
 /// Abstracts cookie writing so handlers can be tested without a real cookie jar.

@@ -19,7 +19,7 @@ use utoipa_swagger_ui::SwaggerUi;
 /// Security scheme modifier — adds the `auth-token` cookie scheme to the `OpenAPI` spec.
 ///
 /// Constructed only by the `#[openapi(modifiers(...))]` macro on [`ApiDoc`].
-#[allow(dead_code)]
+#[allow(dead_code)] // only instantiated by the #[derive(OpenApi)] macro — never constructed directly
 pub struct SecurityAddon;
 
 impl Modify for SecurityAddon {
@@ -37,8 +37,6 @@ impl Modify for SecurityAddon {
 }
 
 /// Root `OpenAPI` document for the Smart Finance API.
-///
-/// Constructed only by the `#[openapi]` macro and [`crate::bin::gen_openapi`].
 #[derive(OpenApi)]
 #[openapi(
     modifiers(&SecurityAddon),
@@ -54,7 +52,7 @@ impl Modify for SecurityAddon {
         (url = "http://localhost:3001", description = "Local development server")
     )
 )]
-#[allow(dead_code)]
+#[allow(dead_code)] // only instantiated by the #[derive(OpenApi)] macro — never constructed directly
 pub struct ApiDoc;
 
 /// Merges Swagger UI into the router and writes `docs/openapi.json` to disk.
