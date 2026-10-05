@@ -99,6 +99,21 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
 
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: smart_finance_deploy
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -112,7 +127,7 @@ jobs:
       - name: Generate openapi.json
         run: cargo run --bin gen-openapi
         env:
-          SQLX_OFFLINE: "true"
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/smart_finance_deploy
 
       - name: Assemble Pages artifact
         run: |
