@@ -12,37 +12,36 @@ An AI-Powered Finance Tracker
 ### Setup
 
 ```bash
-cp .env.example .env
-# Edit .env — set DATABASE_URL to your local Postgres instance
+# Start the database
+docker compose up -d db
+
+cp .env.example .env  # edit if needed
+
 sqlx migrate run
 cargo run
 ```
 
-### Running tests locally
+### Running tests
 
 ```bash
 cargo test
 ```
 
-### Run the full CI pipeline locally (Docker)
+### Run the full CI pipeline locally
 
-Mirrors `.github/workflows/ci.yml` exactly — same Postgres image, same steps.
+Mirrors `.github/workflows/ci.yml` exactly. Requires `sqlx-cli` and `cargo-tarpaulin` installed on your machine.
 
 ```bash
-docker compose run --rm ci
+# Start the database first if not already running
+docker compose up -d db
+
+./ci-local.sh          # full pipeline
+./ci-local.sh fmt      # formatting only
+./ci-local.sh clippy   # clippy only
+./ci-local.sh test     # tests + coverage only
 ```
 
-This will:
-1. Spin up a Postgres 16 container
-2. Run migrations
-3. Check formatting (`cargo fmt --check`)
-4. Run Clippy (`-D warnings`)
-5. Build
-6. Run unit tests with 90% coverage gate
-7. Run integration tests with 75% coverage gate
-8. Generate `docs/openapi.json`
-
-Coverage HTML report is written to `docs/coverage/` on the host.
+Coverage HTML report is written to `docs/coverage/`.
 
 ### API Documentation
 

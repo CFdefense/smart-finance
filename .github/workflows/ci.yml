@@ -50,33 +50,8 @@ jobs:
       - name: Install sqlx-cli
         run: cargo install sqlx-cli --no-default-features --features postgres --locked
 
-      - name: Run database migrations
-        run: sqlx migrate run
-
-      - name: Check formatting
-        run: cargo fmt --check
-
-      - name: Clippy
-        run: cargo clippy -- -D warnings
-
-      - name: Build
-        run: cargo build --locked
-
-      - name: Unit tests with coverage (90% gate)
-        run: >
-          cargo tarpaulin
-          --run-types Tests
-          --fail-under 90
-          --out Xml
-          --output-dir docs/coverage
-
-      - name: Integration tests with coverage (75% gate)
-        run: >
-          cargo tarpaulin
-          --run-types Bins
-          --fail-under 75
-          --out Xml Html
-          --output-dir docs/coverage
+      - name: Run pipeline via cicd.sh
+        run: bash cicd.sh all
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
@@ -125,7 +100,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Generate openapi.json
-        run: cargo run --bin gen-openapi
+        run: bash cicd.sh openapi
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/smart_finance_deploy
 
