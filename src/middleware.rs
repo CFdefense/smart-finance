@@ -1,6 +1,7 @@
 //! Axum middleware for cookie-based authentication.
 
 use crate::error::AppError;
+use crate::models::sql::user::UserRow;
 use axum::{extract::Request, middleware::Next, response::IntoResponse};
 use chrono::Utc;
 use sqlx::PgPool;
@@ -89,13 +90,17 @@ pub async fn middleware_auth(cookies: Cookies, mut req: Request, next: Next) -> 
 
     // Verify the user exists in the database
     // Note: update table name to match your users migration
-    let exists: (bool,) = sqlx::query_as("SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)")
-        .bind(user_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap_or((false,));
+    let user = sqlx::query_as!(
+        UserRow,
+        "SELECT id, email, password_hash FROM users WHERE id = $1",
+        user_id
+    )
+    .fetch_optional(&pool)
+    .await
+    .ok()
+    .flatten();
 
-    if !exists.0 {
+    if user.is_none() {
         return AppError::Unauthorized.into_response();
     }
 

@@ -144,13 +144,9 @@ pub async fn api_signup(
         .to_string();
 
     // Insert user
-    struct InsertedId {
-        id: i32,
-    }
-
-    let row = sqlx::query_as!(
-        InsertedId,
-        "INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id",
+    let user = sqlx::query_as!(
+        UserRow,
+        "INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email, password_hash",
         email,
         password_hash
     )
@@ -158,7 +154,7 @@ pub async fn api_signup(
     .await
     .map_err(AppError::from)?;
 
-    set_cookie(row.id, false, &mut cookies, &key);
+    set_cookie(user.id, false, &mut cookies, &key);
     Ok(())
 }
 
