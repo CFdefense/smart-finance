@@ -123,11 +123,14 @@ pub async fn api_signup(
     let email = payload.email.trim().to_lowercase();
 
     // Check email uniqueness
-    let existing: Option<(i32,)> = sqlx::query_as("SELECT id FROM users WHERE email = $1")
-        .bind(&email)
-        .fetch_optional(&pool)
-        .await
-        .map_err(AppError::from)?;
+    let existing = sqlx::query_as!(
+        UserRow,
+        "SELECT id, email, password_hash FROM users WHERE email = $1",
+        email
+    )
+    .fetch_optional(&pool)
+    .await
+    .map_err(AppError::from)?;
 
     if existing.is_some() {
         return Err(AppError::Conflict("email already exists".to_string()));
@@ -141,15 +144,21 @@ pub async fn api_signup(
         .to_string();
 
     // Insert user
-    let row: (i32,) =
-        sqlx::query_as("INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id")
-            .bind(&email)
-            .bind(&password_hash)
-            .fetch_one(&pool)
-            .await
-            .map_err(AppError::from)?;
+    struct InsertedId {
+        id: i32,
+    }
 
-    set_cookie(row.0, false, &mut cookies, &key);
+    let row = sqlx::query_as!(
+        InsertedId,
+        "INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id",
+        email,
+        password_hash
+    )
+    .fetch_one(&pool)
+    .await
+    .map_err(AppError::from)?;
+
+    set_cookie(row.id, false, &mut cookies, &key);
     Ok(())
 }
 
