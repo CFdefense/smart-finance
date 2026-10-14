@@ -250,3 +250,6 @@ pub fn user_routes() -> AxumRouter {
         .route("/signup", post(api_signup))
         .route("/login", post(api_login))
 }
+
+#[cfg(test)]
+mod test {}

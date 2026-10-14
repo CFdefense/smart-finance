@@ -13,7 +13,7 @@ mod swagger;
 mod tests;
 
 use axum::Extension;
-use controllers::{user::user_routes, AxumRouter};
+use controllers::AxumRouter;
 use http::{header::HeaderValue, Method};
 use std::{env, net::SocketAddr, str::FromStr};
 use tower_cookies::{cookie::Key, CookieManagerLayer};
@@ -34,8 +34,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cookie_key = Key::generate();
 
     // Build API router
-    let api_router = AxumRouter::new().nest("/user", user_routes());
-    let api_router = AxumRouter::new().nest("/api", api_router);
+    let api_routes = AxumRouter::new()
+        .nest("/user", controllers::user::user_routes())
+        .nest("/plaid", controllers::plaid::plaid_routes());
+    let api_router = AxumRouter::new().nest("/api", api_routes);
 
     // Attach Swagger UI in dev builds only
     #[cfg(all(not(test), debug_assertions))]
