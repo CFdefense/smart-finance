@@ -25,3 +25,72 @@ pub struct ExchangeTokenResponse {
     /// Plaid Item ID identifying the linked financial institution connection.
     pub item_id: String,
 }
+
+/// Response containing Plaid financial accounts.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct AccountsResponse {
+    /// Financial accounts linked by the authenticated user.
+    pub accounts: Vec<AccountResponse>,
+}
+
+/// Singular Plaid financial account.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct AccountResponse {
+    /// Your application's or Plaid's account identifier.
+    pub account_id: String,
+    /// Plaid Item associated with this account.
+    pub item_id: String,
+    /// Account display name, such as Checking.
+    pub name: String,
+    /// Official account name, when available.
+    pub official_name: Option<String>,
+    /// Account type, such as depository, credit, or loan.
+    pub account_type: String,
+    /// Account subtype, such as checking or savings.
+    pub account_subtype: Option<String>,
+    /// Masked account number, when available.
+    pub mask: Option<String>,
+    /// Current balance, when available.
+    pub current_balance: Option<f64>,
+    /// Available balance, when supported.
+    pub available_balance: Option<f64>,
+    /// ISO 4217 currency code, when available.
+    pub currency_code: Option<String>,
+}
+
+/// Response containing synced transcation items.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct TransactionSyncResponse {
+    /// Number of newly added transactions.
+    pub added: usize,
+    /// Number of existing transactions that were updated.
+    pub modified: usize,
+    /// Number of transactions that were removed.
+    pub removed: usize,
+    /// Whether additional synchronization pages remain.
+    pub has_more: bool,
+}
+
+/// Response containing transaction items.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct TransactionsResponse {
+    /// Transactions stored for the authenticated user.
+    pub transactions: Vec<TransactionResponse>,
+    /// Total number of transactions matching the query, if calculated.
+    pub total: Option<i64>,
+    /// Maximum number of transactions returned.
+    pub limit: i64,
+    /// Number of transactions skipped.
+    pub offset: i64,
+}
+
+/// A singular transaction.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct TransactionResponse {
+    pub transaction_id: String,
+    pub account_id: String,
+    pub name: String,
+    pub amount: f64,
+    pub date: String,
+    pub pending: bool,
+}

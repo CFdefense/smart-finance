@@ -75,6 +75,80 @@ pub async fn api_plaid_exchange_token(
     todo!()
 }
 
+/// Retrieve financial accounts for the authenticated user.
+///
+/// Fetches account information from Plaid for the user's linked financial
+/// institutions using their stored access tokens. Returns account details such
+/// as account names, types, identifiers, and available balances where supported.
+///
+/// `GET /api/plaid/accounts`
+#[utoipa::path(
+    get,
+    path = "/accounts",
+    summary = "Retrieves the user's linked financial accounts",
+    description = "Fetches account information from Plaid for the authenticated user's linked financial institutions. Returns account names, types, identifiers, and available balances where supported.",
+    responses(
+        (status = 200, description = "Financial accounts retrieved successfully", body = AccountsResponse),
+        (status = 401, description = "User is not authenticated"),
+        (status = 500, description = "Failed to retrieve financial accounts")
+    ),
+    tag = "Plaid"
+)]
+pub async fn api_plaid_get_accounts() -> ApiResult<Json<AccountsResponse>> {
+    todo!()
+}
+
+/// Synchronize transactions for the authenticated user's linked financial
+/// institutions.
+///
+/// Uses Plaid's Transactions Sync API to retrieve added, modified, and removed
+/// transactions. Processes pagination, persists transaction changes, and updates
+/// the synchronization cursor for each Plaid Item to support incremental syncs.
+///
+/// `POST /api/plaid/transactions/sync`
+#[utoipa::path(
+    post,
+    path = "/transactions/sync",
+    summary = "Synchronizes the user's financial transactions",
+    description = "Fetches transaction changes from Plaid for the authenticated user's linked financial institutions, processes added, modified, and removed transactions, and updates synchronization cursors.",
+    responses(
+        (status = 200, description = "Transactions synchronized successfully", body = TransactionSyncResponse),
+        (status = 401, description = "User is not authenticated"),
+        (status = 500, description = "Failed to synchronize transactions")
+    ),
+    tag = "Plaid"
+)]
+pub async fn api_plaid_sync_transactions() -> ApiResult<Json<TransactionSyncResponse>> {
+    todo!()
+}
+
+/// Retrieve stored transactions for the authenticated user.
+///
+/// Returns transactions previously synchronized from Plaid for the user's linked
+/// financial institutions. Supports filtering and pagination as needed, without
+/// requiring a new Plaid API request for every read.
+///
+/// `GET /api/plaid/transactions`
+#[utoipa::path(
+    get,
+    path = "/transactions",
+    summary = "Retrieves the user's synchronized transactions",
+    description = "Returns previously synchronized transactions for the authenticated user's linked financial institutions. Supports filtering and pagination without making a new Plaid API request for every read.",
+    params(
+        ("limit" = Option<i64>, Query, description = "Maximum number of transactions to return"),
+        ("offset" = Option<i64>, Query, description = "Number of transactions to skip")
+    ),
+    responses(
+        (status = 200, description = "Transactions retrieved successfully", body = TransactionsResponse),
+        (status = 401, description = "User is not authenticated"),
+        (status = 500, description = "Failed to retrieve transactions")
+    ),
+    tag = "Plaid"
+)]
+pub async fn api_plaid_get_transactions() -> ApiResult<Json<TransactionsResponse>> {
+    todo!()
+}
+
 /// Builds the user route group.
 ///
 /// Public routes: `POST /signup`, `POST /login`.
