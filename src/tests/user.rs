@@ -6,13 +6,14 @@ use axum::{
 };
 use tower::ServiceExt;
 
-use super::fixtures::{auth_body, cleanup, test_app, unique_email};
+use super::fixtures::{auth_body, cleanup, test_app, test_pool, unique_email};
 
 // ─── Signup tests ─────────────────────────────────────────────────────────────
 
 #[tokio::test]
 async fn signup_success() {
-    let (app, pool) = test_app().await;
+    let app = test_app().await;
+    let pool = test_pool().await;
     let email = unique_email("signup_ok");
 
     let response = app
@@ -33,7 +34,8 @@ async fn signup_success() {
 
 #[tokio::test]
 async fn signup_duplicate_email() {
-    let (app, pool) = test_app().await;
+    let app = test_app().await;
+    let pool = test_pool().await;
     let email = unique_email("signup_dup");
 
     // First signup — must succeed
@@ -68,7 +70,7 @@ async fn signup_duplicate_email() {
 
 #[tokio::test]
 async fn signup_invalid_payload() {
-    let (app, _pool) = test_app().await;
+    let app = test_app().await;
 
     // Missing password field — Axum will return 422 Unprocessable Entity
     let response = app
@@ -88,7 +90,7 @@ async fn signup_invalid_payload() {
 
 #[tokio::test]
 async fn signup_bad_password() {
-    let (app, _pool) = test_app().await;
+    let app = test_app().await;
     let email = unique_email("signup_badpw");
 
     let response = app
@@ -110,7 +112,8 @@ async fn signup_bad_password() {
 
 #[tokio::test]
 async fn login_success() {
-    let (app, pool) = test_app().await;
+    let app = test_app().await;
+    let pool = test_pool().await;
     let email = unique_email("login_ok");
 
     // Create user first
@@ -144,7 +147,8 @@ async fn login_success() {
 
 #[tokio::test]
 async fn login_wrong_password() {
-    let (app, pool) = test_app().await;
+    let app = test_app().await;
+    let pool = test_pool().await;
     let email = unique_email("login_wrongpw");
 
     app.clone()
@@ -177,7 +181,7 @@ async fn login_wrong_password() {
 
 #[tokio::test]
 async fn login_unknown_email() {
-    let (app, _pool) = test_app().await;
+    let app = test_app().await;
 
     let response = app
         .oneshot(
@@ -198,7 +202,7 @@ async fn login_unknown_email() {
 
 #[tokio::test]
 async fn logout_unauthenticated() {
-    let (app, _pool) = test_app().await;
+    let app = test_app().await;
 
     let response = app
         .oneshot(
@@ -216,7 +220,8 @@ async fn logout_unauthenticated() {
 
 #[tokio::test]
 async fn logout_success() {
-    let (app, pool) = test_app().await;
+    let app = test_app().await;
+    let pool = test_pool().await;
     let email = unique_email("logout_ok");
 
     // Signup to get a Set-Cookie header

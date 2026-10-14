@@ -87,10 +87,16 @@ pub struct TransactionsResponse {
 /// A singular transaction.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct TransactionResponse {
+    /// Unique transaction ID.
     pub transaction_id: String,
+    /// Account ID used.
     pub account_id: String,
+    /// Account owner's name.
     pub name: String,
+    /// Transaction amount.
     pub amount: f64,
+    /// Date of the transaction.
     pub date: String,
+    /// Transaction status.
     pub pending: bool,
 }

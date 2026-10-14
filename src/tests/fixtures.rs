@@ -1,30 +1,25 @@
 //! Integration test fixtures and helper functions.
 
-use axum::body::Body;
+use axum::{body::Body, Router};
 use serde_json::json;
 use sqlx::PgPool;
-use tower_cookies::{cookie::Key, CookieManagerLayer};
 
-use crate::{controllers::user::user_routes, controllers::AxumRouter, db};
+use crate::db;
 
-/// Builds the full application router for testing.
+/// Builds the full application router for testing (no CORS, no Swagger).
 ///
-/// Identical to `main()` minus CORS and Swagger UI.
-pub async fn test_app() -> (axum::Router, PgPool) {
+/// Call `create_router` with a dummy origin — CORS is not enforced in unit/integration
+/// tests, so any placeholder string is fine. The returned `Router` is ready for
+/// [`tower::ServiceExt::oneshot`] calls.
+pub async fn test_app() -> Router {
     dotenvy::dotenv().ok();
-    let pool = db::create_pool().await;
-    let key = Key::generate();
+    crate::create_router("http://localhost:5173").await
+}
 
-    let api_router = AxumRouter::new().nest("/user", user_routes());
-    let api_router = AxumRouter::new().nest("/api", api_router);
-
-    let app = axum::Router::new()
-        .merge(api_router)
-        .layer(axum::Extension(pool.clone()))
-        .layer(axum::Extension(key))
-        .layer(CookieManagerLayer::new());
-
-    (app, pool)
+/// Returns a fresh connection pool (shares the same `DATABASE_URL` as `test_app`).
+pub async fn test_pool() -> PgPool {
+    dotenvy::dotenv().ok();
+    db::create_pool().await
 }
 
 /// Generates a unique test email to prevent conflicts between parallel test runs.
