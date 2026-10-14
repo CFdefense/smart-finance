@@ -84,10 +84,3 @@ pub fn plaid_routes() -> AxumRouter {
         .route("/link-token", post(api_plaid_link_token))
         .route("/exchange-token", post(api_plaid_exchange_token))
 }
-
-#[cfg(test)]
-mod test {
-    pub fn test_happy_link_path() {}
-    pub fn test_happy_exchange_path() {}
-    pub fn test_happy_token_path() {}
-}

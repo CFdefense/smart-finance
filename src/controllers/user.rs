@@ -252,4 +252,161 @@ pub fn user_routes() -> AxumRouter {
 }
 
 #[cfg(test)]
-mod test {}
+mod test {
+    use super::*;
+    use tower_cookies::cookie::time::OffsetDateTime;
+
+    /// A minimal [`CookieStore`] that records every cookie added to it.
+    #[derive(Default)]
+    struct MockCookies {
+        added: Vec<Cookie<'static>>,
+    }
+
+    impl CookieStore for MockCookies {
+        fn private_add(&mut self, _key: &Key, cookie: Cookie<'static>) {
+            self.added.push(cookie);
+        }
+    }
+
+    fn test_key() -> Key {
+        // Key::generate() needs 64 bytes; derive from a fixed seed so tests are reproducible.
+        Key::from(&[42u8; 64])
+    }
+
+    // ------------------------------------------------------------------
+    // set_cookie — active session
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn set_cookie_active_sets_correct_name_and_path() {
+        let mut store = MockCookies::default();
+        set_cookie(1, false, &mut store, &test_key());
+
+        assert_eq!(store.added.len(), 1);
+        let c = &store.added[0];
+        assert_eq!(c.name(), "auth-token");
+        assert_eq!(c.path(), Some("/"));
+    }
+
+    #[test]
+    fn set_cookie_active_token_contains_user_id() {
+        let mut store = MockCookies::default();
+        set_cookie(42, false, &mut store, &test_key());
+
+        let value = store.added[0].value().to_string();
+        assert!(
+            value.starts_with("user-42."),
+            "expected token to start with 'user-42.', got '{value}'"
+        );
+    }
+
+    #[test]
+    fn set_cookie_active_token_ends_with_sign_suffix() {
+        let mut store = MockCookies::default();
+        set_cookie(7, false, &mut store, &test_key());
+
+        let value = store.added[0].value().to_string();
+        assert!(
+            value.ends_with(".sign"),
+            "expected token to end with '.sign', got '{value}'"
+        );
+    }
+
+    #[test]
+    fn set_cookie_active_max_age_matches_session_duration() {
+        let mut store = MockCookies::default();
+        set_cookie(1, false, &mut store, &test_key());
+
+        let max_age = store.added[0]
+            .max_age()
+            .expect("max_age should be set for an active cookie");
+        assert_eq!(
+            max_age.whole_seconds(),
+            crate::global::SESSION_DURATION_SECS
+        );
+    }
+
+    #[test]
+    fn set_cookie_active_expiry_is_in_the_future() {
+        let before = OffsetDateTime::now_utc();
+        let mut store = MockCookies::default();
+        set_cookie(1, false, &mut store, &test_key());
+        let after = OffsetDateTime::now_utc();
+
+        let expires = store.added[0]
+            .expires()
+            .and_then(|e| e.datetime())
+            .expect("expiry should be set for an active cookie");
+
+        assert!(
+            expires > before,
+            "expiry {expires} should be after test start {before}"
+        );
+        assert!(
+            expires <= after + Duration::seconds(crate::global::SESSION_DURATION_SECS),
+            "expiry {expires} should not exceed session duration past test end {after}"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // set_cookie — expired session (logout)
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn set_cookie_expired_max_age_is_zero() {
+        let mut store = MockCookies::default();
+        set_cookie(1, true, &mut store, &test_key());
+
+        let max_age = store.added[0]
+            .max_age()
+            .expect("max_age should be set even for an expired cookie");
+        assert_eq!(max_age.whole_seconds(), 0);
+    }
+
+    #[test]
+    fn set_cookie_expired_expiry_is_unix_epoch() {
+        let mut store = MockCookies::default();
+        set_cookie(1, true, &mut store, &test_key());
+
+        let expires = store.added[0]
+            .expires()
+            .and_then(|e| e.datetime())
+            .expect("expiry should be set for an expired cookie");
+
+        assert_eq!(
+            expires.unix_timestamp(),
+            OffsetDateTime::UNIX_EPOCH.unix_timestamp(),
+            "expired cookie should have UNIX_EPOCH expiry"
+        );
+    }
+
+    #[test]
+    fn set_cookie_expired_token_still_contains_user_id() {
+        let mut store = MockCookies::default();
+        set_cookie(99, true, &mut store, &test_key());
+
+        let value = store.added[0].value().to_string();
+        assert!(
+            value.starts_with("user-99."),
+            "expected token to start with 'user-99.', got '{value}'"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // set_cookie — http_only and domain
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn set_cookie_is_http_only() {
+        let mut store = MockCookies::default();
+        set_cookie(1, false, &mut store, &test_key());
+        assert!(store.added[0].http_only().unwrap_or(false));
+    }
+
+    #[test]
+    fn set_cookie_domain_defaults_to_localhost() {
+        let mut store = MockCookies::default();
+        set_cookie(1, false, &mut store, &test_key());
+        assert_eq!(store.added[0].domain(), Some("localhost"));
+    }
+}
