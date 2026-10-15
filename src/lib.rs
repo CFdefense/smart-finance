@@ -10,7 +10,8 @@ pub mod log;
 pub mod middleware;
 pub mod models;
 pub mod swagger;
-pub mod tests;
+#[cfg(test)]
+mod tests;
 
 use axum::{Extension, Router};
 use controllers::AxumRouter;
@@ -24,14 +25,18 @@ use tower_http::cors::CorsLayer;
 ///   - DB Pool Connection
 ///   - Nested Router
 ///   - CORS Layer
+///
+/// # Panics
+///
+/// Panics if `frontend_url` cannot be parsed into a valid [`HeaderValue`].
 pub async fn create_router(frontend_url: &str) -> Router {
     let pool = db::create_pool().await;
     let cookie_key = Key::generate();
 
-    let api_routes = AxumRouter::new()
+    let routes = AxumRouter::new()
         .nest("/user", controllers::user::user_routes())
         .nest("/plaid", controllers::plaid::plaid_routes());
-    let api_router = AxumRouter::new().nest("/api", api_routes);
+    let api_router = AxumRouter::new().nest("/api", routes);
 
     #[cfg(all(not(test), debug_assertions))]
     let api_router = swagger::merge_swagger(api_router);

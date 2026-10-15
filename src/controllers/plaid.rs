@@ -2,7 +2,14 @@
 
 use axum::{routing::post, Json};
 
-use crate::{controllers::AxumRouter, error::ApiResult, models::http::plaid::*};
+use crate::{
+    controllers::AxumRouter,
+    error::ApiResult,
+    models::http::plaid::{
+        AccountsResponse, ExchangeTokenRequest, ExchangeTokenResponse, LinkTokenResponse,
+        TransactionSyncResponse, TransactionsResponse,
+    },
+};
 
 /// Create a Plaid Link token.
 ///
@@ -70,7 +77,7 @@ pub async fn api_plaid_link_token() -> ApiResult<Json<LinkTokenResponse>> {
     tag = "Plaid"
 )]
 pub async fn api_plaid_exchange_token(
-    Json(payload): Json<ExchangeTokenRequest>,
+    Json(_payload): Json<ExchangeTokenRequest>,
 ) -> ApiResult<Json<ExchangeTokenResponse>> {
     todo!()
 }

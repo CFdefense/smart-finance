@@ -307,7 +307,7 @@ mod test {
 
         let value = store.added[0].value().to_string();
         assert!(
-            value.ends_with(".sign"),
+            value.strip_suffix(".sign").is_some(),
             "expected token to end with '.sign', got '{value}'"
         );
     }
@@ -335,7 +335,7 @@ mod test {
 
         let expires = store.added[0]
             .expires()
-            .and_then(|e| e.datetime())
+            .and_then(tower_cookies::cookie::Expiration::datetime)
             .expect("expiry should be set for an active cookie");
 
         assert!(
@@ -370,7 +370,7 @@ mod test {
 
         let expires = store.added[0]
             .expires()
-            .and_then(|e| e.datetime())
+            .and_then(tower_cookies::cookie::Expiration::datetime)
             .expect("expiry should be set for an expired cookie");
 
         assert_eq!(

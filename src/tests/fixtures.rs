@@ -23,6 +23,10 @@ pub async fn test_pool() -> PgPool {
 }
 
 /// Generates a unique test email to prevent conflicts between parallel test runs.
+///
+/// # Panics
+///
+/// Panics if system time is before [`UNIX_EPOCH`].
 pub fn unique_email(prefix: &str) -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
     let nanos = SystemTime::now()
