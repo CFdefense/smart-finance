@@ -32,7 +32,9 @@ ensure_tool sqlx      "cargo install sqlx-cli --no-default-features --features p
 ensure_tool cargo-tarpaulin "cargo install cargo-tarpaulin --locked"
 
 # Load .env when running locally; in CI DATABASE_URL is set via env
-[ -f .env ] && { set -a; source .env; set +a; }
+if [ -z "${DATABASE_URL:-}" ] && [ -f .env ]; then
+    set -a; source .env; set +a
+fi
 : "${DATABASE_URL:?DATABASE_URL must be set}"
 
 FILTER="${1:-all}"
@@ -49,7 +51,7 @@ case "$FILTER" in
   fmt)     run_fmt ;;
   clippy)  run_clippy ;;
   test)    run_migrate; run_unit_coverage; run_integration_coverage ;;
-  openapi) run_openapi ;;
+  openapi) run_migrate; run_openapi ;;
   all)
     run_migrate
     run_fmt
