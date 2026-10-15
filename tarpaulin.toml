@@ -1,0 +1,23 @@
+# tarpaulin.toml — unit test coverage profile.
+# Covers inline #[cfg(test)] modules only (pure logic, no DB).
+# Excludes infrastructure files that have no unit-testable code.
+# Usage: cargo tarpaulin (default) or cargo tarpaulin --config tarpaulin.toml
+
+[run]
+run-types = ["Tests"]
+lib = true
+all-features = true
+skip-clean = true
+locked = true
+fail-under = 85
+exclude-files = [
+    "src/main.rs",
+    "src/log.rs",
+    "src/swagger.rs",
+    "src/db.rs",
+    "src/middleware.rs",
+    "src/bin/*",
+]
+
+[report]
+out = ["Stdout"]

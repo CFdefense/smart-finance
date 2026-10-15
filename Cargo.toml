@@ -1,0 +1,65 @@
+[package]
+name = "smart-finance"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.80"
+authors = ["Smart Finance Contributors"]
+description = "Personal finance management API"
+license = "MIT"
+repository = "https://github.com/cfarrell/smart-finance"
+readme = "README.md"
+keywords = ["finance", "api", "web"]
+categories = ["web-programming::http-server"]
+publish = false
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+unused_import_braces = "warn"
+unused_qualifications = "warn"
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tarpaulin_include)'] }
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+missing_errors_doc = "allow"
+
+[dependencies]
+axum = { version = "0.8", features = ["macros"] }
+tokio = { version = "1", features = ["full"] }
+tower-http = { version = "0.6", features = ["cors"] }
+tower-cookies = { version = "0.11", features = ["private", "signed"] }
+sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "macros", "chrono"] }
+tracing = "0.1"
+tracing-appender = "0.2"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "registry"] }
+dotenvy = "0.15"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+http = "1"
+utoipa = { version = "5", features = ["axum_extras", "chrono", "openapi_extensions"] }
+utoipa-swagger-ui = { version = "9", features = ["axum", "cache"] }
+utoipa-axum = "0.2"
+argon2 = "0.5"
+regex = "1"
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+
+[profile.dev]
+opt-level = 0
+debug = true
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+panic = "abort"
+
+[profile.test]
+opt-level = 1

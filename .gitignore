@@ -1,0 +1,24 @@
+
+
+# Added by cargo
+/target
+
+# Environment — copy .env.example and fill in values
+.env
+.sqlx/
+
+# Tarpaulin coverage output
+docs/coverage/
+docs/tarpaulin-report.html
+
+# Agent planning artifacts
+.sdd/
+docs/plans/
+agent/
+anomaly/
+
+# Tarpaulin LLVM coverage raw profile data
+*.profraw
+
+# Generated OpenAPI spec (produced by cargo run --bin gen-openapi)
+docs/openapi.json
