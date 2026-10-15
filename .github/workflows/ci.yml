@@ -42,13 +42,10 @@ jobs:
       - name: Cache Rust build artefacts
         uses: Swatinem/rust-cache@v2
 
-      - name: Install cargo-tarpaulin
+      - name: Install tools
         uses: taiki-e/install-action@v2
         with:
-          tool: cargo-tarpaulin
-
-      - name: Install sqlx-cli
-        run: cargo install sqlx-cli --no-default-features --features postgres --locked
+          tool: cargo-tarpaulin,sqlx-cli
 
       - name: Run pipeline via cicd.sh
         run: bash cicd.sh all
@@ -98,6 +95,11 @@ jobs:
 
       - name: Cache Rust build artefacts
         uses: Swatinem/rust-cache@v2
+
+      - name: Install sqlx-cli
+        uses: taiki-e/install-action@v2
+        with:
+          tool: sqlx-cli
 
       - name: Generate openapi.json
         run: bash cicd.sh openapi
