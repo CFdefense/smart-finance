@@ -1,6 +1,10 @@
 //! Plaid Financial Service Endpoints
 
-use axum::{extract::Query, routing::{get, post}, Extension, Json};
+use axum::{
+    extract::Query,
+    routing::{get, post},
+    Extension, Json,
+};
 use sqlx::PgPool;
 use tracing::debug;
 use utoipa::OpenApi;

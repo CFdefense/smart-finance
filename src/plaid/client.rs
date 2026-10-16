@@ -175,8 +175,8 @@ impl PlaidClient {
         let client_id = std::env::var("PLAID_CLIENT_ID").unwrap_or_default();
         let secret = std::env::var("PLAID_SECRET").unwrap_or_default();
         let env = std::env::var("PLAID_ENV").unwrap_or_else(|_| "sandbox".to_string());
-        let client_name = std::env::var("PLAID_CLIENT_NAME")
-            .unwrap_or_else(|_| "Smart Finance".to_string());
+        let client_name =
+            std::env::var("PLAID_CLIENT_NAME").unwrap_or_else(|_| "Smart Finance".to_string());
 
         let base_url = format!("https://{env}.plaid.com");
 
@@ -190,6 +190,14 @@ impl PlaidClient {
             secret,
             client_name,
         }
+    }
+
+    /// Build a `PlaidClient` that talks to `base_url` instead of the Plaid
+    /// host derived from `PLAID_ENV`. Used to point tests at a local mock.
+    pub fn with_base_url(base_url: impl Into<String>) -> Self {
+        let mut client = Self::new();
+        client.base_url = base_url.into();
+        client
     }
 
     /// Create a Plaid Link token for the given application user.

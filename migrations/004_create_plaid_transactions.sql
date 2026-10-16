@@ -13,5 +13,5 @@ CREATE TABLE IF NOT EXISTS plaid_transactions (
     updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_plaid_transactions_account_id ON plaid_transactions(account_id);
-CREATE INDEX idx_plaid_transactions_date ON plaid_transactions(date);
+CREATE INDEX IF NOT EXISTS idx_plaid_transactions_account_id ON plaid_transactions(account_id);
+CREATE INDEX IF NOT EXISTS idx_plaid_transactions_date ON plaid_transactions(date);

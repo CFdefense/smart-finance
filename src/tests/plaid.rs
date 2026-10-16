@@ -6,7 +6,10 @@ use axum::{
 };
 use tower::ServiceExt;
 
-use super::fixtures::{authenticated_cookie, cleanup, test_app, test_pool, unique_email};
+use super::fixtures::{
+    authenticated_cookie, cleanup, spawn_mock_plaid, test_app, test_app_with_plaid, test_pool,
+    unique_email, unique_tag, MockMode,
+};
 
 // ─── Auth-gate tests (no Plaid credentials required) ─────────────────────────
 
@@ -250,10 +253,12 @@ async fn get_transactions_data_isolation() {
         .unwrap();
 
     // Pre-clean any leftovers from a previous panicked run (idempotent)
-    sqlx::query!("DELETE FROM plaid_links WHERE item_id IN ('test-item-user-a', 'test-item-user-b')")
-        .execute(&pool)
-        .await
-        .ok();
+    sqlx::query!(
+        "DELETE FROM plaid_links WHERE item_id IN ('test-item-user-a', 'test-item-user-b')"
+    )
+    .execute(&pool)
+    .await
+    .ok();
 
     // Seed plaid_links
     sqlx::query!(
@@ -369,22 +374,32 @@ async fn get_transactions_data_isolation() {
         .filter_map(|t| t["transaction_id"].as_str())
         .collect();
 
-    assert!(ids.contains(&"test-tx-user-a"), "must include user A's transaction");
-    assert!(!ids.contains(&"test-tx-user-b"), "must NOT include user B's transaction");
+    assert!(
+        ids.contains(&"test-tx-user-a"),
+        "must include user A's transaction"
+    );
+    assert!(
+        !ids.contains(&"test-tx-user-b"),
+        "must NOT include user B's transaction"
+    );
 
     // Clean up seeded rows (CASCADE handles child rows)
     sqlx::query!("DELETE FROM plaid_transactions WHERE transaction_id IN ('test-tx-user-a', 'test-tx-user-b')")
         .execute(&pool)
         .await
         .ok();
-    sqlx::query!("DELETE FROM plaid_accounts WHERE account_id IN ('test-acct-user-a', 'test-acct-user-b')")
-        .execute(&pool)
-        .await
-        .ok();
-    sqlx::query!("DELETE FROM plaid_links WHERE item_id IN ('test-item-user-a', 'test-item-user-b')")
-        .execute(&pool)
-        .await
-        .ok();
+    sqlx::query!(
+        "DELETE FROM plaid_accounts WHERE account_id IN ('test-acct-user-a', 'test-acct-user-b')"
+    )
+    .execute(&pool)
+    .await
+    .ok();
+    sqlx::query!(
+        "DELETE FROM plaid_links WHERE item_id IN ('test-item-user-a', 'test-item-user-b')"
+    )
+    .execute(&pool)
+    .await
+    .ok();
     cleanup(&pool, &email_a).await;
     cleanup(&pool, &email_b).await;
 }
@@ -426,4 +441,179 @@ async fn link_token_authenticated() {
     let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
     let token = json["link_token"].as_str().unwrap_or("");
     assert!(!token.is_empty(), "link_token must be non-empty");
+}
+
+// ─── Mock-Plaid tests (local mock server, no real credentials) ───────────────
+
+/// Sends an authenticated request and returns `(status, json body)`.
+async fn call(
+    app: &axum::Router,
+    method: &str,
+    uri: &str,
+    cookie: &str,
+    body: Option<&str>,
+) -> (StatusCode, serde_json::Value) {
+    let mut builder = Request::builder()
+        .method(method)
+        .uri(uri)
+        .header("cookie", cookie);
+    let body = match body {
+        Some(b) => {
+            builder = builder.header("content-type", "application/json");
+            Body::from(b.to_string())
+        }
+        None => Body::empty(),
+    };
+    let response = app
+        .clone()
+        .oneshot(builder.body(body).unwrap())
+        .await
+        .unwrap();
+    let status = response.status();
+    let bytes = http_body_util::BodyExt::collect(response.into_body())
+        .await
+        .unwrap()
+        .to_bytes();
+    let json = serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null);
+    (status, json)
+}
+
+#[tokio::test]
+async fn plaid_full_flow_with_mock() {
+    let tag = unique_tag("flow");
+    let base = spawn_mock_plaid(&tag, MockMode::Ok).await;
+    let app = test_app_with_plaid(&base).await;
+    let pool = test_pool().await;
+    let email = unique_email("plaid_flow");
+    let cookie = authenticated_cookie(app.clone(), &email).await;
+
+    let (status, json) = call(&app, "POST", "/api/plaid/link-token", &cookie, None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["link_token"], "link-mock");
+
+    let (status, json) = call(
+        &app,
+        "POST",
+        "/api/plaid/exchange-token",
+        &cookie,
+        Some(r#"{"public_token":"public-mock"}"#),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["item_id"], format!("item-{tag}"));
+
+    // Exchanging the same item twice violates the UNIQUE constraint
+    let (status, _) = call(
+        &app,
+        "POST",
+        "/api/plaid/exchange-token",
+        &cookie,
+        Some(r#"{"public_token":"public-mock"}"#),
+    )
+    .await;
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+
+    let (status, json) = call(&app, "GET", "/api/plaid/accounts", &cookie, None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["accounts"][0]["account_id"], format!("acct-{tag}"));
+
+    let (status, json) = call(&app, "POST", "/api/plaid/transactions/sync", &cookie, None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["added"], 2);
+    assert_eq!(json["modified"], 1);
+    assert_eq!(json["removed"], 1);
+
+    let (status, json) = call(
+        &app,
+        "GET",
+        "/api/plaid/transactions?limit=500&offset=0",
+        &cookie,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["limit"], 200);
+    assert_eq!(json["total"], 1);
+    assert_eq!(
+        json["transactions"][0]["transaction_id"],
+        format!("tx1-{tag}")
+    );
+
+    cleanup(&pool, &email).await;
+}
+
+#[tokio::test]
+async fn get_transactions_negative_params_rejected() {
+    let app = test_app().await;
+    let pool = test_pool().await;
+    let email = unique_email("plaid_tx_neg");
+    let cookie = authenticated_cookie(app.clone(), &email).await;
+
+    let (status, _) = call(
+        &app,
+        "GET",
+        "/api/plaid/transactions?limit=-1",
+        &cookie,
+        None,
+    )
+    .await;
+    cleanup(&pool, &email).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+/// Every Plaid-backed endpoint must surface upstream failures as HTTP 500.
+async fn assert_plaid_failures_are_500(mode: MockMode, prefix: &str) {
+    let tag = unique_tag(prefix);
+    let base = spawn_mock_plaid(&tag, mode).await;
+    let app = test_app_with_plaid(&base).await;
+    let pool = test_pool().await;
+    let email = unique_email(prefix);
+    let cookie = authenticated_cookie(app.clone(), &email).await;
+
+    let user_id: i32 = sqlx::query_scalar!("SELECT id FROM users WHERE email = $1", email)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let item_id = format!("item-{tag}");
+    sqlx::query!(
+        "INSERT INTO plaid_links (user_id, item_id, access_token) VALUES ($1, $2, 'access-x')",
+        user_id,
+        item_id
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let link = call(&app, "POST", "/api/plaid/link-token", &cookie, None).await;
+    let exchange = call(
+        &app,
+        "POST",
+        "/api/plaid/exchange-token",
+        &cookie,
+        Some(r#"{"public_token":"p"}"#),
+    )
+    .await;
+    let accounts = call(&app, "GET", "/api/plaid/accounts", &cookie, None).await;
+    let sync = call(&app, "POST", "/api/plaid/transactions/sync", &cookie, None).await;
+
+    cleanup(&pool, &email).await;
+
+    for (name, (status, _)) in [
+        ("link-token", link),
+        ("exchange-token", exchange),
+        ("accounts", accounts),
+        ("sync", sync),
+    ] {
+        assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR, "{name}");
+    }
+}
+
+#[tokio::test]
+async fn plaid_upstream_error_status_returns_500() {
+    assert_plaid_failures_are_500(MockMode::ServerError, "plaid_up500").await;
+}
+
+#[tokio::test]
+async fn plaid_unparseable_response_returns_500() {
+    assert_plaid_failures_are_500(MockMode::BadBody, "plaid_badbody").await;
 }

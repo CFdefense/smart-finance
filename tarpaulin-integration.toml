@@ -4,7 +4,8 @@
 # Usage: cargo tarpaulin --config tarpaulin-integration.toml
 
 [run]
-run-types = ["Bins"]
+run-types = ["Tests"]
+lib = true
 all-features = true
 skip-clean = true
 locked = true

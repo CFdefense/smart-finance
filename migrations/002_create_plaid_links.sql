@@ -9,4 +9,4 @@ CREATE TABLE IF NOT EXISTS plaid_links (
     created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_plaid_links_user_id ON plaid_links(user_id);
+CREATE INDEX IF NOT EXISTS idx_plaid_links_user_id ON plaid_links(user_id);

@@ -1,11 +1,135 @@
 //! Integration test fixtures and helper functions.
 
-use axum::{body::Body, http::Request, Router};
-use serde_json::json;
+use axum::{body::Body, http::Request, routing::post, Json, Router};
+use serde_json::{json, Value};
 use sqlx::PgPool;
 use tower::ServiceExt;
 
-use crate::db;
+use crate::{db, plaid::client::PlaidClient};
+
+/// How the mock Plaid server responds.
+#[derive(Clone, Copy)]
+pub enum MockMode {
+    /// Valid Plaid-shaped responses.
+    Ok,
+    /// Every endpoint returns HTTP 500.
+    ServerError,
+    /// Every endpoint returns HTTP 200 with a JSON body of the wrong shape.
+    BadBody,
+}
+
+/// Starts a local mock Plaid API and returns its base URL.
+///
+/// `tag` is embedded in item/account/transaction IDs so parallel tests never collide.
+///
+/// # Panics
+///
+/// Panics if a local TCP listener cannot be bound.
+pub async fn spawn_mock_plaid(tag: &str, mode: MockMode) -> String {
+    let app = match mode {
+        MockMode::Ok => {
+            let t = tag.to_string();
+            let (t1, t2, t3) = (t.clone(), t.clone(), t);
+            Router::new()
+                .route(
+                    "/link/token/create",
+                    post(|| async { Json(json!({"link_token": "link-mock"})) }),
+                )
+                .route(
+                    "/item/public_token/exchange",
+                    post(move || {
+                        let item_id = format!("item-{t1}");
+                        async move {
+                            Json(json!({"access_token": "access-mock", "item_id": item_id}))
+                        }
+                    }),
+                )
+                .route(
+                    "/accounts/get",
+                    post(move || {
+                        let t = t2.clone();
+                        async move {
+                            Json(json!({
+                                "item": {"item_id": format!("item-{t}")},
+                                "accounts": [{
+                                    "account_id": format!("acct-{t}"),
+                                    "name": "Checking",
+                                    "official_name": null,
+                                    "type": "depository",
+                                    "subtype": "checking",
+                                    "mask": "0000",
+                                    "balances": {
+                                        "current": 100.0,
+                                        "available": 90.0,
+                                        "iso_currency_code": "USD"
+                                    }
+                                }]
+                            }))
+                        }
+                    }),
+                )
+                .route(
+                    "/transactions/sync",
+                    post(move |Json(body): Json<Value>| {
+                        let t = t3.clone();
+                        async move {
+                            let tx = |n: u8| {
+                                json!({
+                                    "transaction_id": format!("tx{n}-{t}"),
+                                    "account_id": format!("acct-{t}"),
+                                    "name": "Coffee",
+                                    "amount": 4.5,
+                                    "date": "2024-01-01",
+                                    "pending": false
+                                })
+                            };
+                            if body.get("cursor").is_some() {
+                                Json(json!({
+                                    "added": [],
+                                    "modified": [tx(1)],
+                                    "removed": [{"transaction_id": format!("tx2-{t}")}],
+                                    "next_cursor": "c2",
+                                    "has_more": false
+                                }))
+                            } else {
+                                Json(json!({
+                                    "added": [tx(1), tx(2)],
+                                    "modified": [],
+                                    "removed": [],
+                                    "next_cursor": "c1",
+                                    "has_more": true
+                                }))
+                            }
+                        }
+                    }),
+                )
+        }
+        MockMode::ServerError => Router::new().fallback(|| async {
+            (
+                http::StatusCode::INTERNAL_SERVER_ERROR,
+                "plaid mock failure",
+            )
+        }),
+        MockMode::BadBody => Router::new().fallback(|| async { Json(json!({})) }),
+    };
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.ok();
+    });
+    format!("http://{addr}")
+}
+
+/// Like [`test_app`], but the Plaid client targets `plaid_base_url`.
+pub async fn test_app_with_plaid(plaid_base_url: &str) -> Router {
+    dotenvy::dotenv().ok();
+    crate::create_router_with_plaid(
+        "http://localhost:5173",
+        PlaidClient::with_base_url(plaid_base_url),
+    )
+    .await
+}
 
 /// Builds the full application router for testing (no CORS, no Swagger).
 ///
@@ -76,4 +200,18 @@ pub async fn authenticated_cookie(app: Router, email: &str) -> String {
         .to_string();
 
     set_cookie.split(';').next().unwrap().trim().to_string()
+}
+
+/// Generates a unique tag (used in mock Plaid IDs) to prevent cross-test collisions.
+///
+/// # Panics
+///
+/// Panics if system time is before [`UNIX_EPOCH`].
+pub fn unique_tag(prefix: &str) -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .subsec_nanos();
+    format!("{prefix}{nanos}")
 }

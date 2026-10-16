@@ -26,14 +26,21 @@ use tower_http::cors::CorsLayer;
 ///   - DB Pool Connection
 ///   - Nested Router
 ///   - CORS Layer
+pub async fn create_router(frontend_url: &str) -> Router {
+    create_router_with_plaid(frontend_url, plaid::client::PlaidClient::new()).await
+}
+
+/// Create the API router using a caller-supplied [`plaid::client::PlaidClient`].
 ///
 /// # Panics
 ///
 /// Panics if `frontend_url` cannot be parsed into a valid [`HeaderValue`].
-pub async fn create_router(frontend_url: &str) -> Router {
+pub async fn create_router_with_plaid(
+    frontend_url: &str,
+    plaid: plaid::client::PlaidClient,
+) -> Router {
     let pool = db::create_pool().await;
     let cookie_key = Key::generate();
-    let plaid = plaid::client::PlaidClient::new();
 
     let routes = AxumRouter::new()
         .nest("/user", controllers::user::user_routes())
