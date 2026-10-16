@@ -1,14 +1,22 @@
 //! Plaid Financial Service Endpoints
 
-use axum::{routing::post, Json};
+use axum::{extract::Query, routing::{get, post}, Extension, Json};
+use sqlx::PgPool;
+use tracing::debug;
 
 use crate::{
     controllers::AxumRouter,
-    error::ApiResult,
-    models::http::plaid::{
-        AccountsResponse, ExchangeTokenRequest, ExchangeTokenResponse, LinkTokenResponse,
-        TransactionSyncResponse, TransactionsResponse,
+    error::{ApiResult, AppError},
+    middleware::{middleware_auth, AuthUser},
+    models::{
+        http::plaid::{
+            AccountResponse, AccountsResponse, ExchangeTokenRequest, ExchangeTokenResponse,
+            LinkTokenResponse, TransactionResponse, TransactionSyncResponse, TransactionsQuery,
+            TransactionsResponse,
+        },
+        sql::plaid::{PlaidItemRow, PlaidSyncCursorRow, PlaidTransactionRow},
     },
+    plaid::client::PlaidClient,
 };
 
 /// Create a Plaid Link token.
@@ -37,8 +45,15 @@ use crate::{
     ),
     tag = "Plaid"
 )]
-pub async fn api_plaid_link_token() -> ApiResult<Json<LinkTokenResponse>> {
-    todo!()
+pub async fn api_plaid_link_token(
+    Extension(user): Extension<AuthUser>,
+    Extension(plaid): Extension<PlaidClient>,
+) -> ApiResult<Json<LinkTokenResponse>> {
+    debug!("HANDLER ->> POST /api/plaid/link-token user_id={}", user.id);
+
+    let link_token = plaid.create_link_token(user.id).await?;
+
+    Ok(Json(LinkTokenResponse { link_token }))
 }
 
 /// Exchange a Plaid public token.
@@ -77,9 +92,42 @@ pub async fn api_plaid_link_token() -> ApiResult<Json<LinkTokenResponse>> {
     tag = "Plaid"
 )]
 pub async fn api_plaid_exchange_token(
-    Json(_payload): Json<ExchangeTokenRequest>,
+    Extension(user): Extension<AuthUser>,
+    Extension(plaid): Extension<PlaidClient>,
+    Extension(pool): Extension<PgPool>,
+    Json(payload): Json<ExchangeTokenRequest>,
 ) -> ApiResult<Json<ExchangeTokenResponse>> {
-    todo!()
+    debug!(
+        "HANDLER ->> POST /api/plaid/exchange-token user_id={}",
+        user.id
+    );
+
+    let (access_token, item_id) = plaid.exchange_public_token(&payload.public_token).await?;
+
+    // Persist the Item
+    sqlx::query!(
+        "INSERT INTO plaid_links (user_id, item_id, access_token) VALUES ($1, $2, $3)",
+        user.id,
+        item_id,
+        access_token
+    )
+    .execute(&pool)
+    .await
+    .map_err(AppError::from)?;
+
+    // Seed the sync cursor row (cursor = NULL means first sync not yet run)
+    sqlx::query!(
+        "INSERT INTO plaid_sync_cursors (item_id, cursor, has_more) VALUES ($1, NULL, TRUE)",
+        item_id
+    )
+    .execute(&pool)
+    .await
+    .map_err(AppError::from)?;
+
+    Ok(Json(ExchangeTokenResponse {
+        success: true,
+        item_id,
+    }))
 }
 
 /// Retrieve financial accounts for the authenticated user.
@@ -101,8 +149,76 @@ pub async fn api_plaid_exchange_token(
     ),
     tag = "Plaid"
 )]
-pub async fn api_plaid_get_accounts() -> ApiResult<Json<AccountsResponse>> {
-    todo!()
+pub async fn api_plaid_get_accounts(
+    Extension(user): Extension<AuthUser>,
+    Extension(plaid): Extension<PlaidClient>,
+    Extension(pool): Extension<PgPool>,
+) -> ApiResult<Json<AccountsResponse>> {
+    debug!("HANDLER ->> GET /api/plaid/accounts user_id={}", user.id);
+
+    let items = sqlx::query_as!(
+        PlaidItemRow,
+        "SELECT id, user_id, item_id, access_token, created_at FROM plaid_links WHERE user_id = $1",
+        user.id
+    )
+    .fetch_all(&pool)
+    .await
+    .map_err(AppError::from)?;
+
+    let mut accounts: Vec<AccountResponse> = Vec::new();
+
+    for item in items {
+        let plaid_accounts = plaid.get_accounts(&item.access_token).await?;
+
+        for a in &plaid_accounts {
+            sqlx::query!(
+                r#"
+                INSERT INTO plaid_accounts
+                    (account_id, item_id, name, official_name, account_type, account_subtype,
+                     mask, current_balance, available_balance, currency_code, updated_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+                ON CONFLICT (account_id) DO UPDATE SET
+                    name              = EXCLUDED.name,
+                    official_name     = EXCLUDED.official_name,
+                    account_type      = EXCLUDED.account_type,
+                    account_subtype   = EXCLUDED.account_subtype,
+                    mask              = EXCLUDED.mask,
+                    current_balance   = EXCLUDED.current_balance,
+                    available_balance = EXCLUDED.available_balance,
+                    currency_code     = EXCLUDED.currency_code,
+                    updated_at        = NOW()
+                "#,
+                a.account_id,
+                a.item_id,
+                a.name,
+                a.official_name,
+                a.account_type,
+                a.account_subtype,
+                a.mask,
+                a.current_balance,
+                a.available_balance,
+                a.currency_code
+            )
+            .execute(&pool)
+            .await
+            .map_err(AppError::from)?;
+        }
+
+        accounts.extend(plaid_accounts.into_iter().map(|a| AccountResponse {
+            account_id: a.account_id,
+            item_id: a.item_id,
+            name: a.name,
+            official_name: a.official_name,
+            account_type: a.account_type,
+            account_subtype: a.account_subtype,
+            mask: a.mask,
+            current_balance: a.current_balance,
+            available_balance: a.available_balance,
+            currency_code: a.currency_code,
+        }));
+    }
+
+    Ok(Json(AccountsResponse { accounts }))
 }
 
 /// Synchronize transactions for the authenticated user's linked financial
@@ -125,8 +241,141 @@ pub async fn api_plaid_get_accounts() -> ApiResult<Json<AccountsResponse>> {
     ),
     tag = "Plaid"
 )]
-pub async fn api_plaid_sync_transactions() -> ApiResult<Json<TransactionSyncResponse>> {
-    todo!()
+#[allow(clippy::too_many_lines)]
+pub async fn api_plaid_sync_transactions(
+    Extension(user): Extension<AuthUser>,
+    Extension(plaid): Extension<PlaidClient>,
+    Extension(pool): Extension<PgPool>,
+) -> ApiResult<Json<TransactionSyncResponse>> {
+    debug!(
+        "HANDLER ->> POST /api/plaid/transactions/sync user_id={}",
+        user.id
+    );
+
+    let items = sqlx::query_as!(
+        PlaidItemRow,
+        "SELECT id, user_id, item_id, access_token, created_at FROM plaid_links WHERE user_id = $1",
+        user.id
+    )
+    .fetch_all(&pool)
+    .await
+    .map_err(AppError::from)?;
+
+    let mut total_added: usize = 0;
+    let mut total_modified: usize = 0;
+    let mut total_removed: usize = 0;
+
+    for item in items {
+        let cursor_row = sqlx::query_as!(
+            PlaidSyncCursorRow,
+            "SELECT id, item_id, cursor, has_more, updated_at FROM plaid_sync_cursors WHERE item_id = $1",
+            item.item_id
+        )
+        .fetch_optional(&pool)
+        .await
+        .map_err(AppError::from)?;
+
+        let mut cursor: Option<String> = cursor_row.and_then(|r| r.cursor);
+
+        loop {
+            let page = plaid
+                .sync_transactions(&item.access_token, cursor.clone())
+                .await?;
+
+            total_added += page.added.len();
+            total_modified += page.modified.len();
+            total_removed += page.removed.len();
+
+            for tx in &page.added {
+                sqlx::query!(
+                    r#"
+                    INSERT INTO plaid_transactions
+                        (transaction_id, account_id, name, amount, date, pending, updated_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, NOW())
+                    ON CONFLICT (transaction_id) DO UPDATE SET
+                        name       = EXCLUDED.name,
+                        amount     = EXCLUDED.amount,
+                        date       = EXCLUDED.date,
+                        pending    = EXCLUDED.pending,
+                        updated_at = NOW()
+                    "#,
+                    tx.transaction_id,
+                    tx.account_id,
+                    tx.name,
+                    tx.amount,
+                    tx.date,
+                    tx.pending
+                )
+                .execute(&pool)
+                .await
+                .map_err(AppError::from)?;
+            }
+
+            for tx in &page.modified {
+                sqlx::query!(
+                    r#"
+                    INSERT INTO plaid_transactions
+                        (transaction_id, account_id, name, amount, date, pending, updated_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, NOW())
+                    ON CONFLICT (transaction_id) DO UPDATE SET
+                        name       = EXCLUDED.name,
+                        amount     = EXCLUDED.amount,
+                        date       = EXCLUDED.date,
+                        pending    = EXCLUDED.pending,
+                        updated_at = NOW()
+                    "#,
+                    tx.transaction_id,
+                    tx.account_id,
+                    tx.name,
+                    tx.amount,
+                    tx.date,
+                    tx.pending
+                )
+                .execute(&pool)
+                .await
+                .map_err(AppError::from)?;
+            }
+
+            for tx_id in &page.removed {
+                sqlx::query!(
+                    "DELETE FROM plaid_transactions WHERE transaction_id = $1",
+                    tx_id
+                )
+                .execute(&pool)
+                .await
+                .map_err(AppError::from)?;
+            }
+
+            sqlx::query!(
+                r#"
+                INSERT INTO plaid_sync_cursors (item_id, cursor, has_more, updated_at)
+                VALUES ($1, $2, $3, NOW())
+                ON CONFLICT (item_id) DO UPDATE SET
+                    cursor     = EXCLUDED.cursor,
+                    has_more   = EXCLUDED.has_more,
+                    updated_at = NOW()
+                "#,
+                item.item_id,
+                page.next_cursor,
+                page.has_more
+            )
+            .execute(&pool)
+            .await
+            .map_err(AppError::from)?;
+
+            if !page.has_more {
+                break;
+            }
+            cursor = Some(page.next_cursor);
+        }
+    }
+
+    Ok(Json(TransactionSyncResponse {
+        added: total_added,
+        modified: total_modified,
+        removed: total_removed,
+        has_more: false,
+    }))
 }
 
 /// Retrieve stored transactions for the authenticated user.
@@ -152,16 +401,91 @@ pub async fn api_plaid_sync_transactions() -> ApiResult<Json<TransactionSyncResp
     ),
     tag = "Plaid"
 )]
-pub async fn api_plaid_get_transactions() -> ApiResult<Json<TransactionsResponse>> {
-    todo!()
+pub async fn api_plaid_get_transactions(
+    Extension(user): Extension<AuthUser>,
+    Extension(pool): Extension<PgPool>,
+    Query(params): Query<TransactionsQuery>,
+) -> ApiResult<Json<TransactionsResponse>> {
+    debug!(
+        "HANDLER ->> GET /api/plaid/transactions user_id={}",
+        user.id
+    );
+
+    let limit = params.limit.unwrap_or(50);
+    let offset = params.offset.unwrap_or(0);
+
+    let rows = sqlx::query_as!(
+        PlaidTransactionRow,
+        r#"
+        SELECT
+            t.id,
+            t.transaction_id,
+            t.account_id,
+            t.name,
+            t.amount,
+            t.date,
+            t.pending,
+            t.created_at,
+            t.updated_at
+        FROM plaid_transactions t
+        JOIN plaid_accounts a ON a.account_id = t.account_id
+        JOIN plaid_links i ON i.item_id = a.item_id
+        WHERE i.user_id = $1
+        ORDER BY t.date DESC
+        LIMIT $2 OFFSET $3
+        "#,
+        user.id,
+        limit,
+        offset
+    )
+    .fetch_all(&pool)
+    .await
+    .map_err(AppError::from)?;
+
+    let total: Option<i64> = sqlx::query_scalar!(
+        r#"
+        SELECT COUNT(*)
+        FROM plaid_transactions t
+        JOIN plaid_accounts a ON a.account_id = t.account_id
+        JOIN plaid_links i ON i.item_id = a.item_id
+        WHERE i.user_id = $1
+        "#,
+        user.id
+    )
+    .fetch_one(&pool)
+    .await
+    .map_err(AppError::from)?;
+
+    let transactions = rows
+        .into_iter()
+        .map(|t| TransactionResponse {
+            transaction_id: t.transaction_id,
+            account_id: t.account_id,
+            name: t.name,
+            amount: t.amount,
+            date: t.date.to_string(),
+            pending: t.pending,
+        })
+        .collect();
+
+    Ok(Json(TransactionsResponse {
+        transactions,
+        total,
+        limit,
+        offset,
+    }))
 }
 
-/// Builds the user route group.
+/// Builds the Plaid route group.
 ///
-/// Public routes: `POST /signup`, `POST /login`.
-/// Protected route (requires valid `auth-token` cookie): `POST /logout`.
+/// All routes require a valid `auth-token` cookie — the `middleware_auth` layer
+/// is applied to the entire group.
 pub fn plaid_routes() -> AxumRouter {
     AxumRouter::new()
         .route("/link-token", post(api_plaid_link_token))
         .route("/exchange-token", post(api_plaid_exchange_token))
+        .route("/accounts", get(api_plaid_get_accounts))
+        .route("/transactions/sync", post(api_plaid_sync_transactions))
+        .route("/transactions", get(api_plaid_get_transactions))
+        .route_layer(axum::middleware::from_fn(middleware_auth))
 }
