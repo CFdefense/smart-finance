@@ -24,18 +24,6 @@ use crate::{
     models::sql::user::UserRow,
 };
 
-/// `OpenAPI` doc for user authentication routes.
-///
-/// Constructed only by the `#[openapi]` macro and the root [`crate::swagger::ApiDoc`].
-#[derive(OpenApi)]
-#[openapi(
-    paths(api_signup, api_login, api_logout),
-    info(title = "User Routes", description = "Authentication endpoints."),
-    tags((name = "User"))
-)]
-#[allow(dead_code)] // only instantiated by the #[derive(OpenApi)] macro — never constructed directly
-pub struct UserApiDoc;
-
 /// Abstracts cookie writing so handlers can be tested without a real cookie jar.
 pub trait CookieStore {
     /// Add a private (encrypted) cookie using the given key.
@@ -238,6 +226,18 @@ pub async fn api_logout(
     set_cookie(user.id, true, &mut cookies, &key);
     Ok(())
 }
+
+/// `OpenAPI` doc for user authentication routes.
+///
+/// Constructed only by the `#[openapi]` macro and the root [`crate::swagger::ApiDoc`].
+#[derive(OpenApi)]
+#[openapi(
+    paths(api_signup, api_login, api_logout),
+    info(title = "User Routes", description = "Authentication endpoints."),
+    tags((name = "User"))
+)]
+#[allow(dead_code)] // only instantiated by the #[derive(OpenApi)] macro — never constructed directly
+pub struct UserApiDoc;
 
 /// Builds the user route group.
 ///

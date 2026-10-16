@@ -5,7 +5,7 @@ use chrono::{DateTime, NaiveDate, Utc};
 /// Row model for the `plaid_links` table.
 ///
 /// Represents a linked bank connection (Plaid Item) for a user.
-pub struct PlaidItemRow {
+pub struct PlaidLinkRow {
     /// Primary key.
     pub id: i32,
     /// FK to `users.id`.

@@ -4,9 +4,10 @@ use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
+use serde_json::json;
 use tower::ServiceExt;
 
-use super::fixtures::{auth_body, cleanup, test_app, test_pool, unique_email};
+use super::fixtures::{cleanup, test_app, test_pool, unique_email};
 
 // ─── Signup tests ─────────────────────────────────────────────────────────────
 
@@ -22,7 +23,9 @@ async fn signup_success() {
                 .method("POST")
                 .uri("/api/user/signup")
                 .header("content-type", "application/json")
-                .body(auth_body(&email, "Secret_123"))
+                .body(Body::from(
+                    json!({"email": &email, "password": "Secret_123"}).to_string(),
+                ))
                 .unwrap(),
         )
         .await
@@ -45,7 +48,9 @@ async fn signup_duplicate_email() {
                 .method("POST")
                 .uri("/api/user/signup")
                 .header("content-type", "application/json")
-                .body(auth_body(&email, "Secret_123"))
+                .body(Body::from(
+                    json!({"email": &email, "password": "Secret_123"}).to_string(),
+                ))
                 .unwrap(),
         )
         .await
@@ -58,7 +63,9 @@ async fn signup_duplicate_email() {
                 .method("POST")
                 .uri("/api/user/signup")
                 .header("content-type", "application/json")
-                .body(auth_body(&email, "Secret_123"))
+                .body(Body::from(
+                    json!({"email": &email, "password": "Secret_123"}).to_string(),
+                ))
                 .unwrap(),
         )
         .await
@@ -99,7 +106,9 @@ async fn signup_bad_password() {
                 .method("POST")
                 .uri("/api/user/signup")
                 .header("content-type", "application/json")
-                .body(auth_body(&email, "weak"))
+                .body(Body::from(
+                    json!({"email": &email, "password": "weak"}).to_string(),
+                ))
                 .unwrap(),
         )
         .await
@@ -123,7 +132,9 @@ async fn login_success() {
                 .method("POST")
                 .uri("/api/user/signup")
                 .header("content-type", "application/json")
-                .body(auth_body(&email, "Secret_123"))
+                .body(Body::from(
+                    json!({"email": &email, "password": "Secret_123"}).to_string(),
+                ))
                 .unwrap(),
         )
         .await
@@ -135,7 +146,9 @@ async fn login_success() {
                 .method("POST")
                 .uri("/api/user/login")
                 .header("content-type", "application/json")
-                .body(auth_body(&email, "Secret_123"))
+                .body(Body::from(
+                    json!({"email": &email, "password": "Secret_123"}).to_string(),
+                ))
                 .unwrap(),
         )
         .await
@@ -157,7 +170,9 @@ async fn login_wrong_password() {
                 .method("POST")
                 .uri("/api/user/signup")
                 .header("content-type", "application/json")
-                .body(auth_body(&email, "Secret_123"))
+                .body(Body::from(
+                    json!({"email": &email, "password": "Secret_123"}).to_string(),
+                ))
                 .unwrap(),
         )
         .await
@@ -169,7 +184,9 @@ async fn login_wrong_password() {
                 .method("POST")
                 .uri("/api/user/login")
                 .header("content-type", "application/json")
-                .body(auth_body(&email, "WrongPass_1"))
+                .body(Body::from(
+                    json!({"email": &email, "password": "WrongPass_1"}).to_string(),
+                ))
                 .unwrap(),
         )
         .await
@@ -189,7 +206,10 @@ async fn login_unknown_email() {
                 .method("POST")
                 .uri("/api/user/login")
                 .header("content-type", "application/json")
-                .body(auth_body("nobody_unique_xyz@example.com", "Secret_123"))
+                .body(Body::from(
+                    json!({"email": "nobody_unique_xyz@example.com", "password": "Secret_123"})
+                        .to_string(),
+                ))
                 .unwrap(),
         )
         .await
@@ -232,7 +252,9 @@ async fn logout_success() {
                 .method("POST")
                 .uri("/api/user/signup")
                 .header("content-type", "application/json")
-                .body(auth_body(&email, "Secret_123"))
+                .body(Body::from(
+                    json!({"email": &email, "password": "Secret_123"}).to_string(),
+                ))
                 .unwrap(),
         )
         .await

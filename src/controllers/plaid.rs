@@ -19,7 +19,7 @@ use crate::{
             LinkTokenResponse, TransactionResponse, TransactionSyncResponse, TransactionsQuery,
             TransactionsResponse,
         },
-        sql::plaid::{PlaidItemRow, PlaidSyncCursorRow, PlaidTransactionRow},
+        sql::plaid::{PlaidLinkRow, PlaidSyncCursorRow, PlaidTransactionRow},
     },
     plaid::client::PlaidClient,
 };
@@ -56,8 +56,10 @@ pub async fn api_plaid_link_token(
 ) -> ApiResult<Json<LinkTokenResponse>> {
     debug!("HANDLER ->> POST /api/plaid/link-token user_id={}", user.id);
 
+    // Ask Plaid for a short-lived Link token tied to this user's id.
     let link_token = plaid.create_link_token(user.id).await?;
 
+    // Hand the token to the frontend so it can launch Plaid Link.
     Ok(Json(LinkTokenResponse { link_token }))
 }
 
@@ -107,6 +109,8 @@ pub async fn api_plaid_exchange_token(
         user.id
     );
 
+    // Swap the one-time public token with Plaid for a long-lived access token
+    // and the Item id identifying the linked bank connection.
     let (access_token, item_id) = plaid.exchange_public_token(&payload.public_token).await?;
 
     // Persist the Item
@@ -129,6 +133,7 @@ pub async fn api_plaid_exchange_token(
     .await
     .map_err(AppError::from)?;
 
+    // Return only the item id; the access token never leaves the backend.
     Ok(Json(ExchangeTokenResponse {
         success: true,
         item_id,
@@ -161,8 +166,9 @@ pub async fn api_plaid_get_accounts(
 ) -> ApiResult<Json<AccountsResponse>> {
     debug!("HANDLER ->> GET /api/plaid/accounts user_id={}", user.id);
 
+    // Load the user's linked bank connections (and their access tokens).
     let items = sqlx::query_as!(
-        PlaidItemRow,
+        PlaidLinkRow,
         "SELECT id, user_id, item_id, access_token, created_at FROM plaid_links WHERE user_id = $1",
         user.id
     )
@@ -170,11 +176,15 @@ pub async fn api_plaid_get_accounts(
     .await
     .map_err(AppError::from)?;
 
+    // Collect accounts across all of the user's linked connections.
     let mut accounts: Vec<AccountResponse> = Vec::new();
 
+    // Fetch the live accounts from Plaid for each linked connection.
     for item in items {
         let plaid_accounts = plaid.get_accounts(&item.access_token).await?;
 
+        // Upsert each account locally so transactions can reference it (FK) and
+        // balances stay current.
         for a in &plaid_accounts {
             sqlx::query!(
                 r#"
@@ -209,6 +219,7 @@ pub async fn api_plaid_get_accounts(
             .map_err(AppError::from)?;
         }
 
+        // Convert Plaid account data into API responses (no access tokens exposed).
         accounts.extend(plaid_accounts.into_iter().map(|a| AccountResponse {
             account_id: a.account_id,
             item_id: a.item_id,
@@ -223,6 +234,7 @@ pub async fn api_plaid_get_accounts(
         }));
     }
 
+    // Return the combined list of accounts.
     Ok(Json(AccountsResponse { accounts }))
 }
 
@@ -257,8 +269,9 @@ pub async fn api_plaid_sync_transactions(
         user.id
     );
 
+    // Load the user's linked bank connections (and their access tokens).
     let items = sqlx::query_as!(
-        PlaidItemRow,
+        PlaidLinkRow,
         "SELECT id, user_id, item_id, access_token, created_at FROM plaid_links WHERE user_id = $1",
         user.id
     )
@@ -266,14 +279,17 @@ pub async fn api_plaid_sync_transactions(
     .await
     .map_err(AppError::from)?;
 
+    // Running totals across every linked connection.
     let mut total_added: usize = 0;
     let mut total_modified: usize = 0;
     let mut total_removed: usize = 0;
 
+    // Sync each linked connection independently.
     for item in items {
         // Ensure accounts exist before syncing transactions (FK requirement)
         let plaid_accounts = plaid.get_accounts(&item.access_token).await?;
         for a in &plaid_accounts {
+            // Upsert the account so the local copy stays current.
             sqlx::query!(
                 r#"
                 INSERT INTO plaid_accounts
@@ -307,6 +323,7 @@ pub async fn api_plaid_sync_transactions(
             .map_err(AppError::from)?;
         }
 
+        // Load the stored sync cursor for this connection.
         let cursor_row = sqlx::query_as!(
             PlaidSyncCursorRow,
             "SELECT id, item_id, cursor, has_more, updated_at FROM plaid_sync_cursors WHERE item_id = $1",
@@ -316,17 +333,23 @@ pub async fn api_plaid_sync_transactions(
         .await
         .map_err(AppError::from)?;
 
+        // Resume from the stored cursor; None means a full initial sync.
         let mut cursor: Option<String> = cursor_row.and_then(|r| r.cursor);
 
+        // Page through Plaid's sync API until all pending changes are consumed.
         loop {
+            // Fetch the next page of changes from Plaid.
             let page = plaid
                 .sync_transactions(&item.access_token, cursor.clone())
                 .await?;
 
+            // Tally this page's counts for the response.
             total_added += page.added.len();
             total_modified += page.modified.len();
             total_removed += page.removed.len();
 
+            // Upsert newly added transactions; ON CONFLICT keeps this idempotent if a
+            // page is replayed.
             for tx in &page.added {
                 sqlx::query!(
                     r#"
@@ -352,6 +375,7 @@ pub async fn api_plaid_sync_transactions(
                 .map_err(AppError::from)?;
             }
 
+            // Upsert modified transactions the same way.
             for tx in &page.modified {
                 sqlx::query!(
                     r#"
@@ -377,6 +401,7 @@ pub async fn api_plaid_sync_transactions(
                 .map_err(AppError::from)?;
             }
 
+            // Delete transactions that Plaid reports as removed.
             for tx_id in &page.removed {
                 sqlx::query!(
                     "DELETE FROM plaid_transactions WHERE transaction_id = $1",
@@ -387,6 +412,8 @@ pub async fn api_plaid_sync_transactions(
                 .map_err(AppError::from)?;
             }
 
+            // Persist the new cursor after every page so a later sync resumes
+            // incrementally instead of starting over.
             sqlx::query!(
                 r#"
                 INSERT INTO plaid_sync_cursors (item_id, cursor, has_more, updated_at)
@@ -404,13 +431,17 @@ pub async fn api_plaid_sync_transactions(
             .await
             .map_err(AppError::from)?;
 
+            // Stop once Plaid reports there are no more pages for this connection.
             if !page.has_more {
                 break;
             }
+            // Otherwise continue from the cursor Plaid returned.
             cursor = Some(page.next_cursor);
         }
     }
 
+    // Report totals across all connections; every page has been consumed, so
+    // has_more is always false.
     Ok(Json(TransactionSyncResponse {
         added: total_added,
         modified: total_modified,
@@ -452,16 +483,21 @@ pub async fn api_plaid_get_transactions(
         user.id
     );
 
+    // Default to the first 50 rows when no paging params are supplied.
     let limit = params.limit.unwrap_or(50);
     let offset = params.offset.unwrap_or(0);
 
+    // Reject negative paging values.
     if limit < 0 || offset < 0 {
         return Err(AppError::Validation(
             "limit and offset must be non-negative".to_string(),
         ));
     }
+    // Cap the page size to protect the database.
     let limit = limit.min(200);
 
+    // Fetch one page of transactions, newest first. Ownership is enforced by
+    // joining transactions -> accounts -> links and filtering on the user id.
     let rows = sqlx::query_as!(
         PlaidTransactionRow,
         r#"
@@ -490,6 +526,8 @@ pub async fn api_plaid_get_transactions(
     .await
     .map_err(AppError::from)?;
 
+    // Count all of the user's transactions (ignoring limit/offset) so clients
+    // can paginate.
     let total: Option<i64> = sqlx::query_scalar!(
         r#"
         SELECT COUNT(*)
@@ -504,6 +542,7 @@ pub async fn api_plaid_get_transactions(
     .await
     .map_err(AppError::from)?;
 
+    // Map DB rows to the API shape (date rendered as a string).
     let transactions = rows
         .into_iter()
         .map(|t| TransactionResponse {
@@ -516,6 +555,7 @@ pub async fn api_plaid_get_transactions(
         })
         .collect();
 
+    // Return the page along with its paging metadata.
     Ok(Json(TransactionsResponse {
         transactions,
         total,

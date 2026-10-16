@@ -7,8 +7,7 @@ use axum::{
 use tower::ServiceExt;
 
 use super::fixtures::{
-    authenticated_cookie, cleanup, spawn_mock_plaid, test_app, test_app_with_plaid, test_pool,
-    unique_email, unique_tag, MockMode,
+    authenticated_cookie, cleanup, test_app, test_pool, unique_email, MOCK_FAIL_500, MOCK_FAIL_BODY,
 };
 
 // ─── Auth-gate tests (no Plaid credentials required) ─────────────────────────
@@ -480,11 +479,16 @@ async fn call(
 
 #[tokio::test]
 async fn plaid_full_flow_with_mock() {
-    let tag = unique_tag("flow");
-    let base = spawn_mock_plaid(&tag, MockMode::Ok).await;
-    let app = test_app_with_plaid(&base).await;
+    let app = test_app().await;
     let pool = test_pool().await;
     let email = unique_email("plaid_flow");
+
+    // Pre-clean any leftovers from a previous panicked run (the mock uses fixed IDs)
+    sqlx::query!("DELETE FROM plaid_links WHERE item_id = 'item-mock'")
+        .execute(&pool)
+        .await
+        .ok();
+
     let cookie = authenticated_cookie(app.clone(), &email).await;
 
     let (status, json) = call(&app, "POST", "/api/plaid/link-token", &cookie, None).await;
@@ -500,7 +504,7 @@ async fn plaid_full_flow_with_mock() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(json["item_id"], format!("item-{tag}"));
+    assert_eq!(json["item_id"], "item-mock");
 
     // Exchanging the same item twice violates the UNIQUE constraint
     let (status, _) = call(
@@ -515,7 +519,7 @@ async fn plaid_full_flow_with_mock() {
 
     let (status, json) = call(&app, "GET", "/api/plaid/accounts", &cookie, None).await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(json["accounts"][0]["account_id"], format!("acct-{tag}"));
+    assert_eq!(json["accounts"][0]["account_id"], "acct-mock");
 
     let (status, json) = call(&app, "POST", "/api/plaid/transactions/sync", &cookie, None).await;
     assert_eq!(status, StatusCode::OK);
@@ -534,10 +538,7 @@ async fn plaid_full_flow_with_mock() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["limit"], 200);
     assert_eq!(json["total"], 1);
-    assert_eq!(
-        json["transactions"][0]["transaction_id"],
-        format!("tx1-{tag}")
-    );
+    assert_eq!(json["transactions"][0]["transaction_id"], "tx1-mock");
 
     cleanup(&pool, &email).await;
 }
@@ -561,36 +562,42 @@ async fn get_transactions_negative_params_rejected() {
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
 
-/// Every Plaid-backed endpoint must surface upstream failures as HTTP 500.
-async fn assert_plaid_failures_are_500(mode: MockMode, prefix: &str) {
-    let tag = unique_tag(prefix);
-    let base = spawn_mock_plaid(&tag, mode).await;
-    let app = test_app_with_plaid(&base).await;
+/// Every Plaid-backed endpoint that takes a token must surface upstream
+/// failures as HTTP 500. `marker` is a `MOCK_FAIL_*` value that tells the mock to fail.
+async fn assert_plaid_failures_are_500(marker: &str, prefix: &str) {
+    let app = test_app().await;
     let pool = test_pool().await;
     let email = unique_email(prefix);
     let cookie = authenticated_cookie(app.clone(), &email).await;
 
+    // Seed a link whose access token makes the mock fail on accounts/sync
     let user_id: i32 = sqlx::query_scalar!("SELECT id FROM users WHERE email = $1", email)
         .fetch_one(&pool)
         .await
         .unwrap();
-    let item_id = format!("item-{tag}");
+    let item_id = format!("item-{prefix}");
+    let access_token = format!("access-{marker}");
+    sqlx::query!("DELETE FROM plaid_links WHERE item_id = $1", item_id)
+        .execute(&pool)
+        .await
+        .ok();
     sqlx::query!(
-        "INSERT INTO plaid_links (user_id, item_id, access_token) VALUES ($1, $2, 'access-x')",
+        "INSERT INTO plaid_links (user_id, item_id, access_token) VALUES ($1, $2, $3)",
         user_id,
-        item_id
+        item_id,
+        access_token
     )
     .execute(&pool)
     .await
     .unwrap();
 
-    let link = call(&app, "POST", "/api/plaid/link-token", &cookie, None).await;
+    let exchange_body = format!(r#"{{"public_token":"{marker}"}}"#);
     let exchange = call(
         &app,
         "POST",
         "/api/plaid/exchange-token",
         &cookie,
-        Some(r#"{"public_token":"p"}"#),
+        Some(&exchange_body),
     )
     .await;
     let accounts = call(&app, "GET", "/api/plaid/accounts", &cookie, None).await;
@@ -599,7 +606,6 @@ async fn assert_plaid_failures_are_500(mode: MockMode, prefix: &str) {
     cleanup(&pool, &email).await;
 
     for (name, (status, _)) in [
-        ("link-token", link),
         ("exchange-token", exchange),
         ("accounts", accounts),
         ("sync", sync),
@@ -610,10 +616,10 @@ async fn assert_plaid_failures_are_500(mode: MockMode, prefix: &str) {
 
 #[tokio::test]
 async fn plaid_upstream_error_status_returns_500() {
-    assert_plaid_failures_are_500(MockMode::ServerError, "plaid_up500").await;
+    assert_plaid_failures_are_500(MOCK_FAIL_500, "plaid_up500").await;
 }
 
 #[tokio::test]
 async fn plaid_unparseable_response_returns_500() {
-    assert_plaid_failures_are_500(MockMode::BadBody, "plaid_badbody").await;
+    assert_plaid_failures_are_500(MOCK_FAIL_BODY, "plaid_badbody").await;
 }
