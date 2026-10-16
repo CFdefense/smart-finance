@@ -137,9 +137,10 @@ struct PlaidRemovedTransaction {
 /// Initialized once at startup from environment variables and injected as an
 /// Axum [`axum::Extension`] alongside the `PgPool` and cookie `Key`.
 ///
-/// # Panics
-///
-/// [`PlaidClient::new`] panics if any required env var is missing.
+/// Missing `PLAID_CLIENT_ID` or `PLAID_SECRET` credentials default to empty
+/// strings so the server boots without Plaid configured (useful in tests).
+/// Actual Plaid API calls will return `AppError::Internal` until real
+/// credentials are set.
 #[derive(Clone)]
 pub struct PlaidClient {
     http: reqwest::Client,
