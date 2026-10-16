@@ -249,6 +249,12 @@ async fn get_transactions_data_isolation() {
         .await
         .unwrap();
 
+    // Pre-clean any leftovers from a previous panicked run (idempotent)
+    sqlx::query!("DELETE FROM plaid_links WHERE item_id IN ('test-item-user-a', 'test-item-user-b')")
+        .execute(&pool)
+        .await
+        .ok();
+
     // Seed plaid_links
     sqlx::query!(
         "INSERT INTO plaid_links (user_id, item_id, access_token) VALUES ($1, $2, $3)",
