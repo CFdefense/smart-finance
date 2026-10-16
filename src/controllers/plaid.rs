@@ -3,6 +3,7 @@
 use axum::{extract::Query, routing::{get, post}, Extension, Json};
 use sqlx::PgPool;
 use tracing::debug;
+use utoipa::OpenApi;
 
 use crate::{
     controllers::AxumRouter,
@@ -518,6 +519,24 @@ pub async fn api_plaid_get_transactions(
         offset,
     }))
 }
+
+/// `OpenAPI` doc for Plaid financial service routes.
+///
+/// Constructed only by the `#[openapi]` macro and the root [`crate::swagger::ApiDoc`].
+#[derive(OpenApi)]
+#[openapi(
+    paths(
+        api_plaid_link_token,
+        api_plaid_exchange_token,
+        api_plaid_get_accounts,
+        api_plaid_sync_transactions,
+        api_plaid_get_transactions
+    ),
+    info(title = "Plaid Routes", description = "Plaid financial service endpoints."),
+    tags((name = "Plaid"))
+)]
+#[allow(dead_code)] // only instantiated by the #[derive(OpenApi)] macro — never constructed directly
+pub struct PlaidApiDoc;
 
 /// Builds the Plaid route group.
 ///
