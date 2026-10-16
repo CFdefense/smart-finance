@@ -1,4 +1,4 @@
-//! HTTP request and response models for user authentication routes.
+//! HTTP request and response models for user routes.
 
 use std::sync::LazyLock;
 

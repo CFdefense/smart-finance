@@ -1,68 +1,20 @@
-//! Integration tests for the Smart Finance API.
-//!
-//! Each test spins up the full Axum router in-process against a real Postgres
-//! database. Set `DATABASE_URL` in `.env` or the environment before running.
+//! Login and logout integration tests.
 
 use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
 use serde_json::json;
-use sqlx::PgPool;
 use tower::ServiceExt;
-use tower_cookies::{cookie::Key, CookieManagerLayer};
 
-use crate::{controllers::user::user_routes, controllers::AxumRouter, db};
-
-/// Builds the full application router for testing.
-///
-/// Identical to `main()` minus CORS and Swagger UI.
-async fn test_app() -> (axum::Router, PgPool) {
-    dotenvy::dotenv().ok();
-    let pool = db::create_pool().await;
-    let key = Key::generate();
-
-    let api_router = AxumRouter::new().nest("/user", user_routes());
-    let api_router = AxumRouter::new().nest("/api", api_router);
-
-    let app = axum::Router::new()
-        .merge(api_router)
-        .layer(axum::Extension(pool.clone()))
-        .layer(axum::Extension(key))
-        .layer(CookieManagerLayer::new());
-
-    (app, pool)
-}
-
-/// Generates a unique test email to prevent conflicts between parallel test runs.
-fn unique_email(prefix: &str) -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .subsec_nanos();
-    format!("test+{prefix}{nanos}@example.com")
-}
-
-/// Deletes a test user by email to clean up after each test.
-async fn cleanup(pool: &PgPool, email: &str) {
-    sqlx::query("DELETE FROM users WHERE email = $1")
-        .bind(email)
-        .execute(pool)
-        .await
-        .ok();
-}
-
-/// Builds a JSON body for signup/login requests.
-fn auth_body(email: &str, password: &str) -> Body {
-    Body::from(json!({"email": email, "password": password}).to_string())
-}
+use super::fixtures::{cleanup, test_app, test_pool, unique_email};
 
 // ─── Signup tests ─────────────────────────────────────────────────────────────
 
 #[tokio::test]
 async fn signup_success() {
-    let (app, pool) = test_app().await;
+    let app = test_app().await;
+    let pool = test_pool().await;
     let email = unique_email("signup_ok");
 
     let response = app
@@ -71,7 +23,9 @@ async fn signup_success() {
                 .method("POST")
                 .uri("/api/user/signup")
                 .header("content-type", "application/json")
-                .body(auth_body(&email, "Secret_123"))
+                .body(Body::from(
+                    json!({"email": &email, "password": "Secret_123"}).to_string(),
+                ))
                 .unwrap(),
         )
         .await
@@ -83,7 +37,8 @@ async fn signup_success() {
 
 #[tokio::test]
 async fn signup_duplicate_email() {
-    let (app, pool) = test_app().await;
+    let app = test_app().await;
+    let pool = test_pool().await;
     let email = unique_email("signup_dup");
 
     // First signup — must succeed
@@ -93,7 +48,9 @@ async fn signup_duplicate_email() {
                 .method("POST")
                 .uri("/api/user/signup")
                 .header("content-type", "application/json")
-                .body(auth_body(&email, "Secret_123"))
+                .body(Body::from(
+                    json!({"email": &email, "password": "Secret_123"}).to_string(),
+                ))
                 .unwrap(),
         )
         .await
@@ -106,7 +63,9 @@ async fn signup_duplicate_email() {
                 .method("POST")
                 .uri("/api/user/signup")
                 .header("content-type", "application/json")
-                .body(auth_body(&email, "Secret_123"))
+                .body(Body::from(
+                    json!({"email": &email, "password": "Secret_123"}).to_string(),
+                ))
                 .unwrap(),
         )
         .await
@@ -118,7 +77,7 @@ async fn signup_duplicate_email() {
 
 #[tokio::test]
 async fn signup_invalid_payload() {
-    let (app, _pool) = test_app().await;
+    let app = test_app().await;
 
     // Missing password field — Axum will return 422 Unprocessable Entity
     let response = app
@@ -138,7 +97,7 @@ async fn signup_invalid_payload() {
 
 #[tokio::test]
 async fn signup_bad_password() {
-    let (app, _pool) = test_app().await;
+    let app = test_app().await;
     let email = unique_email("signup_badpw");
 
     let response = app
@@ -147,7 +106,9 @@ async fn signup_bad_password() {
                 .method("POST")
                 .uri("/api/user/signup")
                 .header("content-type", "application/json")
-                .body(auth_body(&email, "weak"))
+                .body(Body::from(
+                    json!({"email": &email, "password": "weak"}).to_string(),
+                ))
                 .unwrap(),
         )
         .await
@@ -160,7 +121,8 @@ async fn signup_bad_password() {
 
 #[tokio::test]
 async fn login_success() {
-    let (app, pool) = test_app().await;
+    let app = test_app().await;
+    let pool = test_pool().await;
     let email = unique_email("login_ok");
 
     // Create user first
@@ -170,7 +132,9 @@ async fn login_success() {
                 .method("POST")
                 .uri("/api/user/signup")
                 .header("content-type", "application/json")
-                .body(auth_body(&email, "Secret_123"))
+                .body(Body::from(
+                    json!({"email": &email, "password": "Secret_123"}).to_string(),
+                ))
                 .unwrap(),
         )
         .await
@@ -182,7 +146,9 @@ async fn login_success() {
                 .method("POST")
                 .uri("/api/user/login")
                 .header("content-type", "application/json")
-                .body(auth_body(&email, "Secret_123"))
+                .body(Body::from(
+                    json!({"email": &email, "password": "Secret_123"}).to_string(),
+                ))
                 .unwrap(),
         )
         .await
@@ -194,7 +160,8 @@ async fn login_success() {
 
 #[tokio::test]
 async fn login_wrong_password() {
-    let (app, pool) = test_app().await;
+    let app = test_app().await;
+    let pool = test_pool().await;
     let email = unique_email("login_wrongpw");
 
     app.clone()
@@ -203,7 +170,9 @@ async fn login_wrong_password() {
                 .method("POST")
                 .uri("/api/user/signup")
                 .header("content-type", "application/json")
-                .body(auth_body(&email, "Secret_123"))
+                .body(Body::from(
+                    json!({"email": &email, "password": "Secret_123"}).to_string(),
+                ))
                 .unwrap(),
         )
         .await
@@ -215,7 +184,9 @@ async fn login_wrong_password() {
                 .method("POST")
                 .uri("/api/user/login")
                 .header("content-type", "application/json")
-                .body(auth_body(&email, "WrongPass_1"))
+                .body(Body::from(
+                    json!({"email": &email, "password": "WrongPass_1"}).to_string(),
+                ))
                 .unwrap(),
         )
         .await
@@ -227,7 +198,7 @@ async fn login_wrong_password() {
 
 #[tokio::test]
 async fn login_unknown_email() {
-    let (app, _pool) = test_app().await;
+    let app = test_app().await;
 
     let response = app
         .oneshot(
@@ -235,7 +206,10 @@ async fn login_unknown_email() {
                 .method("POST")
                 .uri("/api/user/login")
                 .header("content-type", "application/json")
-                .body(auth_body("nobody_unique_xyz@example.com", "Secret_123"))
+                .body(Body::from(
+                    json!({"email": "nobody_unique_xyz@example.com", "password": "Secret_123"})
+                        .to_string(),
+                ))
                 .unwrap(),
         )
         .await
@@ -248,7 +222,7 @@ async fn login_unknown_email() {
 
 #[tokio::test]
 async fn logout_unauthenticated() {
-    let (app, _pool) = test_app().await;
+    let app = test_app().await;
 
     let response = app
         .oneshot(
@@ -266,7 +240,8 @@ async fn logout_unauthenticated() {
 
 #[tokio::test]
 async fn logout_success() {
-    let (app, pool) = test_app().await;
+    let app = test_app().await;
+    let pool = test_pool().await;
     let email = unique_email("logout_ok");
 
     // Signup to get a Set-Cookie header
@@ -277,7 +252,9 @@ async fn logout_success() {
                 .method("POST")
                 .uri("/api/user/signup")
                 .header("content-type", "application/json")
-                .body(auth_body(&email, "Secret_123"))
+                .body(Body::from(
+                    json!({"email": &email, "password": "Secret_123"}).to_string(),
+                ))
                 .unwrap(),
         )
         .await
