@@ -9,6 +9,7 @@ pub mod global;
 pub mod log;
 pub mod middleware;
 pub mod models;
+pub mod plaid;
 pub mod swagger;
 #[cfg(test)]
 mod tests;
