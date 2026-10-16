@@ -33,6 +33,7 @@ use tower_http::cors::CorsLayer;
 pub async fn create_router(frontend_url: &str) -> Router {
     let pool = db::create_pool().await;
     let cookie_key = Key::generate();
+    let plaid = plaid::client::PlaidClient::new();
 
     let routes = AxumRouter::new()
         .nest("/user", controllers::user::user_routes())
@@ -61,6 +62,7 @@ pub async fn create_router(frontend_url: &str) -> Router {
         .merge(api_router)
         .layer(Extension(pool))
         .layer(Extension(cookie_key))
+        .layer(Extension(plaid))
         .layer(CookieManagerLayer::new())
         .layer(cors)
 }
