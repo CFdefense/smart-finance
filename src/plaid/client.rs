@@ -161,16 +161,13 @@ impl PlaidClient {
     /// Reads `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV` (`sandbox` or
     /// `production`), and `PLAID_CLIENT_NAME`.
     ///
-    /// # Panics
-    ///
-    /// Panics with a descriptive message if any required variable is absent.
+    /// Missing credentials default to empty strings; the client will boot but
+    /// any actual Plaid API call will return `AppError::Internal` with a
+    /// non-2xx error from Plaid. Set all four variables for production use.
     pub fn new() -> Self {
-        let client_id = std::env::var("PLAID_CLIENT_ID")
-            .expect("PLAID_CLIENT_ID env var must be set");
-        let secret = std::env::var("PLAID_SECRET")
-            .expect("PLAID_SECRET env var must be set");
-        let env = std::env::var("PLAID_ENV")
-            .expect("PLAID_ENV env var must be set (sandbox or production)");
+        let client_id = std::env::var("PLAID_CLIENT_ID").unwrap_or_default();
+        let secret = std::env::var("PLAID_SECRET").unwrap_or_default();
+        let env = std::env::var("PLAID_ENV").unwrap_or_else(|_| "sandbox".to_string());
         let client_name = std::env::var("PLAID_CLIENT_NAME")
             .unwrap_or_else(|_| "Smart Finance".to_string());
 
