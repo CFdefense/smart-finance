@@ -1,8 +1,9 @@
 //! Integration test fixtures and helper functions.
 
-use axum::{body::Body, Router};
+use axum::{body::Body, http::Request, Router};
 use serde_json::json;
 use sqlx::PgPool;
+use tower::ServiceExt;
 
 use crate::db;
 
@@ -48,4 +49,31 @@ pub async fn cleanup(pool: &PgPool, email: &str) {
 /// Builds a JSON body for signup/login requests.
 pub fn auth_body(email: &str, password: &str) -> Body {
     Body::from(json!({"email": email, "password": password}).to_string())
+}
+
+/// Signs up a fresh user and returns the `auth-token=<value>` cookie string.
+///
+/// Use this to make authenticated requests in Plaid integration tests.
+pub async fn authenticated_cookie(app: Router, email: &str) -> String {
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/user/signup")
+                .header("content-type", "application/json")
+                .body(auth_body(email, "Secret_123"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let set_cookie = resp
+        .headers()
+        .get("set-cookie")
+        .expect("signup must set a cookie")
+        .to_str()
+        .unwrap()
+        .to_string();
+
+    set_cookie.split(';').next().unwrap().trim().to_string()
 }
