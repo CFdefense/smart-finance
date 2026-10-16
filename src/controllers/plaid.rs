@@ -266,6 +266,42 @@ pub async fn api_plaid_sync_transactions(
     let mut total_removed: usize = 0;
 
     for item in items {
+        // Ensure accounts exist before syncing transactions (FK requirement)
+        let plaid_accounts = plaid.get_accounts(&item.access_token).await?;
+        for a in &plaid_accounts {
+            sqlx::query!(
+                r#"
+                INSERT INTO plaid_accounts
+                    (account_id, item_id, name, official_name, account_type, account_subtype,
+                     mask, current_balance, available_balance, currency_code, updated_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+                ON CONFLICT (account_id) DO UPDATE SET
+                    name              = EXCLUDED.name,
+                    official_name     = EXCLUDED.official_name,
+                    account_type      = EXCLUDED.account_type,
+                    account_subtype   = EXCLUDED.account_subtype,
+                    mask              = EXCLUDED.mask,
+                    current_balance   = EXCLUDED.current_balance,
+                    available_balance = EXCLUDED.available_balance,
+                    currency_code     = EXCLUDED.currency_code,
+                    updated_at        = NOW()
+                "#,
+                a.account_id,
+                a.item_id,
+                a.name,
+                a.official_name,
+                a.account_type,
+                a.account_subtype,
+                a.mask,
+                a.current_balance,
+                a.available_balance,
+                a.currency_code
+            )
+            .execute(&pool)
+            .await
+            .map_err(AppError::from)?;
+        }
+
         let cursor_row = sqlx::query_as!(
             PlaidSyncCursorRow,
             "SELECT id, item_id, cursor, has_more, updated_at FROM plaid_sync_cursors WHERE item_id = $1",
@@ -414,6 +450,13 @@ pub async fn api_plaid_get_transactions(
     let limit = params.limit.unwrap_or(50);
     let offset = params.offset.unwrap_or(0);
 
+    if limit < 0 || offset < 0 {
+        return Err(AppError::Validation(
+            "limit and offset must be non-negative".to_string(),
+        ));
+    }
+    let limit = limit.min(200);
+
     let rows = sqlx::query_as!(
         PlaidTransactionRow,
         r#"
@@ -431,7 +474,7 @@ pub async fn api_plaid_get_transactions(
         JOIN plaid_accounts a ON a.account_id = t.account_id
         JOIN plaid_links i ON i.item_id = a.item_id
         WHERE i.user_id = $1
-        ORDER BY t.date DESC
+        ORDER BY t.date DESC, t.id DESC
         LIMIT $2 OFFSET $3
         "#,
         user.id,

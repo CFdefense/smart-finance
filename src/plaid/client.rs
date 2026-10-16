@@ -3,6 +3,7 @@
 use crate::error::AppError;
 use chrono::NaiveDate;
 use serde::Deserialize;
+use std::time::Duration;
 
 // ── Public data types returned by PlaidClient methods ────────────────────────
 
@@ -165,6 +166,11 @@ impl PlaidClient {
     /// Missing credentials default to empty strings; the client will boot but
     /// any actual Plaid API call will return `AppError::Internal` with a
     /// non-2xx error from Plaid. Set all four variables for production use.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the underlying `reqwest::Client` cannot be built (should not
+    /// happen in normal operation).
     pub fn new() -> Self {
         let client_id = std::env::var("PLAID_CLIENT_ID").unwrap_or_default();
         let secret = std::env::var("PLAID_SECRET").unwrap_or_default();
@@ -175,7 +181,10 @@ impl PlaidClient {
         let base_url = format!("https://{env}.plaid.com");
 
         Self {
-            http: reqwest::Client::new(),
+            http: reqwest::Client::builder()
+                .timeout(Duration::from_secs(30))
+                .build()
+                .expect("failed to build reqwest client"),
             base_url,
             client_id,
             secret,
