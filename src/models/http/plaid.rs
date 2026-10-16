@@ -100,3 +100,12 @@ pub struct TransactionResponse {
     /// Transaction status.
     pub pending: bool,
 }
+
+/// Query parameters for `GET /api/plaid/transactions`.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct TransactionsQuery {
+    /// Maximum number of transactions to return. Defaults to 50.
+    pub limit: Option<i64>,
+    /// Number of transactions to skip. Defaults to 0.
+    pub offset: Option<i64>,
+}
