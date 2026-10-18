@@ -1,0 +1,29 @@
+.header {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+}
+
+.title {
+    font-size: 3.75rem;
+    font-family: "Arial";
+    display: inline-block;
+    justify-content: flex-start;
+    padding-left: 20px;
+}
+
+.icons {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    padding-right: 30px;
+    cursor: default;
+}
+
+.material-symbols-outlined {
+    color: #434343;
+    font-size: 60px;
+    background-color: white;
+    border-radius: 15px;
+    box-shadow: 4px 8px 15px 2px rgba(0, 0, 0, 0.2);
+}
