@@ -9,4 +9,9 @@ import { Router } from '@angular/router';
 })
 export class UserProfile {
   protected readonly title = signal('profile');
+  router = inject(Router);
+
+  backToDashboard(): void {
+    this.router.navigate(['/dashboard']);
+  }
 }

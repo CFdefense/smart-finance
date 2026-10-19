@@ -1,0 +1,31 @@
+.header {
+    display: flex;
+    /* justify-content: space-between; */
+    width: 100%;
+    overflow: auto;
+}
+
+.title {
+    font-size: 3.75rem;
+    display: flex;
+    /* justify-content: flex-start; */
+    font-family: "Inter Tight", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
+        "Segoe UI Symbol";
+    padding-left: 25px;
+    float: left;
+}
+
+.icons {
+    display: flex;
+    /* justify-content: flex-start; */
+    align-items: center;
+    padding-left: 30px;
+    cursor: default;
+    float: left;
+}
+
+.material-symbols-outlined {
+    color: #434343;
+    font-size: 50px;
+}

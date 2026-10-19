@@ -6,17 +6,19 @@
 
 .title {
     font-size: 3.75rem;
-    font-family: "Arial";
+    font-family: "Inter Tight", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
+        "Segoe UI Symbol";
     display: inline-block;
     justify-content: flex-start;
-    padding-left: 20px;
+    padding-left: 60px;
 }
 
 .icons {
     display: flex;
     justify-content: flex-end;
     align-items: center;
-    padding-right: 30px;
+    padding-right: 70px;
     cursor: default;
 }
 
