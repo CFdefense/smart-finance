@@ -45,6 +45,8 @@ utoipa-swagger-ui = { version = "9", features = ["axum", "cache"] }
 utoipa-axum = "0.2"
 argon2 = "0.5"
 regex = "1"
+tower = "0.5"
+reqwest = { version = "0.12", features = ["json"] }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
