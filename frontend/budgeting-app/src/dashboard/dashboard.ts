@@ -15,4 +15,8 @@ export class UserDashboard {
   openProfile(): void {
     this.router.navigate(['/profile']);
   }
+
+  onLogout(): void {
+    this.router.navigate(['/login']);
+  }
 }
