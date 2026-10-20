@@ -24,7 +24,7 @@ async fn signup_success() {
                 .uri("/api/user/signup")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    json!({"email": &email, "password": "Secret_123"}).to_string(),
+                    json!({"first_name": "Alice", "last_name": "Smith", "email": &email, "password": "Secret_123"}).to_string(),
                 ))
                 .unwrap(),
         )
@@ -49,7 +49,7 @@ async fn signup_duplicate_email() {
                 .uri("/api/user/signup")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    json!({"email": &email, "password": "Secret_123"}).to_string(),
+                    json!({"first_name": "Alice", "last_name": "Smith", "email": &email, "password": "Secret_123"}).to_string(),
                 ))
                 .unwrap(),
         )
@@ -64,7 +64,7 @@ async fn signup_duplicate_email() {
                 .uri("/api/user/signup")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    json!({"email": &email, "password": "Secret_123"}).to_string(),
+                    json!({"first_name": "Alice", "last_name": "Smith", "email": &email, "password": "Secret_123"}).to_string(),
                 ))
                 .unwrap(),
         )
@@ -107,7 +107,7 @@ async fn signup_bad_password() {
                 .uri("/api/user/signup")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    json!({"email": &email, "password": "weak"}).to_string(),
+                    json!({"first_name": "Alice", "last_name": "Smith", "email": &email, "password": "weak"}).to_string(),
                 ))
                 .unwrap(),
         )
@@ -133,7 +133,7 @@ async fn login_success() {
                 .uri("/api/user/signup")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    json!({"email": &email, "password": "Secret_123"}).to_string(),
+                    json!({"first_name": "Alice", "last_name": "Smith", "email": &email, "password": "Secret_123"}).to_string(),
                 ))
                 .unwrap(),
         )
@@ -171,7 +171,7 @@ async fn login_wrong_password() {
                 .uri("/api/user/signup")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    json!({"email": &email, "password": "Secret_123"}).to_string(),
+                    json!({"first_name": "Alice", "last_name": "Smith", "email": &email, "password": "Secret_123"}).to_string(),
                 ))
                 .unwrap(),
         )
@@ -253,7 +253,7 @@ async fn logout_success() {
                 .uri("/api/user/signup")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    json!({"email": &email, "password": "Secret_123"}).to_string(),
+                    json!({"first_name": "Alice", "last_name": "Smith", "email": &email, "password": "Secret_123"}).to_string(),
                 ))
                 .unwrap(),
         )

@@ -23,6 +23,10 @@ pub struct LoginRequest {
 /// Validated server-side via [`SignupRequest::validate`] before insert.
 #[derive(Debug, Deserialize, Clone, ToSchema)]
 pub struct SignupRequest {
+    /// User first name.
+    pub first_name: String,
+    /// User last name.
+    pub last_name: String,
     /// Account email address.
     pub email: String,
     /// Plaintext password submitted by the user.
@@ -68,6 +72,14 @@ impl SignupRequest {
     ///
     /// Returns `Ok(())` if all fields pass, or `Err(String)` with the first failure message.
     pub fn validate(&self) -> Result<(), String> {
+        if self.first_name.trim().is_empty() {
+            return Err("First name is required".to_string());
+        }
+
+        if self.last_name.trim().is_empty() {
+            return Err("Last name is required".to_string());
+        }
+
         let email = self.email.trim();
         if email.is_empty() {
             return Err("Email is required".to_string());
@@ -86,6 +98,8 @@ mod tests {
 
     fn req(email: &str, password: &str) -> SignupRequest {
         SignupRequest {
+            first_name: "Test".to_string(),
+            last_name: "User".to_string(),
             email: email.to_string(),
             password: password.to_string(),
         }
@@ -161,6 +175,22 @@ mod tests {
     #[test]
     fn validate_success() {
         assert!(req("alice@example.com", "Secret_123").validate().is_ok());
+    }
+
+    #[test]
+    fn validate_empty_first_name() {
+        let mut request = req("alice@example.com", "Secret_123");
+        request.first_name = "".to_string();
+
+        assert!(request.validate().is_err());
+    }
+
+    #[test]
+    fn validate_empty_last_name() {
+        let mut request = req("alice@example.com", "Secret_123");
+        request.last_name = "".to_string();
+
+        assert!(request.validate().is_err());
     }
 
     #[test]

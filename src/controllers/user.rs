@@ -102,7 +102,7 @@ pub async fn api_signup(
     Extension(pool): Extension<PgPool>,
     Json(payload): Json<SignupRequest>,
 ) -> ApiResult<()> {
-    debug!("HANDLER ->> POST /api/user/signup payload={payload:?}");
+    debug!("HANDLER ->> POST /api/user/signup");
 
     if let Err(e) = payload.validate() {
         return Err(AppError::Validation(e));
@@ -134,7 +134,13 @@ pub async fn api_signup(
     // Insert user
     let user = sqlx::query_as!(
         UserRow,
-        "INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email, password_hash",
+        r#"
+        INSERT INTO users (first_name, last_name, email, password_hash) 
+        VALUES ($1, $2, $3, $4) 
+        RETURNING id, email, password_hash
+        "#,
+        payload.first_name.trim(),
+        payload.last_name.trim(),
         email,
         password_hash
     )
@@ -158,7 +164,11 @@ pub async fn api_signup(
     request_body(
         content = LoginRequest,
         content_type = "application/json",
-        example = json!({"email": "alice@example.com", "password": "Secret_123"})
+        example = json!({
+            "first_name": "Alice",
+            "last_name": "Smith",
+            "email": "alice@example.com",
+            "password": "Secret_123"})
     ),
     responses(
         (status = 200, description = "Login successful, cookie set"),
