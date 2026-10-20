@@ -1,6 +1,6 @@
 import { Component, signal, inject } from '@angular/core';
 import { Router } from '@angular/router';
-import { AuthService } from '../app/services/auth.services';
+import { AuthService } from '../app/services/auth.service';
 
 @Component({
   imports: [],
@@ -28,5 +28,5 @@ export class UserDashboard {
       },
     });
   }
-  
+
 }

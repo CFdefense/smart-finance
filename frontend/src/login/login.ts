@@ -1,7 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { AuthService } from '../app/services/auth.services';
+import { AuthService } from '../app/services/auth.service';
 
 @Component({
   imports: [FormsModule, RouterLink],
