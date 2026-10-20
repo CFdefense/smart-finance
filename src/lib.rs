@@ -40,7 +40,14 @@ pub async fn create_router_with_plaid(
     plaid: plaid::client::PlaidClient,
 ) -> Router {
     let pool = db::create_pool().await;
-    let cookie_key = Key::generate();
+    let cookie_key_hex =
+        std::env::var("COOKIE_KEY").expect("COOKIE_KEY environment variable is required");
+
+    let cookie_key_bytes =
+        hex::decode(&cookie_key_hex).expect("COOKIE_KEY must contain valid hexadecimal characters");
+
+    let cookie_key = Key::try_from(cookie_key_bytes.as_slice())
+        .expect("COOKIE_KEY must decode to exactly 64 bytes");
 
     let routes = AxumRouter::new()
         .nest("/user", controllers::user::user_routes())

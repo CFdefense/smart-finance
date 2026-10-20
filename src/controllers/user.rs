@@ -116,7 +116,7 @@ pub async fn api_signup(
     // Check email uniqueness
     let existing = sqlx::query_as!(
         UserRow,
-        "SELECT id, email, password_hash FROM users WHERE email = $1",
+        "SELECT id, email, password_hash, account_status FROM users WHERE email = $1",
         email
     )
     .fetch_optional(&pool)
@@ -140,7 +140,7 @@ pub async fn api_signup(
         r#"
         INSERT INTO users (first_name, last_name, email, password_hash) 
         VALUES ($1, $2, $3, $4) 
-        RETURNING id, email, password_hash
+        RETURNING id, email, password_hash, account_status
         "#,
         payload.first_name.trim(),
         payload.last_name.trim(),
@@ -188,7 +188,7 @@ pub async fn api_login(
 
     let user_result = sqlx::query_as!(
         UserRow,
-        "SELECT id, email, password_hash FROM users WHERE email = $1",
+        "SELECT id, email, password_hash, account_status FROM users WHERE email = $1",
         payload.email
     )
     .fetch_optional(&pool)
@@ -197,6 +197,9 @@ pub async fn api_login(
     match user_result {
         Ok(Some(user)) => {
             debug!("login: found user id={} email={}", user.id, user.email);
+            if user.account_status != "active" {
+                return Err(AppError::BadRequest("invalid credentials".to_string()));
+            }
 
             let parsed = PasswordHash::new(&user.password_hash)
                 .map_err(|e| AppError::Internal(format!("hash parse error: {e:?}")))?;
