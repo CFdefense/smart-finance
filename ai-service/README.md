@@ -8,9 +8,7 @@ This is the ai agent service. It takes http requests and returns LLM responses.
 
 ```bash
 cd ai-service
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+uv sync
 ```
 
 2. Start the HTTP service: `uvicorn main:app --reload`
@@ -19,6 +17,7 @@ pip install -r requirements.txt
       1. `/health` - Get HTTP API health. 
       2. `/chat` - Opening this will result in a 405 error in browser, since it is a POST and not a GET. 
       3. `/docs` - Shows API skeleton documentation. **Use 'Try it out' here** to test `/chat` input and output.
+4. Test using `pytest`
 
 ## API
    POST /chat
