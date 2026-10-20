@@ -1,29 +1,50 @@
+import os
+from contextlib import asynccontextmanager
+
+from dotenv import load_dotenv
 from fastapi import FastAPI
-from pydantic import BaseModel
 
-app = FastAPI()
+from agent import AnalyzerAgent, ChatAgent
+from agent.data_models import ChatRequest, ChatResponse
 
-
-class ChatRequest(BaseModel):
-    user_id: int
-    message: str
+load_dotenv()
 
 
-class ChatResponse(BaseModel):
-    response: str
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize and clean up shared application resources."""
+    app.state.openai_key = os.environ["OPENAI_API_KEY"]
+    app.state.model = os.getenv("AGENT_MODEL", "gpt-4.1")
+    app.state.analyzer_agent = AnalyzerAgent().create(app.state.openai_key, app.state.model)
+    app.state.chat_agent = ChatAgent().create(app.state.openai_key, app.state.model)
+
+    yield
+
+    # Cleanup here if we need to
 
 
-def generate_answer(user_id: int, message: str) -> str:
-    """Placeholder until we connect an LLM service"""
-    return f"You ({user_id}) asked {message}"
+app = FastAPI(lifespan=lifespan)
 
 
 @app.post("/chat")
 def chat(request: ChatRequest) -> ChatResponse:
-    answer = generate_answer(request.user_id, request.message)
-    return ChatResponse(response=answer)
+    """Send a chat request to the configured AI agent."""
+    return app.state.chat_agent.generate_answer(request)
+
+
+@app.post("/analyze")
+def analyze(request: ChatRequest) -> ChatResponse:
+    """Generate a response to a standard chat request."""
+    return app.state.analyzer_agent.generate_answer(request)
+
+
+@app.post("/anomaly")
+def anomaly(request: ChatRequest) -> ChatResponse:
+    """Generate a response for an anomaly-related request."""
+    return ChatResponse(response="TODO")
 
 
 @app.get("/health")
 def health():
+    """Return the health status of the service."""
     return {"status": "ok"}
