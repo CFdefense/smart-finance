@@ -29,3 +29,6 @@ docs/openapi.json
 
 # Python's compiled bytecode cache, created automatically when code runs.
 __pycache__/
+
+# Personal vscode settings
+.vscode/
