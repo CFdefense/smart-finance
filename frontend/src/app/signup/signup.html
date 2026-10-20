@@ -47,18 +47,23 @@
         name="password"
         [(ngModel)]="password"
         placeholder="Create a password"
+        autocomplete="new-password"
         required
       />
+      <p class="password-hint">
+        Password must be 8–128 characters and contain at least one uppercase
+        letter, one lowercase letter, and one number. Use standard ASCII characters.
+      </p>
     </div>
 
-    <button type="submit" [disabled]="isSubmitting">
-      {{ isSubmitting ? 'Creating Account...' : 'Create Account' }}
+    <button type="submit" [disabled]="isSubmitting()">
+      {{ isSubmitting() ? 'Creating Account...' : 'Create Account' }}
     </button>
 
-    @if (errorMessage) {
-      <p role="alert">{{ errorMessage }}</p>
+    @if (errorMessage()) {
+      <p role="alert">{{ errorMessage() }}</p>
     }
-    
+
   </form>
 
   <p>

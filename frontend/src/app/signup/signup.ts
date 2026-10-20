@@ -1,10 +1,8 @@
-import { Component } from '@angular/core';
-import { RouterLink } from '@angular/router';
+
+import { Component, inject, signal } from '@angular/core';
+import { Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { inject } from '@angular/core';
-import { Router } from '@angular/router';
 import { AuthService } from '../services/auth.services';
-import is from '@angular/common/locales/extra/is';
 
 @Component({
   imports: [RouterLink, FormsModule],
@@ -13,34 +11,58 @@ import is from '@angular/common/locales/extra/is';
   templateUrl: './signup.html',
 })
 export class Signup {
+  private readonly authService = inject(AuthService);
+  private readonly router = inject(Router);
+
   firstName = '';
   lastName = '';
   email = '';
   password = '';
 
-  private readonly authService = inject(AuthService);
-  private readonly router = inject(Router);
+  errorMessage = signal('');
+  isSubmitting = signal(false);
 
-  errorMessage = '';
-  isSubmitting = false;
+  onSignup(): void {
+    if (this.isSubmitting()) {
+      return;
+    }
 
-  onSignup() {
-    this.errorMessage = '';
-    this.isSubmitting = true;
+    this.errorMessage.set('');
+
+    if (
+      !this.firstName.trim() ||
+      !this.lastName.trim() ||
+      !this.email.trim() ||
+      !this.password
+    ) {
+      this.errorMessage.set('Please complete all fields.');
+      return;
+    }
+
+    this.isSubmitting.set(true);
 
     this.authService
-      .signup(this.firstName, this.lastName, this.email, this.password)
+      .signup(
+        this.firstName.trim(),
+        this.lastName.trim(),
+        this.email.trim(),
+        this.password,
+      )
       .subscribe({
         next: () => {
-          this.isSubmitting = false;
+          this.isSubmitting.set(false);
           this.router.navigate(['/dashboard']);
         },
         error: (err) => {
-          this.isSubmitting = false;
-          this.errorMessage =
+          this.isSubmitting.set(false);
+
+          this.errorMessage.set(
             err.status === 409
               ? 'An account with this email already exists.'
-              : 'Registration failed. Please check your information.';
+              : err.status === 400 || err.status === 422
+                ? 'Please check your information and password requirements.'
+                : 'Registration failed. Please try again later.',
+          );
         },
       });
   }

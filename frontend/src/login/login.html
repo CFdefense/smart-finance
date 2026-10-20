@@ -1,3 +1,4 @@
+
 <head>
   <link
     rel="stylesheet"
@@ -11,38 +12,62 @@
       <h1>Finance Budgeting App</h1>
       <span class="material-symbols-outlined">savings</span>
     </div>
+
     <div class="divider" role="separator" aria-label="Divider"></div>
+
     <div class="right-side">
-      <div>
-        <label class="login-label">Log into account</label>
-      </div>
-      <div>
-        <input
-          type="text"
-          id="email"
-          name="email"
-          class="login"
-          placeholder="email"
-          autocomplete="email"
-          [(ngModel)]="email"
-          required
-        />
+      <form (ngSubmit)="onLogin()">
+        <div>
+          <label class="login-label" for="email">Log into account</label>
+        </div>
+
+        <div>
+          <input
+            type="email"
+            id="email"
+            name="email"
+            class="login"
+            placeholder="email"
+            autocomplete="email"
+            [(ngModel)]="email"
+            required
+          />
+
+          <br />
+
+          <input
+            type="password"
+            id="password"
+            name="password"
+            class="login"
+            placeholder="password"
+            autocomplete="current-password"
+            [(ngModel)]="password"
+            required
+          />
+        </div>
+
         <br />
-        <input
-          type="password"
-          id="password"
-          name="password"
-          class="login"
-          placeholder="password"
-          autocomplete="password"
-          [(ngModel)]="password"
-          required
-        />
-      </div>
-      <br />
-      <div>
-        <input type="button" class="login-button" value="Log in" (click)="onLogin()" />
-      </div>
+
+        <div>
+          <button
+            type="submit"
+            class="login-button"
+            [disabled]="isSubmitting()"
+          >
+            {{ isSubmitting() ? 'Logging in...' : 'Log in' }}
+          </button>
+        </div>
+
+        @if (errorMessage()) {
+          <p role="alert">{{ errorMessage() }}</p>
+        }
+      </form>
+
+      <p>
+        Don't have an account?
+        <a routerLink="/signup">Sign up</a>
+      </p>
     </div>
   </div>
 </main>
