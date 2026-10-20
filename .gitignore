@@ -23,3 +23,9 @@ anomaly/
 
 # Generated OpenAPI spec (produced by cargo run --bin gen-openapi)
 docs/openapi.json
+
+# Python virtual environment.
+.venv/
+
+# Python's compiled bytecode cache, created automatically when code runs.
+__pycache__/
