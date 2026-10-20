@@ -13,4 +13,11 @@ dependencies = [
 dev = [
     "httpx2>=2.15.1",
     "pytest>=9.1.1",
+    "ruff>=0.17.1",
 ]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]   # E: style errors, F: likely bugs, I: import order
