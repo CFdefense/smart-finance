@@ -4,7 +4,10 @@ use argon2::{
     password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
     Argon2,
 };
-use axum::{routing::post, Extension, Json};
+use axum::{
+    routing::{get, post},
+    Extension, Json,
+};
 use sqlx::PgPool;
 use tower_cookies::{
     cookie::{
@@ -53,7 +56,7 @@ fn set_cookie(user_id: i32, is_expired: bool, cookies: &mut impl CookieStore, ke
 
     let token = format!("user-{}.{}.sign", user_id, expires.unix_timestamp());
 
-    debug!("set_cookie: token={token} production={on_production}");
+    debug!("set_cookie: production={on_production}");
 
     let cookie = Cookie::build(("auth-token", token))
         .domain(domain.to_string())
@@ -86,7 +89,7 @@ fn set_cookie(user_id: i32, is_expired: bool, cookies: &mut impl CookieStore, ke
         content = SignupRequest,
         content_type = "application/json",
         description = "Email must be unique. Password is validated server-side.",
-        example = json!({"email": "alice@example.com", "password": "Secret_123"})
+        example = json!({"first_name": "Alice", "last_name": "Smith", "email": "alice@example.com", "password": "Secret_123"})
     ),
     responses(
         (status = 200, description = "Account created and cookie set"),
@@ -165,8 +168,6 @@ pub async fn api_signup(
         content = LoginRequest,
         content_type = "application/json",
         example = json!({
-            "first_name": "Alice",
-            "last_name": "Smith",
             "email": "alice@example.com",
             "password": "Secret_123"})
     ),
@@ -211,6 +212,24 @@ pub async fn api_login(
     }
 }
 
+/// Check whether the current session is authenticated.
+///
+/// GET /api/user/me
+#[utoipa::path(
+    get,
+    path = "/me",
+    summary = "Check the current authenticated session",
+    responses(
+        (status = 200, description = "Authenticated"),
+        (status = 401, description = "Not authenticated")
+    ),
+    security(("auth-token" = [])),
+    tag = "User"
+)]
+pub async fn api_me(Extension(_user): Extension<AuthUser>) -> ApiResult<()> {
+    Ok(())
+}
+
 /// Log out the current user.
 ///
 /// Sets the `auth-token` cookie to expired, invalidating the session.
@@ -227,6 +246,7 @@ pub async fn api_login(
     security(("auth-token" = [])),
     tag = "User"
 )]
+
 pub async fn api_logout(
     mut cookies: Cookies,
     Extension(key): Extension<Key>,
@@ -242,7 +262,7 @@ pub async fn api_logout(
 /// Constructed only by the `#[openapi]` macro and the root [`crate::swagger::ApiDoc`].
 #[derive(OpenApi)]
 #[openapi(
-    paths(api_signup, api_login, api_logout),
+    paths(api_signup, api_login, api_logout, api_me),
     info(title = "User Routes", description = "Authentication endpoints."),
     tags((name = "User"))
 )]
@@ -252,10 +272,12 @@ pub struct UserApiDoc;
 /// Builds the user route group.
 ///
 /// Public routes: `POST /signup`, `POST /login`.
-/// Protected route (requires valid `auth-token` cookie): `POST /logout`.
+/// Protected routes (require valid `auth-token` cookie):
+/// `POST /logout` and `GET /me`.
 pub fn user_routes() -> AxumRouter {
     AxumRouter::new()
         .route("/logout", post(api_logout))
+        .route("/me", get(api_me))
         .route_layer(axum::middleware::from_fn(middleware_auth))
         .route("/signup", post(api_signup))
         .route("/login", post(api_login))

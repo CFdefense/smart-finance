@@ -13,7 +13,14 @@
             </div>
             <div class="profile-dropdown-content">
                 <div class="profile-option"><span class="material-symbols-outlined person" role="button" (click)="openProfile()">person</span><a (click)="openProfile()">Profile</a></div>
-                <div class="logout-option"><span class="material-symbols-outlined logout" role="button" (click)="onLogout()">logout</span><a (click)="onLogout()">Logout</a></div>
+                <div class="logout-option">
+                    <button type="button" (click)="onLogout()">
+                        <span class="material-symbols-outlined logout" aria-hidden="true">
+                            logout
+                        </span>
+                        Logout
+                    </button>
+                </div>
             </div>
         </div>
     </div>

@@ -10,7 +10,7 @@ export class AuthService {
 
     login(email: string, password: string): Observable<void> {
         return this.http.post<void>(
-            'http://127.0.0.1:3001/api/user/login',
+            'http://localhost:3001/api/user/login',
             { email, password },
             { withCredentials: true }
         );
@@ -23,7 +23,7 @@ export class AuthService {
     password: string,
   ): Observable<void> {
     return this.http.post<void>(
-      'http://127.0.0.1:3001/api/user/signup',
+      'http://localhost:3001/api/user/signup',
       {
         first_name: firstName,
         last_name: lastName,
@@ -33,4 +33,20 @@ export class AuthService {
       { withCredentials: true },
     );
   }
+
+  checkAuth(): Observable<void> {
+    return this.http.get<void>(
+      'http://localhost:3001/api/user/me',
+      { withCredentials: true },
+    );
+}
+
+logout(): Observable<void> {
+  return this.http.post<void>(
+    'http://localhost:3001/api/user/logout',
+    {},
+    { withCredentials: true },
+  );
+}
+
 }
