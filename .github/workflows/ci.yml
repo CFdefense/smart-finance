@@ -46,6 +46,10 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-tarpaulin,sqlx-cli
+      
+      - name: Install dependencies
+        working-directory: ./frontend
+        run: npm ci
 
       - name: Run pipeline via cicd.sh
         run: bash cicd.sh all
@@ -110,7 +114,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ./frontend
-        run: npm install
+        run: npm ci
 
       - name: Generate openapi.json
         run: bash cicd.sh openapi
