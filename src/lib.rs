@@ -22,8 +22,8 @@ use tower_http::cors::CorsLayer;
 
 /// Create the API router using a caller-supplied [`plaid::client::PlaidClient`].
 ///
-/// Accepts frontend_url: the URL to configure CORS to.
-/// Accepts plaid: an optional plaid client to use. (Mock Clients accepted)
+/// Accepts `frontend_url`: the URL to configure CORS to.
+/// Accepts `plaid`: an optional plaid client to use. (Mock Clients accepted)
 ///
 /// # Panics
 ///
