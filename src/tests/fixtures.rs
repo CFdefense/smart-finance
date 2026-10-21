@@ -145,7 +145,7 @@ fn mock_plaid_url() -> &'static str {
 /// The returned `Router` is ready for [`tower::ServiceExt::oneshot`] calls.
 pub async fn test_app() -> Router {
     dotenvy::dotenv().ok();
-    crate::create_router_with_plaid(
+    crate::create_router(
         "http://localhost:5173",
         PlaidClient::with_base_url(mock_plaid_url()),
     )
