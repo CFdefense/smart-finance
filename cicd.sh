@@ -50,7 +50,7 @@ run_unit_coverage()       { step "Unit tests (≥85% coverage)";        cargo ta
 run_integration_coverage(){ step "Integration tests (≥75% coverage)"; cargo tarpaulin --config tarpaulin-integration.toml && pass "integration coverage"; }
 run_openapi()             { step "Generate openapi.json";             cargo run --bin gen-openapi && pass "openapi.json"; }
 run_nglint()              { step "Run lint";                          (cd ./frontend && npx ng lint); }
-run_prettier_check()      { step "Prettier check";                    (cd ./frontend && npx prettier --check "src/**/*.ts" && pass ".prettierrc"); }
+run_prettier_check()      { step "Prettier check";                    (cd ./frontend && npx prettier --check "src/**/*.ts" && npx prettier --check "src/**/*.css" && npx prettier --check "src/**/*.html" && pass ".prettierrc"); }
 run_angular_build()       { step "Run angular build";                 (cd ./frontend && npx ng build); }
 run_test_coverage()       { step "Test coverage (≥90% coverage)";     (cd ./frontend && npx ng test --coverage); }
 

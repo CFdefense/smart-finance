@@ -1,5 +1,6 @@
 import { Component, signal, inject } from '@angular/core';
 import { Router } from '@angular/router';
+import { AuthService } from '../app/services/auth.service';
 
 @Component({
   imports: [],
@@ -9,13 +10,21 @@ import { Router } from '@angular/router';
 })
 export class UserDashboard {
   protected readonly title = signal('dashboard');
-  router = inject(Router);
+  private readonly authService = inject(AuthService);
+  private readonly router = inject(Router);
 
   openProfile(): void {
     this.router.navigate(['/profile']);
   }
 
-  onLogout(): void {
-    this.router.navigate(['/login']);
+  onLogout() {
+    this.authService.logout().subscribe({
+      next: () => {
+        this.router.navigate(['/login']);
+      },
+      error: (err) => {
+        console.error('Logout failed:', err);
+      },
+    });
   }
 }

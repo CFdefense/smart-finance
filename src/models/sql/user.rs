@@ -10,4 +10,6 @@ pub struct UserRow {
     pub email: String,
     /// Argon2 hashed password.
     pub password_hash: String,
+    /// Account status: active, inactive, suspended.
+    pub account_status: String,
 }

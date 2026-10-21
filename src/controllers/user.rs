@@ -4,7 +4,10 @@ use argon2::{
     password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
     Argon2,
 };
-use axum::{routing::post, Extension, Json};
+use axum::{
+    routing::{get, post},
+    Extension, Json,
+};
 use sqlx::PgPool;
 use tower_cookies::{
     cookie::{
@@ -53,7 +56,7 @@ fn set_cookie(user_id: i32, is_expired: bool, cookies: &mut impl CookieStore, ke
 
     let token = format!("user-{}.{}.sign", user_id, expires.unix_timestamp());
 
-    debug!("set_cookie: token={token} production={on_production}");
+    debug!("set_cookie: production={on_production}");
 
     let cookie = Cookie::build(("auth-token", token))
         .domain(domain.to_string())
@@ -86,7 +89,7 @@ fn set_cookie(user_id: i32, is_expired: bool, cookies: &mut impl CookieStore, ke
         content = SignupRequest,
         content_type = "application/json",
         description = "Email must be unique. Password is validated server-side.",
-        example = json!({"email": "alice@example.com", "password": "Secret_123"})
+        example = json!({"first_name": "Alice", "last_name": "Smith", "email": "alice@example.com", "password": "Secret_123"})
     ),
     responses(
         (status = 200, description = "Account created and cookie set"),
@@ -102,7 +105,7 @@ pub async fn api_signup(
     Extension(pool): Extension<PgPool>,
     Json(payload): Json<SignupRequest>,
 ) -> ApiResult<()> {
-    debug!("HANDLER ->> POST /api/user/signup payload={payload:?}");
+    debug!("HANDLER ->> POST /api/user/signup");
 
     if let Err(e) = payload.validate() {
         return Err(AppError::Validation(e));
@@ -113,7 +116,7 @@ pub async fn api_signup(
     // Check email uniqueness
     let existing = sqlx::query_as!(
         UserRow,
-        "SELECT id, email, password_hash FROM users WHERE email = $1",
+        "SELECT id, email, password_hash, account_status FROM users WHERE email = $1",
         email
     )
     .fetch_optional(&pool)
@@ -134,7 +137,13 @@ pub async fn api_signup(
     // Insert user
     let user = sqlx::query_as!(
         UserRow,
-        "INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email, password_hash",
+        r#"
+        INSERT INTO users (first_name, last_name, email, password_hash) 
+        VALUES ($1, $2, $3, $4) 
+        RETURNING id, email, password_hash, account_status
+        "#,
+        payload.first_name.trim(),
+        payload.last_name.trim(),
         email,
         password_hash
     )
@@ -158,7 +167,9 @@ pub async fn api_signup(
     request_body(
         content = LoginRequest,
         content_type = "application/json",
-        example = json!({"email": "alice@example.com", "password": "Secret_123"})
+        example = json!({
+            "email": "alice@example.com",
+            "password": "Secret_123"})
     ),
     responses(
         (status = 200, description = "Login successful, cookie set"),
@@ -177,7 +188,7 @@ pub async fn api_login(
 
     let user_result = sqlx::query_as!(
         UserRow,
-        "SELECT id, email, password_hash FROM users WHERE email = $1",
+        "SELECT id, email, password_hash, account_status FROM users WHERE email = $1",
         payload.email
     )
     .fetch_optional(&pool)
@@ -186,6 +197,9 @@ pub async fn api_login(
     match user_result {
         Ok(Some(user)) => {
             debug!("login: found user id={} email={}", user.id, user.email);
+            if user.account_status != "active" {
+                return Err(AppError::BadRequest("invalid credentials".to_string()));
+            }
 
             let parsed = PasswordHash::new(&user.password_hash)
                 .map_err(|e| AppError::Internal(format!("hash parse error: {e:?}")))?;
@@ -199,6 +213,24 @@ pub async fn api_login(
         }
         Ok(None) | Err(_) => Err(AppError::BadRequest("invalid credentials".to_string())),
     }
+}
+
+/// Check whether the current session is authenticated.
+///
+/// GET /api/user/me
+#[utoipa::path(
+    get,
+    path = "/me",
+    summary = "Check the current authenticated session",
+    responses(
+        (status = 200, description = "Authenticated"),
+        (status = 401, description = "Not authenticated")
+    ),
+    security(("auth-token" = [])),
+    tag = "User"
+)]
+pub async fn api_me(Extension(_user): Extension<AuthUser>) -> ApiResult<()> {
+    Ok(())
 }
 
 /// Log out the current user.
@@ -217,6 +249,7 @@ pub async fn api_login(
     security(("auth-token" = [])),
     tag = "User"
 )]
+
 pub async fn api_logout(
     mut cookies: Cookies,
     Extension(key): Extension<Key>,
@@ -232,7 +265,7 @@ pub async fn api_logout(
 /// Constructed only by the `#[openapi]` macro and the root [`crate::swagger::ApiDoc`].
 #[derive(OpenApi)]
 #[openapi(
-    paths(api_signup, api_login, api_logout),
+    paths(api_signup, api_login, api_logout, api_me),
     info(title = "User Routes", description = "Authentication endpoints."),
     tags((name = "User"))
 )]
@@ -242,10 +275,12 @@ pub struct UserApiDoc;
 /// Builds the user route group.
 ///
 /// Public routes: `POST /signup`, `POST /login`.
-/// Protected route (requires valid `auth-token` cookie): `POST /logout`.
+/// Protected routes (require valid `auth-token` cookie):
+/// `POST /logout` and `GET /me`.
 pub fn user_routes() -> AxumRouter {
     AxumRouter::new()
         .route("/logout", post(api_logout))
+        .route("/me", get(api_me))
         .route_layer(axum::middleware::from_fn(middleware_auth))
         .route("/signup", post(api_signup))
         .route("/login", post(api_login))

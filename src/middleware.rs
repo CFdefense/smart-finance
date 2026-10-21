@@ -63,6 +63,22 @@ pub async fn middleware_auth(cookies: Cookies, mut req: Request, next: Next) -> 
         return AppError::Unauthorized.into_response();
     }
 
+    // Verify the user exists in the database
+    // Note: update table name to match your users migration
+    let user = sqlx::query_as!(
+        UserRow,
+        "SELECT id, email, password_hash, account_status FROM users WHERE id = $1",
+        user_id
+    )
+    .fetch_optional(&pool)
+    .await
+    .ok()
+    .flatten();
+
+    if !matches!(user, Some(ref u) if u.account_status == "active") {
+        return AppError::Unauthorized.into_response();
+    }
+
     // Refresh cookie if it expires within the next session window
     let session_secs = crate::global::SESSION_DURATION_SECS;
     if exp - now < session_secs {
@@ -86,22 +102,6 @@ pub async fn middleware_auth(cookies: Cookies, mut req: Request, next: Next) -> 
             .build();
 
         cookies.private(&key).add(new_cookie);
-    }
-
-    // Verify the user exists in the database
-    // Note: update table name to match your users migration
-    let user = sqlx::query_as!(
-        UserRow,
-        "SELECT id, email, password_hash FROM users WHERE id = $1",
-        user_id
-    )
-    .fetch_optional(&pool)
-    .await
-    .ok()
-    .flatten();
-
-    if user.is_none() {
-        return AppError::Unauthorized.into_response();
     }
 
     req.extensions_mut().insert(AuthUser { id: user_id });
