@@ -8,6 +8,7 @@
 #   ./cicd.sh              # full pipeline
 #   ./cicd.sh fmt          # formatting only
 #   ./cicd.sh clippy       # clippy only
+#   ./cicd.sh python       # python checks only
 #   ./cicd.sh test         # tests + coverage only
 #   ./cicd.sh openapi      # generate openapi.json only
 
@@ -28,8 +29,9 @@ ensure_tool() {
     fi
 }
 
-ensure_tool sqlx      "cargo install sqlx-cli --no-default-features --features postgres --locked"
-ensure_tool cargo-tarpaulin "cargo install cargo-tarpaulin --locked"
+ensure_tool sqlx              "cargo install sqlx-cli --no-default-features --features postgres --locked"
+ensure_tool cargo-tarpaulin   "cargo install cargo-tarpaulin --locked"
+ensure_tool uv                "curl -LsSf https://astral.sh/uv/install.sh | sh && export PATH="$HOME/.local/bin:$PATH""
 
 # Load .env when running locally; in CI DATABASE_URL is set via env
 if [ -z "${DATABASE_URL:-}" ] && [ -f .env ]; then
@@ -46,10 +48,14 @@ run_build()               { step "Build";                             cargo buil
 run_unit_coverage()       { step "Unit tests (≥85% coverage)";        cargo tarpaulin --config tarpaulin.toml && pass "unit coverage"; }
 run_integration_coverage(){ step "Integration tests (≥75% coverage)"; cargo tarpaulin --config tarpaulin-integration.toml && pass "integration coverage"; }
 run_openapi()             { step "Generate openapi.json";             cargo run --bin gen-openapi && pass "openapi.json"; }
+run_py_fmt()              { step "Python format check";               (cd ai-service && uv run ruff format --check .) && pass "py fmt"; }
+run_py_lint()             { step "Python lint";                       (cd ai-service && uv run ruff check .) && pass "py lint"; }
+run_py_test()             { step "Python tests";                      (cd ai-service && uv sync --locked && uv run pytest) && pass "py tests"; }
 
 case "$FILTER" in
   fmt)     run_fmt ;;
   clippy)  run_clippy ;;
+  python)  run_py_fmt; run_py_lint; run_py_test ;;
   test)    run_migrate; run_unit_coverage; run_integration_coverage ;;
   openapi) run_migrate; run_openapi ;;
   all)
@@ -59,7 +65,10 @@ case "$FILTER" in
     run_build
     run_unit_coverage
     run_integration_coverage
+    run_py_fmt
+    run_py_lint
+    run_py_test
     run_openapi
     echo -e "\n${GREEN}✓ All CI checks passed.${NC}" ;;
-  *)  echo "Usage: $0 [fmt|clippy|test|openapi|all]"; exit 1 ;;
+  *)  echo "Usage: $0 [fmt|clippy|python|test|openapi|all]"; exit 1 ;;
 esac

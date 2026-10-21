@@ -56,32 +56,6 @@ jobs:
         with:
           name: coverage-report
           path: docs/coverage/
-  
-  ai-service:
-    name: AI service (Python)
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ai-service
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v6
-
-      - name: Install dependencies
-        run: uv sync --locked
-
-      - name: Format check
-        run: uv run ruff format --check .
-
-      - name: Lint
-        run: uv run ruff check .
-
-      - name: Test
-        run: uv run pytest
 
   deploy:
     name: Deploy Swagger UI to GitHub Pages
