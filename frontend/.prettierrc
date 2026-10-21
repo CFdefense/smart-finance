@@ -1,6 +1,11 @@
 {
   "printWidth": 100,
   "singleQuote": true,
+  "semi": true,
+  "bracketSpacing": true,
+  "bracketSameLine": true,
+  "arrowParens": "always",
+  "htmlWhitespaceSensitivity": "ignore",
   "overrides": [
     {
       "files": "*.html",
