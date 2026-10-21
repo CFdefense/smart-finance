@@ -7,7 +7,6 @@ import { Router } from '@angular/router';
   styleUrl: './dashboard.css',
   templateUrl: './dashboard.html',
 })
-
 export class UserDashboard {
   protected readonly title = signal('dashboard');
   router = inject(Router);

@@ -32,6 +32,7 @@ ensure_tool sqlx      "cargo install sqlx-cli --no-default-features --features p
 ensure_tool cargo-tarpaulin "cargo install cargo-tarpaulin --locked"
 (cd ./frontend && ensure_tool npx angular-eslint "ng add angular-eslint")
 (cd ./frontend && ensure_tool npx prettier "npm install prettier --save-dev")
+(cd ./frontend && ensure_tool npx test "npm install --save-dev @vitest/coverage-v8")
 
 # Load .env when running locally; in CI DATABASE_URL is set via env
 if [ -z "${DATABASE_URL:-}" ] && [ -f .env ]; then
@@ -49,7 +50,7 @@ run_unit_coverage()       { step "Unit tests (≥85% coverage)";        cargo ta
 run_integration_coverage(){ step "Integration tests (≥75% coverage)"; cargo tarpaulin --config tarpaulin-integration.toml && pass "integration coverage"; }
 run_openapi()             { step "Generate openapi.json";             cargo run --bin gen-openapi && pass "openapi.json"; }
 run_nglint()              { step "Run lint";                          (cd ./frontend && npx ng lint); }
-run_prettier_check()      { step "Prettier check";                    (cd ./frontend && npx prettier --check && pass ".prettierrc"); }
+run_prettier_check()      { step "Prettier check";                    (cd ./frontend && npx prettier --check "src/**/*.ts" && pass ".prettierrc"); }
 run_angular_build()       { step "Run angular build";                 (cd ./frontend && npx ng build); }
 run_test_coverage()       { step "Test coverage (≥90% coverage)";     (cd ./frontend && npx ng test --coverage); }
 

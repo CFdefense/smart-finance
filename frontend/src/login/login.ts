@@ -7,7 +7,6 @@ import { Router } from '@angular/router';
   styleUrl: './login.css',
   templateUrl: './login.html',
 })
-
 export class Login {
   protected readonly title = signal('login');
   router = inject(Router);

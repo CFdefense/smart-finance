@@ -3,8 +3,5 @@ import { provideRouter } from '@angular/router';
 import { routeConfig } from './app.routes';
 
 export const appConfig: ApplicationConfig = {
-  providers: [
-    provideBrowserGlobalErrorListeners(),
-    provideRouter(routeConfig)
-  ]
+  providers: [provideBrowserGlobalErrorListeners(), provideRouter(routeConfig)],
 };
