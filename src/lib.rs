@@ -20,25 +20,15 @@ use http::{header::HeaderValue, Method};
 use tower_cookies::{cookie::Key, CookieManagerLayer};
 use tower_http::cors::CorsLayer;
 
-/// Create the API router.
-///
-/// Creates an API router containing:
-///   - DB Pool Connection
-///   - Nested Router
-///   - CORS Layer
-pub async fn create_router(frontend_url: &str) -> Router {
-    create_router_with_plaid(frontend_url, plaid::client::PlaidClient::new()).await
-}
-
 /// Create the API router using a caller-supplied [`plaid::client::PlaidClient`].
+///
+/// Accepts `frontend_url`: the URL to configure CORS to.
+/// Accepts `plaid`: an optional plaid client to use. (Mock Clients accepted)
 ///
 /// # Panics
 ///
 /// Panics if `frontend_url` cannot be parsed into a valid [`HeaderValue`].
-pub async fn create_router_with_plaid(
-    frontend_url: &str,
-    plaid: plaid::client::PlaidClient,
-) -> Router {
+pub async fn create_router(frontend_url: &str, plaid: plaid::client::PlaidClient) -> Router {
     let pool = db::create_pool().await;
     let cookie_key_hex =
         std::env::var("COOKIE_KEY").expect("COOKIE_KEY environment variable is required");
@@ -49,14 +39,18 @@ pub async fn create_router_with_plaid(
     let cookie_key = Key::try_from(cookie_key_bytes.as_slice())
         .expect("COOKIE_KEY must decode to exactly 64 bytes");
 
+    // Nest the routes
     let routes = AxumRouter::new()
         .nest("/user", controllers::user::user_routes())
         .nest("/plaid", controllers::plaid::plaid_routes());
+
+    // Build the api router
     let api_router = AxumRouter::new().nest("/api", routes);
 
     #[cfg(all(not(test), debug_assertions))]
     let api_router = swagger::merge_swagger(api_router);
 
+    // Build CORS policy
     let cors = CorsLayer::new()
         .allow_origin(
             frontend_url
@@ -72,6 +66,7 @@ pub async fn create_router_with_plaid(
             http::header::HeaderName::from_static("x-requested-with"),
         ]);
 
+    // Build and return the Router
     Router::new()
         .merge(api_router)
         .layer(Extension(pool))

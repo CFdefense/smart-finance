@@ -1,11 +1,9 @@
 import { Routes } from '@angular/router';
-import { App } from './app';
 import { Login } from '../login/login';
 import { UserDashboard } from '../dashboard/dashboard';
 import { UserProfile } from '../profile/profile';
 import { Signup } from './signup/signup';
 import { authGuard } from './auth-guard';
-
 
 export const routeConfig: Routes = [
     {path: '', redirectTo: 'login', pathMatch: 'full'},

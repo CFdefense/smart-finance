@@ -9,8 +9,6 @@ import { AuthService } from '../app/services/auth.service';
   styleUrl: './login.css',
   templateUrl: './login.html',
 })
-
-
 export class Login {
   protected readonly title = signal('login');
 

@@ -8,7 +8,6 @@ import { AuthService } from '../app/services/auth.service';
   styleUrl: './dashboard.css',
   templateUrl: './dashboard.html',
 })
-
 export class UserDashboard {
   protected readonly title = signal('dashboard');
   private readonly authService = inject(AuthService);

@@ -1,6 +1,7 @@
 //! Smart Finance API — application entry point.
 
 use smart_finance::log;
+use smart_finance::plaid::client::PlaidClient;
 use std::{env, net::SocketAddr, str::FromStr};
 
 #[tokio::main]
@@ -17,7 +18,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let bind_address = env::var("BIND_ADDRESS").expect("BIND_ADDRESS must be set");
 
     // Initialize the app router
-    let app = smart_finance::create_router(&frontend_url).await;
+    let app = smart_finance::create_router(&frontend_url, PlaidClient::new()).await;
 
     // Create a socket address
     let addr = SocketAddr::from_str(&bind_address).expect("Invalid BIND_ADDRESS format");
