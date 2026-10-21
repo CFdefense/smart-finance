@@ -15,8 +15,8 @@ docs/tarpaulin-report.html
 # Agent planning artifacts
 .sdd/
 docs/plans/
-agent/
-anomaly/
+/agent/
+/anomaly/
 
 # Tarpaulin LLVM coverage raw profile data
 *.profraw
@@ -32,3 +32,6 @@ __pycache__/
 
 # Personal vscode settings
 .vscode/
+
+# Python test coverage
+.coverage

@@ -55,14 +55,15 @@ run_nglint()              { step "Run lint";                          (cd ./fron
 run_prettier_check()      { step "Prettier check";                    (cd ./frontend && npx prettier --check "src/**/*.ts" && pass ".prettierrc"); }
 run_angular_build()       { step "Run angular build";                 (cd ./frontend && npx ng build); }
 run_test_coverage()       { step "Test coverage (≥90% coverage)";     (cd ./frontend && npx ng test --coverage); }
-run_py_fmt()              { step "Python format check";               (cd ai-service && uv run ruff format --check .) && pass "py fmt"; }
-run_py_lint()             { step "Python lint";                       (cd ai-service && uv run ruff check .) && pass "py lint"; }
-run_py_test()             { step "Python tests";                      (cd ai-service && uv sync --locked && uv run pytest) && pass "py tests"; }
+run_py_sync()             { step "Python dependencies (locked)";      (cd ai-service && uv sync --locked) && pass "py sync"; }
+run_py_fmt()              { step "Python format check";               (cd ai-service && uv run --locked ruff format --check .) && pass "py fmt"; }
+run_py_lint()             { step "Python lint";                       (cd ai-service && uv run --locked ruff check .) && pass "py lint"; }
+run_py_test()             { step "Python tests (≥75% coverage)";      (cd ai-service && uv run --locked pytest) && pass "py tests"; }
 
 case "$FILTER" in
   fmt)     run_fmt ;;
   clippy)  run_clippy ;;
-  python)  run_migrate; run_py_fmt; run_py_lint; run_py_test ;;
+  python)  run_migrate; run_py_sync; run_py_fmt; run_py_lint; run_py_test ;;
   test)    run_migrate; run_unit_coverage; run_integration_coverage ;;
   openapi) run_migrate; run_openapi ;;
   all)
@@ -72,6 +73,7 @@ case "$FILTER" in
     run_build
     run_unit_coverage
     run_integration_coverage
+    run_py_sync
     run_py_fmt
     run_py_lint
     run_py_test
