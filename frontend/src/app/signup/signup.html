@@ -1,4 +1,3 @@
-
 <div class="signup-container">
   <h1>Create an Account</h1>
 
@@ -11,8 +10,7 @@
         name="firstName"
         [(ngModel)]="firstName"
         placeholder="Enter your first name"
-        required
-      />
+        required />
     </div>
 
     <div>
@@ -23,8 +21,7 @@
         name="lastName"
         [(ngModel)]="lastName"
         placeholder="Enter your last name"
-        required
-      />
+        required />
     </div>
 
     <div>
@@ -35,8 +32,7 @@
         name="email"
         [(ngModel)]="email"
         placeholder="Enter your email"
-        required
-      />
+        required />
     </div>
 
     <div>
@@ -48,11 +44,10 @@
         [(ngModel)]="password"
         placeholder="Create a password"
         autocomplete="new-password"
-        required
-      />
+        required />
       <p class="password-hint">
-        Password must be 8–128 characters and contain at least one uppercase
-        letter, one lowercase letter, and one number. Use standard ASCII characters.
+        Password must be 8–128 characters and contain at least one uppercase letter, one lowercase
+        letter, and one number. Use standard ASCII characters.
       </p>
     </div>
 
@@ -63,7 +58,6 @@
     @if (errorMessage()) {
       <p role="alert">{{ errorMessage() }}</p>
     }
-
   </form>
 
   <p>

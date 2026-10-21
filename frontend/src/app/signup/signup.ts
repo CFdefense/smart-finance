@@ -1,4 +1,3 @@
-
 import { Component, inject, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -29,12 +28,7 @@ export class Signup {
 
     this.errorMessage.set('');
 
-    if (
-      !this.firstName.trim() ||
-      !this.lastName.trim() ||
-      !this.email.trim() ||
-      !this.password
-    ) {
+    if (!this.firstName.trim() || !this.lastName.trim() || !this.email.trim() || !this.password) {
       this.errorMessage.set('Please complete all fields.');
       return;
     }
@@ -42,12 +36,7 @@ export class Signup {
     this.isSubmitting.set(true);
 
     this.authService
-      .signup(
-        this.firstName.trim(),
-        this.lastName.trim(),
-        this.email.trim(),
-        this.password,
-      )
+      .signup(this.firstName.trim(), this.lastName.trim(), this.email.trim(), this.password)
       .subscribe({
         next: () => {
           this.isSubmitting.set(false);

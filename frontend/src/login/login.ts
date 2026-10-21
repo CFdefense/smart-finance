@@ -21,36 +21,34 @@ export class Login {
   errorMessage = signal('');
   isSubmitting = signal(false);
 
-  
-onLogin(): void {
-  if (this.isSubmitting()) {
-    return;
+  onLogin(): void {
+    if (this.isSubmitting()) {
+      return;
+    }
+
+    this.errorMessage.set('');
+
+    if (!this.email.trim() || !this.password) {
+      this.errorMessage.set('Please enter your email and password.');
+      return;
+    }
+
+    this.isSubmitting.set(true);
+
+    this.authService.login(this.email.trim(), this.password).subscribe({
+      next: () => {
+        this.isSubmitting.set(false);
+        this.router.navigate(['/dashboard']);
+      },
+      error: (err) => {
+        this.isSubmitting.set(false);
+
+        this.errorMessage.set(
+          err.status === 400 || err.status === 401
+            ? 'Invalid email or password.'
+            : 'Unable to log in right now. Please try again.',
+        );
+      },
+    });
   }
-
-  this.errorMessage.set('');
-
-  if (!this.email.trim() || !this.password) {
-    this.errorMessage.set('Please enter your email and password.');
-    return;
-  }
-
-  this.isSubmitting.set(true);
-
-  this.authService.login(this.email.trim(), this.password).subscribe({
-    next: () => {
-      this.isSubmitting.set(false);
-      this.router.navigate(['/dashboard']);
-    },
-    error: (err) => {
-      this.isSubmitting.set(false);
-
-      this.errorMessage.set(
-        err.status === 400 || err.status === 401
-          ? 'Invalid email or password.'
-          : 'Unable to log in right now. Please try again.'
-      );
-    },
-  });
-}
-
 }
