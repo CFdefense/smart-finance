@@ -27,7 +27,7 @@ jobs:
 
     env:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/smart_finance_test
-      FRONTEND_URL: http://localhost:3000
+      FRONTEND_URL: http://localhost:4200
       BIND_ADDRESS: 127.0.0.1:3001
 
     steps:
@@ -45,7 +45,7 @@ jobs:
       - name: Install tools
         uses: taiki-e/install-action@v2
         with:
-          tool: cargo-tarpaulin,sqlx-cli
+          tool: cargo-tarpaulin,sqlx-cli,angular-eslint,prettier
 
       - name: Run pipeline via cicd.sh
         run: bash cicd.sh all
@@ -55,6 +55,13 @@ jobs:
         if: always()
         with:
           name: coverage-report
+          path: docs/coverage/
+
+      - name: Upload frontend coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frontend-coverage-report
           path: docs/coverage/
 
   deploy:
@@ -100,6 +107,10 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: sqlx-cli
+
+      - name: Install dependencies
+        working-directory: ./frontend
+        run: npm install
 
       - name: Generate openapi.json
         run: bash cicd.sh openapi
