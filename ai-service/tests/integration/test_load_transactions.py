@@ -4,8 +4,8 @@ import uuid
 
 import pytest
 
+from anomaly.detector import load_transactions
 from db import get_connection
-from monitor.detector import load_transactions
 
 
 @pytest.fixture

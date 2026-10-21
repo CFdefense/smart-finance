@@ -8,9 +8,9 @@ from fastapi import FastAPI
 
 from agent import AnalyzerAgent, ChatAgent
 from agent.data_models import ChatRequest, ChatResponse
+from anomaly.data_models import AnomalyRequest, AnomalyResponse
+from anomaly.detector import check_transactions
 from db import get_connection
-from monitor.data_models import AnomalyRequest, AnomalyResponse
-from monitor.detector import check_transactions
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)

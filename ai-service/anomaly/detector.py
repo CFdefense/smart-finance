@@ -1,8 +1,8 @@
 from statistics import median
 from typing import Protocol
 
-from db import get_connection
 from anomaly.data_models import FlaggedTransaction, Transaction
+from db import get_connection
 
 
 class AnomalyDetector(Protocol):
@@ -75,4 +75,3 @@ def check_transactions(user_id: int, new_ids: list[str]) -> list[FlaggedTransact
     new = [t for t in everything if t.transaction_id in new_ids]
     history = [t for t in everything if t.transaction_id not in new_ids]
     return detector.find_anomalies(new, history)
-

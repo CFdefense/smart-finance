@@ -2,9 +2,9 @@
 
 from datetime import date
 
-import monitor.detector as detector_module
-from monitor.data_models import FlaggedTransaction, Transaction
-from monitor.detector import MedianDetector
+import anomaly.detector as detector_module
+from anomaly.data_models import FlaggedTransaction, Transaction
+from anomaly.detector import MedianDetector
 
 detector = MedianDetector()
 
