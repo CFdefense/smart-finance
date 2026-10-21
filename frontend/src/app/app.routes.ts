@@ -1,5 +1,4 @@
 import { Routes } from '@angular/router';
-import { App } from './app';
 import { Login } from '../login/login';
 import { UserDashboard } from '../dashboard/dashboard';
 import { UserProfile } from '../profile/profile';
