@@ -19,7 +19,7 @@ use crate::{
             LinkTokenResponse, TransactionResponse, TransactionSyncResponse, TransactionsQuery,
             TransactionsResponse,
         },
-        sql::plaid::{PlaidLinkRow, PlaidSyncCursorRow, PlaidTransactionRow},
+        sql::plaid::{PlaidLinkRow, PlaidSyncCursorRow},
     },
     plaid::client::PlaidClient,
 };
@@ -111,14 +111,14 @@ pub async fn api_plaid_exchange_token(
 
     // Swap the one-time public token with Plaid for a long-lived access token
     // and the Item id identifying the linked bank connection.
-    let (access_token, item_id) = plaid.exchange_public_token(&payload.public_token).await?;
+    let mut exchanged = plaid.exchange_public_token(&payload.public_token).await?;
 
     // Persist the Item
     sqlx::query!(
         "INSERT INTO plaid_links (user_id, item_id, access_token) VALUES ($1, $2, $3)",
         user.id,
-        item_id,
-        access_token
+        exchanged.item_id,
+        exchanged.access_token
     )
     .execute(&pool)
     .await
@@ -127,17 +127,15 @@ pub async fn api_plaid_exchange_token(
     // Seed the sync cursor row (cursor = NULL means first sync not yet run)
     sqlx::query!(
         "INSERT INTO plaid_sync_cursors (item_id, cursor, has_more) VALUES ($1, NULL, TRUE)",
-        item_id
+        exchanged.item_id
     )
     .execute(&pool)
     .await
     .map_err(AppError::from)?;
 
-    // Return only the item id; the access token never leaves the backend.
-    Ok(Json(ExchangeTokenResponse {
-        success: true,
-        item_id,
-    }))
+    // The access token is skip_serializing, so it never leaves the backend.
+    exchanged.success = true;
+    Ok(Json(exchanged))
 }
 
 /// Retrieve financial accounts for the authenticated user.
@@ -219,19 +217,8 @@ pub async fn api_plaid_get_accounts(
             .map_err(AppError::from)?;
         }
 
-        // Convert Plaid account data into API responses (no access tokens exposed).
-        accounts.extend(plaid_accounts.into_iter().map(|a| AccountResponse {
-            account_id: a.account_id,
-            item_id: a.item_id,
-            name: a.name,
-            official_name: a.official_name,
-            account_type: a.account_type,
-            account_subtype: a.account_subtype,
-            mask: a.mask,
-            current_balance: a.current_balance,
-            available_balance: a.available_balance,
-            currency_code: a.currency_code,
-        }));
+        // The client already returns the API model (no access tokens exposed).
+        accounts.extend(plaid_accounts);
     }
 
     // Return the combined list of accounts.
@@ -402,10 +389,10 @@ pub async fn api_plaid_sync_transactions(
             }
 
             // Delete transactions that Plaid reports as removed.
-            for tx_id in &page.removed {
+            for removed in &page.removed {
                 sqlx::query!(
                     "DELETE FROM plaid_transactions WHERE transaction_id = $1",
-                    tx_id
+                    removed.transaction_id
                 )
                 .execute(&pool)
                 .await
@@ -498,19 +485,16 @@ pub async fn api_plaid_get_transactions(
 
     // Fetch one page of transactions, newest first. Ownership is enforced by
     // joining transactions -> accounts -> links and filtering on the user id.
-    let rows = sqlx::query_as!(
-        PlaidTransactionRow,
+    let transactions = sqlx::query_as!(
+        TransactionResponse,
         r#"
         SELECT
-            t.id,
             t.transaction_id,
             t.account_id,
             t.name,
             t.amount,
             t.date,
-            t.pending,
-            t.created_at,
-            t.updated_at
+            t.pending
         FROM plaid_transactions t
         JOIN plaid_accounts a ON a.account_id = t.account_id
         JOIN plaid_links i ON i.item_id = a.item_id
@@ -541,19 +525,6 @@ pub async fn api_plaid_get_transactions(
     .fetch_one(&pool)
     .await
     .map_err(AppError::from)?;
-
-    // Map DB rows to the API shape (date rendered as a string).
-    let transactions = rows
-        .into_iter()
-        .map(|t| TransactionResponse {
-            transaction_id: t.transaction_id,
-            account_id: t.account_id,
-            name: t.name,
-            amount: t.amount,
-            date: t.date.to_string(),
-            pending: t.pending,
-        })
-        .collect();
 
     // Return the page along with its paging metadata.
     Ok(Json(TransactionsResponse {
