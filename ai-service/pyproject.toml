@@ -1,0 +1,75 @@
+[project]
+name = "ai-service"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "dotenvy>=0.2.0",
+    "fastapi>=0.156.2",
+    "langchain-core>=1.6.12",
+    "langchain-openai>=1.7.2",
+    "langgraph>=1.2.16",
+    "psycopg[binary]>=3.3.6",
+    "python-dotenv>=1.2.4",
+    "uvicorn>=0.54.0",
+]
+
+[dependency-groups]
+dev = [
+    "httpx2>=2.15.1",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.17.1",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+# Enable common Python linting rules
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort (import sorting)
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+    "D",   # pydocstyle (docstring conventions)
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+    "E303",  # too many blank lines (we want 2)
+    "E304",  # blank lines found after function decorator
+    "W293",  # blank line contains whitespace (allow whitespace in blank lines, especially in comments/docstrings)
+    "D100",  # Missing docstring in public module (optional)
+    "D104",  # Missing docstring in public package (optional)
+    "D105",  # Missing docstring in magic method (optional)
+    "D107",  # Missing docstring in __init__ (optional)
+    "D401",  # Skip Comment Linting
+    "D203",  # Skip incorrect-blank-line-before-class
+    "D212",  # Skip multi-line-summary-first-line
+]
+# Enforce 2 blank lines before top-level functions and classes
+# E302: Expected 2 blank lines before function/class definition
+# D101: Missing docstring in public class
+# D102: Missing docstring in public method
+# D103: Missing docstring in public function (enforced)
+
+[tool.ruff.lint.isort]
+# Configure import sorting
+known-first-party = ["lib", "tests"]
+combine-as-imports = true
+
+[tool.ruff.format]
+# Ruff formatter configuration
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+addopts = "--cov=. --cov-report=term-missing --cov-report=html:../docs/coverage/ai-service --cov-fail-under=75"
+
+[tool.coverage.run]
+omit = ["tests/*"]

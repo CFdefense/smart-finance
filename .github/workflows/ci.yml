@@ -68,6 +68,13 @@ jobs:
           name: frontend-coverage-report
           path: docs/coverage/
 
+      - name: Upload AI service coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ai-service-coverage-report
+          path: docs/coverage/ai-service/
+
   deploy:
     name: Deploy Swagger UI to GitHub Pages
     runs-on: ubuntu-latest
