@@ -34,7 +34,7 @@ ensure_tool cargo-tarpaulin   "cargo install cargo-tarpaulin --locked"
 (cd ./frontend && ensure_tool npx angular-eslint "ng add angular-eslint")
 (cd ./frontend && ensure_tool npx prettier "npm install prettier --save-dev")
 (cd ./frontend && ensure_tool npx test "npm install --save-dev @vitest/coverage-v8")
-ensure_tool uv                "curl -LsSf https://astral.sh/uv/install.sh | sh && export PATH="$HOME/.local/bin:$PATH""
+ensure_tool uv                'curl -LsSf https://astral.sh/uv/install.sh | sh && export PATH="$HOME/.local/bin:$PATH"'
 
 # Load .env when running locally; in CI DATABASE_URL is set via env
 if [ -z "${DATABASE_URL:-}" ] && [ -f .env ]; then
