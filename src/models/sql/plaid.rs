@@ -1,6 +1,6 @@
 //! SQL row models for Plaid tables.
 
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, Utc};
 
 /// Row model for the `plaid_links` table.
 ///
@@ -16,62 +16,6 @@ pub struct PlaidLinkRow {
     pub access_token: String,
     /// When the Item was linked.
     pub created_at: DateTime<Utc>,
-}
-
-/// Row model for the `plaid_accounts` table.
-///
-/// Represents a financial account fetched from Plaid for a given Item.
-pub struct PlaidAccountRow {
-    /// Primary key.
-    pub id: i32,
-    /// Plaid's unique account identifier.
-    pub account_id: String,
-    /// FK to `plaid_links.item_id`.
-    pub item_id: String,
-    /// Account display name.
-    pub name: String,
-    /// Official account name, when available.
-    pub official_name: Option<String>,
-    /// Account type (e.g. `depository`, `credit`).
-    pub account_type: String,
-    /// Account subtype (e.g. `checking`, `savings`).
-    pub account_subtype: Option<String>,
-    /// Masked account number, when available.
-    pub mask: Option<String>,
-    /// Current balance, when available.
-    pub current_balance: Option<f64>,
-    /// Available balance, when supported.
-    pub available_balance: Option<f64>,
-    /// ISO 4217 currency code, when available.
-    pub currency_code: Option<String>,
-    /// When the account record was first stored.
-    pub created_at: DateTime<Utc>,
-    /// When the account record was last updated.
-    pub updated_at: DateTime<Utc>,
-}
-
-/// Row model for the `plaid_transactions` table.
-///
-/// Represents a transaction synced from Plaid.
-pub struct PlaidTransactionRow {
-    /// Primary key.
-    pub id: i32,
-    /// Plaid's unique transaction identifier.
-    pub transaction_id: String,
-    /// FK to `plaid_accounts.account_id`.
-    pub account_id: String,
-    /// Merchant or transaction name.
-    pub name: String,
-    /// Transaction amount (positive = debit, negative = credit per Plaid convention).
-    pub amount: f64,
-    /// Date of the transaction.
-    pub date: NaiveDate,
-    /// Whether the transaction is pending.
-    pub pending: bool,
-    /// When the transaction was first stored.
-    pub created_at: DateTime<Utc>,
-    /// When the transaction was last updated.
-    pub updated_at: DateTime<Utc>,
 }
 
 /// Row model for the `plaid_sync_cursors` table.
