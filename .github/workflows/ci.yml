@@ -45,7 +45,7 @@ jobs:
       - name: Install tools
         uses: taiki-e/install-action@v2
         with:
-          tool: cargo-tarpaulin,sqlx-cli,angular-eslint,prettier
+          tool: cargo-tarpaulin,sqlx-cli
 
       - name: Run pipeline via cicd.sh
         run: bash cicd.sh all
