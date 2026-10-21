@@ -153,10 +153,7 @@ impl PlaidClient {
     /// Fetch all financial accounts for a given access token.
     ///
     /// Calls `POST /accounts/get`.
-    pub async fn get_accounts(
-        &self,
-        access_token: &str,
-    ) -> Result<Vec<AccountResponse>, AppError> {
+    pub async fn get_accounts(&self, access_token: &str) -> Result<Vec<AccountResponse>, AppError> {
         let body = serde_json::json!({
             "client_id": self.client_id,
             "secret": self.secret,
