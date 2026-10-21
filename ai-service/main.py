@@ -1,11 +1,13 @@
 import os
 from contextlib import asynccontextmanager
 
+import psycopg
 from dotenv import load_dotenv
 from fastapi import FastAPI
 
 from agent import AnalyzerAgent, ChatAgent
 from agent.data_models import ChatRequest, ChatResponse
+from db import get_connection
 
 load_dotenv()
 
@@ -46,5 +48,11 @@ def anomaly(request: ChatRequest) -> ChatResponse:
 
 @app.get("/health")
 def health():
-    """Return the health status of the service."""
-    return {"status": "ok"}
+    """Return the health status of the service and its database."""
+    try:
+        with get_connection() as conn:
+            conn.execute("SELECT 1")
+        database = "ok"
+    except psycopg.OperationalError:
+        database = "unreachable"
+    return {"status": "ok", "database": database}
