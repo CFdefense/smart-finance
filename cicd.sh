@@ -48,9 +48,9 @@ run_build()               { step "Build";                             cargo buil
 run_unit_coverage()       { step "Unit tests (≥85% coverage)";        cargo tarpaulin --config tarpaulin.toml && pass "unit coverage"; }
 run_integration_coverage(){ step "Integration tests (≥75% coverage)"; cargo tarpaulin --config tarpaulin-integration.toml && pass "integration coverage"; }
 run_openapi()             { step "Generate openapi.json";             cargo run --bin gen-openapi && pass "openapi.json"; }
-run_nglint()              { step "Run lint";                          ng lint; }
+run_nglint()              { step "Run lint";                          npm run lint; }
 run_prettier_check()      { step "Prettier check";                    npx prettier --check && pass "prettier";}
-run_angular_build()       { step "Run angular build";                 ng build; }
+run_angular_build()       { step "Run angular build";                 npm run build; }
 run_test_coverage()       { step "Test coverage (≥90% coverage)";     ng test --coverage; }
 
 case "$FILTER" in
