@@ -55,7 +55,7 @@ run_py_test()             { step "Python tests";                      (cd ai-ser
 case "$FILTER" in
   fmt)     run_fmt ;;
   clippy)  run_clippy ;;
-  python)  run_py_fmt; run_py_lint; run_py_test ;;
+  python)  run_migrate; run_py_fmt; run_py_lint; run_py_test ;;
   test)    run_migrate; run_unit_coverage; run_integration_coverage ;;
   openapi) run_migrate; run_openapi ;;
   all)
