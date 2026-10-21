@@ -5,7 +5,7 @@ import uuid
 import pytest
 
 from db import get_connection
-from monitor.workers import load_transactions
+from monitor.detector import load_transactions
 
 
 @pytest.fixture

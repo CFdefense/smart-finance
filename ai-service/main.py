@@ -10,7 +10,7 @@ from agent import AnalyzerAgent, ChatAgent
 from agent.data_models import ChatRequest, ChatResponse
 from db import get_connection
 from monitor.data_models import AnomalyRequest, AnomalyResponse
-from monitor.workers import job_queue, submit_check
+from monitor.detector import check_transactions
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -27,7 +27,6 @@ async def lifespan(app: FastAPI):
     yield
 
     # Cleanup here if we need to
-    job_queue.shutdown(wait=True)
 
 
 app = FastAPI(lifespan=lifespan)
@@ -48,7 +47,7 @@ def analyze(request: ChatRequest) -> ChatResponse:
 @app.post("/anomaly")
 def anomaly(request: AnomalyRequest) -> AnomalyResponse:
     """Check a user's new transactions and return the ones that look unusual."""
-    flagged = submit_check(request.user_id, request.transaction_ids)
+    flagged = check_transactions(request.user_id, request.transaction_ids)
     return AnomalyResponse(flagged=flagged)
 
 

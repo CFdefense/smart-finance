@@ -12,14 +12,29 @@ uv sync
 ```
 
 2. Start the HTTP service: `uvicorn main:app --reload`
-3. View the port by the following into your browser searchbar: `http://127.0.0.1:8000/<route>`
+3. View the service by typing the following into your browser's address bar: `http://127.0.0.1:8000/<route>`
    1. Valid routes:
-      1. `/health` - Get HTTP API health. 
-      2. `/chat` - Opening this will result in a 405 error in browser, since it is a POST and not a GET. 
-      3. `/docs` - Shows API skeleton documentation. **Use 'Try it out' here** to test `/chat` input and output.
+      1. `/health` - Get HTTP API and database health.
+      2. `/chat` - POST only. Opening this in a browser gives a 405 error, since browsers send GET.
+      3. `/analyze` - POST only (405 in a browser).
+      4. `/anomaly` - POST only (405 in a browser).
+      5. `/docs` - Shows API documentation. **Use 'Try it out' here** to test the POST routes (`/chat`, `/analyze`, `/anomaly`).
 4. Test using `pytest`
 
 ## API
    POST /chat
    Request:  {"user_id": 1, "message": "How much did I spend on food?"}
-   Response: {"response": "..."}   (placeholder text for now)
+   Response: {"response": "..."}   (answered by the LLM; needs OPENAI_API_KEY)
+
+   POST /analyze
+   Request:  {"user_id": 1, "message": "Is a $900 charge at Best Buy suspicious?"}
+   Response: {"response": "..."}   (LLM analysis of the transaction; needs OPENAI_API_KEY)
+
+   POST /anomaly
+   Request:  {"user_id": 1, "transaction_ids": ["txn_abc", "txn_def"]}
+   Response: {"flagged": [{"transaction": {"transaction_id": "txn_abc", "name": "TV", "amount": 900.0, "date": "2026-10-04"},
+                           "reason": "$900.00 is over 3x your typical purchase of $15.00"}]}
+             (empty list if nothing looks unusual; placeholder rule for now)
+
+   GET /health
+   Response: {"status": "ok", "database": "ok"}   ("unreachable" if Postgres is down)
