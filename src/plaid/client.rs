@@ -2,80 +2,12 @@
 
 use crate::{
     error::AppError,
-    models::plaid::{PlaidAccountData, PlaidSyncPage, PlaidTransactionData},
+    models::http::plaid::{
+        AccountResponse, ExchangeTokenResponse, LinkTokenResponse, PlaidAccountsGetResponse,
+        PlaidTransactionsSyncResponse,
+    },
 };
-use chrono::NaiveDate;
-use serde::Deserialize;
 use std::time::Duration;
-
-// ── Private Plaid API response shapes ────────────────────────────────────────
-
-#[derive(Deserialize)]
-struct LinkTokenCreateResponse {
-    link_token: String,
-}
-
-#[derive(Deserialize)]
-struct ExchangeTokenResponse {
-    access_token: String,
-    item_id: String,
-}
-
-#[derive(Deserialize)]
-struct AccountsGetResponse {
-    accounts: Vec<PlaidAccountRaw>,
-    item: PlaidItemRaw,
-}
-
-#[derive(Deserialize)]
-struct PlaidItemRaw {
-    item_id: String,
-}
-
-#[derive(Deserialize)]
-struct PlaidAccountRaw {
-    account_id: String,
-    name: String,
-    official_name: Option<String>,
-    #[serde(rename = "type")]
-    account_type: String,
-    subtype: Option<String>,
-    mask: Option<String>,
-    balances: PlaidBalancesRaw,
-}
-
-#[derive(Deserialize)]
-struct PlaidBalancesRaw {
-    current: Option<f64>,
-    available: Option<f64>,
-    iso_currency_code: Option<String>,
-}
-
-#[derive(Deserialize)]
-struct TransactionsSyncResponse {
-    added: Vec<PlaidTransactionRaw>,
-    modified: Vec<PlaidTransactionRaw>,
-    removed: Vec<PlaidRemovedTransaction>,
-    next_cursor: String,
-    has_more: bool,
-}
-
-#[derive(Deserialize)]
-struct PlaidTransactionRaw {
-    transaction_id: String,
-    account_id: String,
-    name: String,
-    amount: f64,
-    date: NaiveDate,
-    pending: bool,
-}
-
-#[derive(Deserialize)]
-struct PlaidRemovedTransaction {
-    transaction_id: String,
-}
-
-// ── PlaidClient ───────────────────────────────────────────────────────────────
 
 /// Shared HTTP client for the Plaid API.
 ///
@@ -175,7 +107,7 @@ impl PlaidClient {
             )));
         }
 
-        let parsed: LinkTokenCreateResponse = resp
+        let parsed: LinkTokenResponse = resp
             .json()
             .await
             .map_err(|e| AppError::Internal(format!("Plaid response parse error: {e}")))?;
@@ -185,11 +117,12 @@ impl PlaidClient {
 
     /// Exchange a public token for an access token and Item ID.
     ///
-    /// Calls `POST /item/public_token/exchange`. Returns `(access_token, item_id)`.
+    /// Calls `POST /item/public_token/exchange`. The returned `success` flag
+    /// is `false`; the caller sets it once the connection is persisted.
     pub async fn exchange_public_token(
         &self,
         public_token: &str,
-    ) -> Result<(String, String), AppError> {
+    ) -> Result<ExchangeTokenResponse, AppError> {
         let body = serde_json::json!({
             "client_id": self.client_id,
             "secret": self.secret,
@@ -212,12 +145,9 @@ impl PlaidClient {
             )));
         }
 
-        let parsed: ExchangeTokenResponse = resp
-            .json()
+        resp.json()
             .await
-            .map_err(|e| AppError::Internal(format!("Plaid response parse error: {e}")))?;
-
-        Ok((parsed.access_token, parsed.item_id))
+            .map_err(|e| AppError::Internal(format!("Plaid response parse error: {e}")))
     }
 
     /// Fetch all financial accounts for a given access token.
@@ -226,7 +156,7 @@ impl PlaidClient {
     pub async fn get_accounts(
         &self,
         access_token: &str,
-    ) -> Result<Vec<PlaidAccountData>, AppError> {
+    ) -> Result<Vec<AccountResponse>, AppError> {
         let body = serde_json::json!({
             "client_id": self.client_id,
             "secret": self.secret,
@@ -249,7 +179,7 @@ impl PlaidClient {
             )));
         }
 
-        let parsed: AccountsGetResponse = resp
+        let parsed: PlaidAccountsGetResponse = resp
             .json()
             .await
             .map_err(|e| AppError::Internal(format!("Plaid response parse error: {e}")))?;
@@ -258,7 +188,7 @@ impl PlaidClient {
         let accounts = parsed
             .accounts
             .into_iter()
-            .map(|a| PlaidAccountData {
+            .map(|a| AccountResponse {
                 account_id: a.account_id,
                 item_id: item_id.clone(),
                 name: a.name,
@@ -283,7 +213,7 @@ impl PlaidClient {
         &self,
         access_token: &str,
         cursor: Option<String>,
-    ) -> Result<PlaidSyncPage, AppError> {
+    ) -> Result<PlaidTransactionsSyncResponse, AppError> {
         let mut body = serde_json::json!({
             "client_id": self.client_id,
             "secret": self.secret,
@@ -311,30 +241,8 @@ impl PlaidClient {
             )));
         }
 
-        let parsed: TransactionsSyncResponse = resp
-            .json()
+        resp.json()
             .await
-            .map_err(|e| AppError::Internal(format!("Plaid response parse error: {e}")))?;
-
-        let map_tx = |t: PlaidTransactionRaw| PlaidTransactionData {
-            transaction_id: t.transaction_id,
-            account_id: t.account_id,
-            name: t.name,
-            amount: t.amount,
-            date: t.date,
-            pending: t.pending,
-        };
-
-        Ok(PlaidSyncPage {
-            added: parsed.added.into_iter().map(map_tx).collect(),
-            modified: parsed.modified.into_iter().map(map_tx).collect(),
-            removed: parsed
-                .removed
-                .into_iter()
-                .map(|r| r.transaction_id)
-                .collect(),
-            next_cursor: parsed.next_cursor,
-            has_more: parsed.has_more,
-        })
+            .map_err(|e| AppError::Internal(format!("Plaid response parse error: {e}")))
     }
 }
