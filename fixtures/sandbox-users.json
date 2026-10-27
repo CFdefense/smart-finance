@@ -1,0 +1,38 @@
+[
+  {
+    "email": "jeremy@test.com",
+    "first_name": "Jeremy",
+    "last_name": "Frank",
+    "password": "Password123",
+    "institution_id": "ins_109508",
+    "sandbox_username": "custom_jfrank",
+    "sandbox_password": "pass_good"
+  },
+  {
+    "email": "libby@test.com",
+    "first_name": "Libby",
+    "last_name": "Foley",
+    "password": "Password123",
+    "institution_id": "ins_109508",
+    "sandbox_username": "custom_lfoley",
+    "sandbox_password": "pass_good"
+  },
+  {
+    "email": "mitchell@test.com",
+    "first_name": "Mitchell",
+    "last_name": "Levy",
+    "password": "Password123",
+    "institution_id": "ins_109508",
+    "sandbox_username": "custom_mlevy",
+    "sandbox_password": "pass_good"
+  },
+  {
+    "email": "christian@test.com",
+    "first_name": "Christian",
+    "last_name": "Farrell",
+    "password": "Password123",
+    "institution_id": "ins_109508",
+    "sandbox_username": "custom_cfarrell",
+    "sandbox_password": "pass_good"
+  }
+]

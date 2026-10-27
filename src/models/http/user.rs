@@ -3,11 +3,14 @@
 use std::sync::LazyLock;
 
 use regex::Regex;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 static EMAIL_REGEX: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$").unwrap());
+
+static PHONE_E164_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^\+[1-9]\d{7,14}$").unwrap());
 
 /// Request payload for `POST /api/user/login`.
 #[derive(Debug, Deserialize, ToSchema)]
@@ -31,6 +34,69 @@ pub struct SignupRequest {
     pub email: String,
     /// Plaintext password submitted by the user.
     pub password: String,
+}
+
+/// Response body for `GET /api/user/profile`.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ProfileResponse {
+    /// Account email address.
+    pub email: String,
+    /// Whether the user has opted in to email notifications.
+    pub email_notifications: bool,
+    /// E.164 phone number, or `null` if not set.
+    pub phone_number: Option<String>,
+    /// Whether the user has opted in to SMS notifications.
+    pub sms_notifications: bool,
+}
+
+/// Request body for `PUT /api/user/profile`.
+///
+/// All fields are optional — omitted fields are left unchanged.
+/// Pass `phone_number: ""` to clear the stored phone number (also forces
+/// `sms_notifications` to `false`).
+#[derive(Debug, Deserialize, Clone, ToSchema)]
+pub struct UpdateProfileRequest {
+    /// Opt in or out of email notifications.
+    pub email_notifications: Option<bool>,
+    /// New E.164 phone number, `""` to clear, or absent to leave unchanged.
+    pub phone_number: Option<String>,
+    /// Opt in or out of SMS notifications.
+    pub sms_notifications: Option<bool>,
+}
+
+impl UpdateProfileRequest {
+    /// Validates the request against the user's currently-stored phone number.
+    ///
+    /// Rules:
+    /// - If `phone_number` is `Some(s)` and non-empty, it must be E.164 format.
+    /// - If the effective `sms_notifications` after the update would be `true`
+    ///   and there would be no phone number, returns an error.
+    ///
+    /// `existing_phone` is the phone number currently stored for the user,
+    /// used to determine the effective state when `phone_number` is omitted.
+    pub fn validate(&self, existing_phone: Option<&str>) -> Result<(), String> {
+        // Validate format if a new non-empty phone is provided
+        if let Some(phone) = &self.phone_number {
+            if !phone.is_empty() && !PHONE_E164_REGEX.is_match(phone) {
+                return Err("phone_number must be in E.164 format (e.g. +15551234567)".to_string());
+            }
+        }
+
+        // Effective phone after this update:
+        //   Some("") → cleared (None), Some(s) → s, None → existing unchanged
+        let effective_phone: Option<&str> = match &self.phone_number {
+            Some(p) if p.is_empty() => None,
+            Some(p) => Some(p.as_str()),
+            None => existing_phone,
+        };
+
+        let effective_sms = self.sms_notifications.unwrap_or(false);
+        if effective_sms && effective_phone.map_or(true, str::is_empty) {
+            return Err("sms_notifications requires a phone_number".to_string());
+        }
+
+        Ok(())
+    }
 }
 
 impl SignupRequest {
@@ -206,5 +272,63 @@ mod tests {
     #[test]
     fn validate_bad_password() {
         assert!(req("alice@example.com", "weak").validate().is_err());
+    }
+
+    // ── UpdateProfileRequest::validate ──────────────────────────────────
+
+    fn upd(email: Option<bool>, phone: Option<&str>, sms: Option<bool>) -> UpdateProfileRequest {
+        UpdateProfileRequest {
+            email_notifications: email,
+            phone_number: phone.map(str::to_string),
+            sms_notifications: sms,
+        }
+    }
+
+    #[test]
+    fn profile_update_all_none_is_ok() {
+        assert!(upd(None, None, None).validate(None).is_ok());
+    }
+
+    #[test]
+    fn profile_update_valid_phone_accepted() {
+        assert!(upd(None, Some("+15551234567"), None).validate(None).is_ok());
+    }
+
+    #[test]
+    fn profile_update_bad_phone_rejected() {
+        assert!(upd(None, Some("5551234567"), None).validate(None).is_err());
+    }
+
+    #[test]
+    fn profile_update_sms_true_no_phone_rejected() {
+        assert!(upd(None, None, Some(true)).validate(None).is_err());
+    }
+
+    #[test]
+    fn profile_update_sms_true_with_new_phone_ok() {
+        assert!(upd(None, Some("+15551234567"), Some(true))
+            .validate(None)
+            .is_ok());
+    }
+
+    #[test]
+    fn profile_update_sms_true_with_existing_phone_ok() {
+        assert!(upd(None, None, Some(true))
+            .validate(Some("+15551234567"))
+            .is_ok());
+    }
+
+    #[test]
+    fn profile_update_clear_phone_with_sms_true_rejected() {
+        assert!(upd(None, Some(""), Some(true))
+            .validate(Some("+15551234567"))
+            .is_err());
+    }
+
+    #[test]
+    fn profile_update_clear_phone_ok() {
+        assert!(upd(None, Some(""), None)
+            .validate(Some("+15551234567"))
+            .is_ok());
     }
 }

@@ -1,4 +1,4 @@
-//! Login and logout integration tests.
+//! Login, logout, and profile integration tests.
 
 use axum::{
     body::Body,
@@ -7,7 +7,7 @@ use axum::{
 use serde_json::json;
 use tower::ServiceExt;
 
-use super::fixtures::{cleanup, test_app, test_pool, unique_email};
+use super::fixtures::{authenticated_cookie, cleanup, test_app, test_pool, unique_email};
 
 // ─── Signup tests ─────────────────────────────────────────────────────────────
 
@@ -513,4 +513,256 @@ async fn logout_success() {
 
     cleanup(&pool, &email).await;
     assert_eq!(response.status(), StatusCode::OK);
+}
+
+// ─── Profile tests ────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn get_profile_unauthenticated() {
+    let app = test_app().await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/user/profile")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn get_profile_returns_defaults() {
+    let app = test_app().await;
+    let pool = test_pool().await;
+    let email = unique_email("profile_defaults");
+
+    let cookie = authenticated_cookie(app.clone(), &email).await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/user/profile")
+                .header("cookie", &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    cleanup(&pool, &email).await;
+    assert_eq!(json["email_notifications"], false);
+    assert_eq!(json["phone_number"], serde_json::Value::Null);
+    assert_eq!(json["sms_notifications"], false);
+}
+
+#[tokio::test]
+async fn put_profile_unauthenticated() {
+    let app = test_app().await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri("/api/user/profile")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"email_notifications": true}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn put_profile_opt_in_email() {
+    let app = test_app().await;
+    let pool = test_pool().await;
+    let email = unique_email("profile_email_optin");
+
+    let cookie = authenticated_cookie(app.clone(), &email).await;
+
+    let put_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri("/api/user/profile")
+                .header("content-type", "application/json")
+                .header("cookie", &cookie)
+                .body(Body::from(r#"{"email_notifications": true}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(put_resp.status(), StatusCode::OK);
+
+    let get_resp = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/user/profile")
+                .header("cookie", &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let body = axum::body::to_bytes(get_resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    cleanup(&pool, &email).await;
+    assert_eq!(json["email_notifications"], true);
+}
+
+#[tokio::test]
+async fn put_profile_set_phone_and_sms() {
+    let app = test_app().await;
+    let pool = test_pool().await;
+    let email = unique_email("profile_sms");
+
+    let cookie = authenticated_cookie(app.clone(), &email).await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri("/api/user/profile")
+                .header("content-type", "application/json")
+                .header("cookie", &cookie)
+                .body(Body::from(
+                    json!({"phone_number": "+15551234567", "sms_notifications": true}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    cleanup(&pool, &email).await;
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn put_profile_sms_without_phone_rejected() {
+    let app = test_app().await;
+    let pool = test_pool().await;
+    let email = unique_email("profile_sms_nophone");
+
+    let cookie = authenticated_cookie(app.clone(), &email).await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri("/api/user/profile")
+                .header("content-type", "application/json")
+                .header("cookie", &cookie)
+                .body(Body::from(r#"{"sms_notifications": true}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    cleanup(&pool, &email).await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn put_profile_invalid_phone_format_rejected() {
+    let app = test_app().await;
+    let pool = test_pool().await;
+    let email = unique_email("profile_badphone");
+
+    let cookie = authenticated_cookie(app.clone(), &email).await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri("/api/user/profile")
+                .header("content-type", "application/json")
+                .header("cookie", &cookie)
+                .body(Body::from(r#"{"phone_number": "5551234567"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    cleanup(&pool, &email).await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn put_profile_clear_phone_disables_sms() {
+    let app = test_app().await;
+    let pool = test_pool().await;
+    let email = unique_email("profile_clear_phone");
+
+    let cookie = authenticated_cookie(app.clone(), &email).await;
+
+    // Set phone and enable SMS
+    app.clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri("/api/user/profile")
+                .header("content-type", "application/json")
+                .header("cookie", &cookie)
+                .body(Body::from(
+                    json!({"phone_number": "+15551234567", "sms_notifications": true}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    // Clear phone number
+    app.clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri("/api/user/profile")
+                .header("content-type", "application/json")
+                .header("cookie", &cookie)
+                .body(Body::from(r#"{"phone_number": ""}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    // Confirm sms_notifications is false and phone is null
+    let get_resp = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/user/profile")
+                .header("cookie", &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let body = axum::body::to_bytes(get_resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    cleanup(&pool, &email).await;
+    assert_eq!(json["phone_number"], serde_json::Value::Null);
+    assert_eq!(json["sms_notifications"], false);
 }
