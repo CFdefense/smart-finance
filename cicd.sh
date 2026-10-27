@@ -31,8 +31,8 @@ ensure_tool() {
 
 ensure_tool sqlx              "cargo install sqlx-cli --no-default-features --features postgres --locked"
 ensure_tool cargo-tarpaulin   "cargo install cargo-tarpaulin --locked"
-[ -d "./frontend/node_modules/@angular-eslint/builder" ] || (cd ./frontend && npm install)
 ensure_tool uv                'curl -LsSf https://astral.sh/uv/install.sh | sh && export PATH="$HOME/.local/bin:$PATH"'
+(cd ./frontend && npm install --silent)
 
 # Load .env when running locally; in CI DATABASE_URL is set via env
 if [ -z "${DATABASE_URL:-}" ] && [ -f .env ]; then
