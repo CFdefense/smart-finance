@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from agent import AnalyzerAgent, ChatAgent
 from agent.data_models import ChatRequest, ChatResponse
 from anomaly.data_models import AnomalyRequest, AnomalyResponse
-from anomaly.detector import check_transactions
+from anomaly.detector import MedianDetector, check_transactions
 from db import get_connection
 
 load_dotenv()
@@ -23,7 +23,7 @@ async def lifespan(app: FastAPI):
     app.state.model = os.getenv("AGENT_MODEL", "gpt-4.1")
     app.state.analyzer_agent = AnalyzerAgent().create(app.state.openai_key, app.state.model)
     app.state.chat_agent = ChatAgent().create(app.state.openai_key, app.state.model)
-
+    app.state.detector = MedianDetector(multiplier=float(os.getenv("ANOMALY_MULTIPLIER", "3")))
     yield
 
     # Cleanup here if we need to
@@ -47,8 +47,7 @@ def analyze(request: ChatRequest) -> ChatResponse:
 @app.post("/anomaly")
 def anomaly(request: AnomalyRequest) -> AnomalyResponse:
     """Check a user's new transactions and return the ones that look unusual."""
-    flagged = check_transactions(request.user_id, request.transaction_ids)
-    return AnomalyResponse(flagged=flagged)
+    return check_transactions(request, app.state.detector)
 
 
 @app.get("/health")
