@@ -37,7 +37,20 @@ fn field<'a>(body: &'a Value, key: &str) -> &'a str {
     body.get(key).and_then(Value::as_str).unwrap_or_default()
 }
 
-/// A fake Plaid API with fixed IDs (`item-mock`, `acct-mock`, `tx1-mock`, `tx2-mock`).
+/// Extracts suffix for test isolation (e.g. `access-seed-123` -> `seed-123`).
+fn suffix(token: &str) -> &str {
+    if let Some(rest) = token.strip_prefix("access-") {
+        rest
+    } else if let Some(rest) = token.strip_prefix("public-") {
+        rest
+    } else if token.is_empty() {
+        "mock"
+    } else {
+        token
+    }
+}
+
+/// A fake Plaid API with isolated or fixed IDs.
 ///
 /// Failure cases are triggered by the token sent in the request; see `MOCK_FAIL_*`.
 fn mock_plaid_router() -> Router {
@@ -47,22 +60,44 @@ fn mock_plaid_router() -> Router {
             post(|| async { Json(json!({"link_token": "link-mock"})) }),
         )
         .route(
+            "/sandbox/public_token/create",
+            post(|Json(body): Json<Value>| async move {
+                let user = body
+                    .get("options")
+                    .and_then(|o| o.get("override_username"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("mock");
+                Json(json!({"public_token": format!("public-{user}")}))
+            }),
+        )
+        .route(
+            "/sandbox/item/fire_webhook",
+            post(|| async { Json(json!({"webhook_fired": true})) }),
+        )
+        .route(
             "/item/public_token/exchange",
             post(|Json(body): Json<Value>| async move {
-                mock_failure(field(&body, "public_token")).unwrap_or_else(|| {
-                    Json(json!({"access_token": "access-mock", "item_id": "item-mock"}))
-                        .into_response()
+                let token = field(&body, "public_token");
+                let s = suffix(token);
+                mock_failure(token).unwrap_or_else(|| {
+                    Json(json!({
+                        "access_token": format!("access-{s}"),
+                        "item_id": format!("item-{s}")
+                    }))
+                    .into_response()
                 })
             }),
         )
         .route(
             "/accounts/get",
             post(|Json(body): Json<Value>| async move {
-                mock_failure(field(&body, "access_token")).unwrap_or_else(|| {
+                let token = field(&body, "access_token");
+                let s = suffix(token);
+                mock_failure(token).unwrap_or_else(|| {
                     Json(json!({
-                        "item": {"item_id": "item-mock"},
+                        "item": {"item_id": format!("item-{s}")},
                         "accounts": [{
-                            "account_id": "acct-mock",
+                            "account_id": format!("acct-{s}"),
                             "name": "Checking",
                             "official_name": null,
                             "type": "depository",
@@ -82,13 +117,15 @@ fn mock_plaid_router() -> Router {
         .route(
             "/transactions/sync",
             post(|Json(body): Json<Value>| async move {
-                if let Some(failure) = mock_failure(field(&body, "access_token")) {
+                let token = field(&body, "access_token");
+                let s = suffix(token);
+                if let Some(failure) = mock_failure(token) {
                     return failure;
                 }
-                let tx = |n: u8| {
+                let tx = move |n: u8| {
                     json!({
-                        "transaction_id": format!("tx{n}-mock"),
-                        "account_id": "acct-mock",
+                        "transaction_id": format!("tx{n}-{s}"),
+                        "account_id": format!("acct-{s}"),
                         "name": "Coffee",
                         "amount": 4.5,
                         "date": "2024-01-01",
@@ -97,10 +134,11 @@ fn mock_plaid_router() -> Router {
                 };
                 // First page (no cursor) has more; the follow-up page modifies/removes.
                 if body.get("cursor").is_some() {
+                    let tx2_id = format!("tx2-{s}");
                     Json(json!({
                         "added": [],
                         "modified": [tx(1)],
-                        "removed": [{"transaction_id": "tx2-mock"}],
+                        "removed": [{"transaction_id": tx2_id}],
                         "next_cursor": "c2",
                         "has_more": false
                     }))
@@ -122,7 +160,7 @@ fn mock_plaid_router() -> Router {
 ///
 /// It runs on its own thread and runtime because every `#[tokio::test]` has a
 /// separate runtime that is dropped when the test ends.
-fn mock_plaid_url() -> &'static str {
+pub fn mock_plaid_url() -> &'static str {
     static URL: OnceLock<String> = OnceLock::new();
     URL.get_or_init(|| {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();

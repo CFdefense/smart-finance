@@ -10,6 +10,7 @@ pub mod log;
 pub mod middleware;
 pub mod models;
 pub mod plaid;
+pub mod seeder;
 pub mod swagger;
 #[cfg(test)]
 mod tests;
