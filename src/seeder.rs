@@ -207,6 +207,7 @@ pub async fn seed_tester_profile(
     // 7. Poll and synchronize transactions
     let mut cursor: Option<String> = None;
     let mut total_tx = 0;
+    let mut any_sync_succeeded = false;
 
     for attempt in 1..=5 {
         let mut current_cursor = cursor.clone();
@@ -279,6 +280,7 @@ pub async fn seed_tester_profile(
         }
 
         if !sync_failed {
+            any_sync_succeeded = true;
             total_tx += attempt_tx;
             cursor = current_cursor;
         }
@@ -291,6 +293,12 @@ pub async fn seed_tester_profile(
         let _ = plaid
             .fire_sandbox_webhook(&exchange.access_token, "SYNC_UPDATES_AVAILABLE")
             .await;
+    }
+
+    if !any_sync_succeeded {
+        return Err(AppError::Internal(
+            "transaction sync failed on all 5 attempts".to_string(),
+        ));
     }
 
     result.transactions_synced = total_tx;
