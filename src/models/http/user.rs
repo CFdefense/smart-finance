@@ -39,6 +39,10 @@ pub struct SignupRequest {
 /// Response body for `GET /api/user/profile`.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct ProfileResponse {
+    /// User's first name.
+    pub first_name: String,
+    /// User's last name.
+    pub last_name: String,
     /// Account email address.
     pub email: String,
     /// Whether the user has opted in to email notifications.
@@ -56,6 +60,12 @@ pub struct ProfileResponse {
 /// `sms_notifications` to `false`).
 #[derive(Debug, Deserialize, Clone, ToSchema)]
 pub struct UpdateProfileRequest {
+    /// New first name, if provided.
+    pub first_name: Option<String>,
+    /// New last name, if provided.
+    pub last_name: Option<String>,
+    /// New account email, if provided.
+    pub email: Option<String>,
     /// Opt in or out of email notifications.
     pub email_notifications: Option<bool>,
     /// New E.164 phone number, `""` to clear, or absent to leave unchanged.
@@ -75,6 +85,27 @@ impl UpdateProfileRequest {
     /// `existing_phone` is the phone number currently stored for the user,
     /// used to determine the effective state when `phone_number` is omitted.
     pub fn validate(&self, existing_phone: Option<&str>) -> Result<(), String> {
+        // Validate non-empty first
+        if let Some(first_name) = &self.first_name {
+            if first_name.trim().is_empty() {
+                return Err("First name cannot be empty".to_string());
+            }
+        }
+
+        // Validate non-empty last
+        if let Some(last_name) = &self.last_name {
+            if last_name.trim().is_empty() {
+                return Err("Last name cannot be empty".to_string());
+            }
+        }
+
+        // Validate format if a new email is provided
+        if let Some(email) = &self.email {
+            if !SignupRequest::validate_email(email.trim()) {
+                return Err("Invalid email address".to_string());
+            }
+        }
+
         // Validate format if a new non-empty phone is provided
         if let Some(phone) = &self.phone_number {
             if !phone.is_empty() && !PHONE_E164_REGEX.is_match(phone) {
@@ -96,6 +127,23 @@ impl UpdateProfileRequest {
         }
 
         Ok(())
+    }
+}
+
+/// Request payload for changing the authenticated user's password.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct ChangePasswordRequest {
+    /// The user's current password, required for verification.
+    pub current_password: String,
+
+    /// The new password to save after validation.
+    pub new_password: String,
+}
+
+impl ChangePasswordRequest {
+    /// Validate the new password using the signup password rules.
+    pub fn validate(&self) -> Result<(), String> {
+        SignupRequest::validate_password(&self.new_password)
     }
 }
 
@@ -278,6 +326,9 @@ mod tests {
 
     fn upd(email: Option<bool>, phone: Option<&str>, sms: Option<bool>) -> UpdateProfileRequest {
         UpdateProfileRequest {
+            first_name: None,
+            last_name: None,
+            email: None,
             email_notifications: email,
             phone_number: phone.map(str::to_string),
             sms_notifications: sms,

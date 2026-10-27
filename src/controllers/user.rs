@@ -24,7 +24,9 @@ use crate::{
     controllers::AxumRouter,
     error::{ApiResult, AppError},
     middleware::{middleware_auth, AuthUser},
-    models::http::user::{LoginRequest, ProfileResponse, SignupRequest, UpdateProfileRequest},
+    models::http::user::{
+        ChangePasswordRequest, LoginRequest, ProfileResponse, SignupRequest, UpdateProfileRequest,
+    },
     models::sql::user::{UserProfileRow, UserRow},
 };
 
@@ -284,7 +286,7 @@ pub async fn api_get_profile(
     let row = sqlx::query_as!(
         UserProfileRow,
         r#"
-        SELECT email, email_notifications, phone_number, sms_notifications
+        SELECT first_name, last_name, email, email_notifications, phone_number, sms_notifications
         FROM users
         WHERE id = $1
         "#,
@@ -295,6 +297,8 @@ pub async fn api_get_profile(
     .map_err(AppError::from)?;
 
     Ok(Json(ProfileResponse {
+        first_name: row.first_name,
+        last_name: row.last_name,
         email: row.email,
         email_notifications: row.email_notifications,
         phone_number: row.phone_number,
@@ -350,26 +354,117 @@ pub async fn api_update_profile(
     let clear_phone = payload.phone_number.as_deref() == Some("");
     let new_phone: Option<String> = payload.phone_number.filter(|p| !p.is_empty());
 
-    sqlx::query!(
+    let new_first_name = payload
+        .first_name
+        .as_ref()
+        .map(|name| name.trim().to_string());
+
+    let new_last_name = payload
+        .last_name
+        .as_ref()
+        .map(|name| name.trim().to_string());
+
+    let new_email = payload
+        .email
+        .as_ref()
+        .map(|email| email.trim().to_lowercase());
+
+    let result = sqlx::query!(
         r#"
         UPDATE users SET
-          email_notifications = COALESCE($1, email_notifications),
-          phone_number        = CASE
-                                  WHEN $2 THEN NULL
-                                  WHEN $3::TEXT IS NOT NULL THEN $3::TEXT
-                                  ELSE phone_number
-                                END,
-          sms_notifications   = CASE
-                                  WHEN $2 THEN false
-                                  ELSE COALESCE($4, sms_notifications)
-                                END
-        WHERE id = $5
+            email_notifications = COALESCE($1, email_notifications),
+            phone_number = CASE
+                WHEN $2 THEN NULL
+                WHEN $3::TEXT IS NOT NULL THEN $3::TEXT
+                ELSE phone_number
+            END,
+            sms_notifications = CASE
+                WHEN $2 THEN false
+                ELSE COALESCE($4, sms_notifications)
+            END,
+            first_name = COALESCE($5::TEXT, first_name),
+            last_name = COALESCE($6::TEXT, last_name),
+            email = COALESCE($7::TEXT, email)
+        WHERE id = $8
         "#,
-        payload.email_notifications, // $1 Option<bool>
-        clear_phone,                 // $2 bool — true => NULL phone + false SMS
-        new_phone,                   // $3 Option<String>
-        payload.sms_notifications,   // $4 Option<bool>
-        user.id                      // $5 i32
+        payload.email_notifications,
+        clear_phone,
+        new_phone,
+        payload.sms_notifications,
+        new_first_name,
+        new_last_name,
+        new_email,
+        user.id
+    )
+    .execute(&pool)
+    .await;
+
+    match result {
+        Ok(_) => Ok(()),
+
+        Err(sqlx::Error::Database(error)) if error.code().as_deref() == Some("23505") => Err(
+            AppError::Conflict("Email address already in use".to_string()),
+        ),
+
+        Err(error) => Err(AppError::from(error)),
+    }
+}
+
+/// Change the authenticated user's password.
+///
+/// PUT /api/user/password
+#[utoipa::path(
+    put,
+    path = "/password",
+    summary = "Change the current user's password",
+    request_body = ChangePasswordRequest,
+    responses(
+        (status = 200, description = "Password changed"),
+        (status = 400, description = "Invalid password or validation failure"),
+        (status = 401, description = "Not authenticated"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(("auth-token" = [])),
+    tag = "User"
+)]
+pub async fn api_change_password(
+    Extension(user): Extension<AuthUser>,
+    Extension(pool): Extension<PgPool>,
+    Json(payload): Json<ChangePasswordRequest>,
+) -> ApiResult<()> {
+    // Step 1: Validate the new password.
+    if let Err(error) = payload.validate() {
+        return Err(AppError::Validation(error));
+    }
+
+    // Step 2: Retrieve the current password hash.
+    let stored_hash: String =
+        sqlx::query_scalar!("SELECT password_hash FROM users WHERE id = $1", user.id)
+            .fetch_one(&pool)
+            .await
+            .map_err(AppError::from)?;
+
+    // Step 3: Verify the user's current password.
+    let parsed_hash = PasswordHash::new(&stored_hash)
+        .map_err(|e| AppError::Internal(format!("Invalid stored password hash: {e}")))?;
+
+    Argon2::default()
+        .verify_password(payload.current_password.as_bytes(), &parsed_hash)
+        .map_err(|_| AppError::BadRequest("Current password is incorrect".to_string()))?;
+
+    // Step 4: Hash the new password with a fresh salt.
+    let salt = SaltString::generate(&mut OsRng);
+
+    let new_hash = Argon2::default()
+        .hash_password(payload.new_password.as_bytes(), &salt)
+        .map_err(|e| AppError::Internal(format!("Password hashing failed: {e}")))?
+        .to_string();
+
+    // Step 5: Save the new password hash.
+    sqlx::query!(
+        "UPDATE users SET password_hash = $1 WHERE id = $2",
+        new_hash,
+        user.id
     )
     .execute(&pool)
     .await
@@ -383,8 +478,8 @@ pub async fn api_update_profile(
 /// Constructed only by the `#[openapi]` macro and the root [`crate::swagger::ApiDoc`].
 #[derive(OpenApi)]
 #[openapi(
-    paths(api_signup, api_login, api_logout, api_me, api_get_profile, api_update_profile),
-    components(schemas(ProfileResponse, UpdateProfileRequest)),
+    paths(api_signup, api_login, api_logout, api_me, api_get_profile, api_update_profile, api_change_password),
+    components(schemas(ProfileResponse, UpdateProfileRequest, ChangePasswordRequest)),
     info(title = "User Routes", description = "Authentication endpoints."),
     tags((name = "User"))
 )]
@@ -401,6 +496,7 @@ pub fn user_routes() -> AxumRouter {
         .route("/logout", post(api_logout))
         .route("/me", get(api_me))
         .route("/profile", get(api_get_profile).put(api_update_profile))
+        .route("/password", put(api_change_password))
         .route_layer(axum::middleware::from_fn(middleware_auth))
         .route("/signup", post(api_signup))
         .route("/login", post(api_login))

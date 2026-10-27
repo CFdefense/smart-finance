@@ -59,7 +59,7 @@ pub async fn create_router(frontend_url: &str, plaid: plaid::client::PlaidClient
                 .expect("Invalid FRONTEND_URL format"),
         )
         .allow_credentials(true)
-        .allow_methods([Method::GET, Method::POST, Method::DELETE])
+        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
         .allow_headers([
             http::header::CONTENT_TYPE,
             http::header::ACCEPT,

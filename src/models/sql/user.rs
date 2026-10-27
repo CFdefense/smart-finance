@@ -17,13 +17,18 @@ pub struct UserRow {
 /// Row model for reading notification preferences from the `users` table.
 ///
 /// Returned by `GET /api/user/profile`.
+
 pub struct UserProfileRow {
+    /// User's first name.
+    pub first_name: String,
+    /// User's last name.
+    pub last_name: String,
     /// Account email address.
     pub email: String,
-    /// Whether the user has opted in to email notifications.
+    /// Whether email notifications are enabled.
     pub email_notifications: bool,
-    /// E.164 phone number, or `None` if not set.
+    /// Phone number, if provided.
     pub phone_number: Option<String>,
-    /// Whether the user has opted in to SMS notifications.
+    /// Whether SMS notifications are enabled.
     pub sms_notifications: bool,
 }
