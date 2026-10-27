@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 
 import psycopg
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 
 from agent import AnalyzerAgent, ChatAgent
 from agent.data_models import ChatRequest, ChatResponse
@@ -19,10 +19,17 @@ logging.basicConfig(level=logging.INFO)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize and clean up shared application resources."""
-    app.state.openai_key = os.environ["OPENAI_API_KEY"]
-    app.state.model = os.getenv("AGENT_MODEL", "gpt-4.1")
-    app.state.analyzer_agent = AnalyzerAgent().create(app.state.openai_key, app.state.model)
-    app.state.chat_agent = ChatAgent().create(app.state.openai_key, app.state.model)
+    openai_key = os.getenv("OPENAI_API_KEY")
+    model = os.getenv("AGENT_MODEL", "gpt-4.1")
+
+    if openai_key:
+        app.state.analyzer_agent = AnalyzerAgent().create(openai_key, model)
+        app.state.chat_agent = ChatAgent().create(openai_key, model)
+    else:
+        logging.warning("OPENAI_API_KEY not set; /chat and /analyze are disabled.")
+        app.state.analyzer_agent = None
+        app.state.chat_agent = None
+
     app.state.detector = MedianDetector(multiplier=float(os.getenv("ANOMALY_MULTIPLIER", "3")))
     yield
 
@@ -35,12 +42,16 @@ app = FastAPI(lifespan=lifespan)
 @app.post("/chat")
 def chat(request: ChatRequest) -> ChatResponse:
     """Send a chat request to the configured AI agent."""
+    if app.state.chat_agent is None:
+        raise HTTPException(status_code=503, detail="AI assistant is not available.")
     return app.state.chat_agent.generate_answer(request)
 
 
 @app.post("/analyze")
 def analyze(request: ChatRequest) -> ChatResponse:
     """Generate a response to a standard chat request."""
+    if app.state.analyzer_agent is None:
+        raise HTTPException(status_code=503, detail="AI assistant is not available.")
     return app.state.analyzer_agent.generate_answer(request)
 
 
