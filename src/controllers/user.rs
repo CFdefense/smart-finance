@@ -334,16 +334,19 @@ pub async fn api_update_profile(
 ) -> ApiResult<()> {
     debug!("HANDLER ->> PUT /api/user/profile user_id={}", user.id);
 
-    let (existing_phone, existing_gateway): (Option<String>, Option<String>) = sqlx::query!(
-        "SELECT phone_number, sms_carrier_gateway FROM users WHERE id = $1",
-        user.id
-    )
-    .fetch_one(&pool)
-    .await
-    .map(|r| (r.phone_number, r.sms_carrier_gateway))
-    .map_err(AppError::from)?;
+    let (existing_phone, existing_gateway, existing_sms): (Option<String>, Option<String>, bool) =
+        sqlx::query!(
+            "SELECT phone_number, sms_carrier_gateway, sms_notifications FROM users WHERE id = $1",
+            user.id
+        )
+        .fetch_one(&pool)
+        .await
+        .map(|r| (r.phone_number, r.sms_carrier_gateway, r.sms_notifications))
+        .map_err(AppError::from)?;
 
-    if let Err(e) = payload.validate(existing_phone.as_deref(), existing_gateway.as_deref()) {
+    if let Err(e) =
+        payload.validate(existing_phone.as_deref(), existing_gateway.as_deref(), existing_sms)
+    {
         return Err(AppError::Validation(e));
     }
 

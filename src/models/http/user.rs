@@ -78,12 +78,14 @@ impl UpdateProfileRequest {
     /// - If the effective `sms_notifications` would be `true` and there would be
     ///   no carrier gateway, returns an error.
     ///
-    /// `existing_phone` is the phone number currently stored for the user,
-    /// used to determine the effective state when `phone_number` is omitted.
+    /// `existing_phone`, `existing_gateway`, and `existing_sms` are the values
+    /// currently stored for the user, used to determine the effective state when
+    /// the corresponding request fields are omitted.
     pub fn validate(
         &self,
         existing_phone: Option<&str>,
         existing_gateway: Option<&str>,
+        existing_sms: bool,
     ) -> Result<(), String> {
         // Validate format if a new non-empty phone is provided
         if let Some(phone) = &self.phone_number {
@@ -107,7 +109,7 @@ impl UpdateProfileRequest {
             None => existing_gateway,
         };
 
-        let effective_sms = self.sms_notifications.unwrap_or(false);
+        let effective_sms = self.sms_notifications.unwrap_or(existing_sms);
         if effective_sms && effective_phone.map_or(true, str::is_empty) {
             return Err("sms_notifications requires a phone_number".to_string());
         }
@@ -312,27 +314,27 @@ mod tests {
 
     #[test]
     fn profile_update_all_none_is_ok() {
-        assert!(upd(None, None, None, None).validate(None, None).is_ok());
+        assert!(upd(None, None, None, None).validate(None, None, false).is_ok());
     }
 
     #[test]
     fn profile_update_valid_phone_accepted() {
         assert!(upd(None, Some("+15551234567"), None, None)
-            .validate(None, None)
+            .validate(None, None, false)
             .is_ok());
     }
 
     #[test]
     fn profile_update_bad_phone_rejected() {
         assert!(upd(None, Some("5551234567"), None, None)
-            .validate(None, None)
+            .validate(None, None, false)
             .is_err());
     }
 
     #[test]
     fn profile_update_sms_true_no_phone_rejected() {
         assert!(upd(None, None, Some(true), None)
-            .validate(None, None)
+            .validate(None, None, false)
             .is_err());
     }
 
@@ -340,7 +342,7 @@ mod tests {
     fn profile_update_sms_true_with_new_phone_ok() {
         assert!(
             upd(None, Some("+15551234567"), Some(true), Some("tmomail.net"))
-                .validate(None, None)
+                .validate(None, None, false)
                 .is_ok()
         );
     }
@@ -348,42 +350,53 @@ mod tests {
     #[test]
     fn profile_update_sms_true_with_existing_phone_ok() {
         assert!(upd(None, None, Some(true), None)
-            .validate(Some("+15551234567"), Some("tmomail.net"))
+            .validate(Some("+15551234567"), Some("tmomail.net"), false)
             .is_ok());
     }
 
     #[test]
     fn profile_update_clear_phone_with_sms_true_rejected() {
         assert!(upd(None, Some(""), Some(true), Some("tmomail.net"))
-            .validate(Some("+15551234567"), None)
+            .validate(Some("+15551234567"), None, false)
             .is_err());
     }
 
     #[test]
     fn profile_update_clear_phone_ok() {
         assert!(upd(None, Some(""), None, None)
-            .validate(Some("+15551234567"), None)
+            .validate(Some("+15551234567"), None, false)
             .is_ok());
     }
 
     #[test]
     fn profile_update_sms_true_no_gateway_rejected() {
         assert!(upd(None, Some("+15551234567"), Some(true), None)
-            .validate(None, None)
+            .validate(None, None, false)
             .is_err());
     }
 
     #[test]
     fn profile_update_sms_true_with_existing_gateway_ok() {
         assert!(upd(None, None, Some(true), None)
-            .validate(Some("+15551234567"), Some("vtext.com"))
+            .validate(Some("+15551234567"), Some("vtext.com"), false)
             .is_ok());
     }
 
     #[test]
     fn profile_update_clear_gateway_with_sms_true_rejected() {
         assert!(upd(None, None, Some(true), Some(""))
-            .validate(Some("+15551234567"), Some("tmomail.net"))
+            .validate(Some("+15551234567"), Some("tmomail.net"), false)
+            .is_err());
+    }
+
+    // Regression: omitting sms_notifications must fall back to the existing DB
+    // value, not silently default to false.
+    #[test]
+    fn profile_update_clear_gateway_sms_omitted_uses_existing_sms() {
+        // User has SMS enabled in DB; request clears the gateway but omits sms_notifications.
+        // effective_sms should be true (from existing_sms), so this must be rejected.
+        assert!(upd(None, None, None, Some(""))
+            .validate(Some("+15551234567"), Some("tmomail.net"), true)
             .is_err());
     }
 }
