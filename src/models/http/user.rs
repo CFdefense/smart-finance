@@ -78,9 +78,7 @@ impl UpdateProfileRequest {
         // Validate format if a new non-empty phone is provided
         if let Some(phone) = &self.phone_number {
             if !phone.is_empty() && !PHONE_E164_REGEX.is_match(phone) {
-                return Err(
-                    "phone_number must be in E.164 format (e.g. +15551234567)".to_string(),
-                );
+                return Err("phone_number must be in E.164 format (e.g. +15551234567)".to_string());
             }
         }
 
@@ -308,21 +306,29 @@ mod tests {
 
     #[test]
     fn profile_update_sms_true_with_new_phone_ok() {
-        assert!(upd(None, Some("+15551234567"), Some(true)).validate(None).is_ok());
+        assert!(upd(None, Some("+15551234567"), Some(true))
+            .validate(None)
+            .is_ok());
     }
 
     #[test]
     fn profile_update_sms_true_with_existing_phone_ok() {
-        assert!(upd(None, None, Some(true)).validate(Some("+15551234567")).is_ok());
+        assert!(upd(None, None, Some(true))
+            .validate(Some("+15551234567"))
+            .is_ok());
     }
 
     #[test]
     fn profile_update_clear_phone_with_sms_true_rejected() {
-        assert!(upd(None, Some(""), Some(true)).validate(Some("+15551234567")).is_err());
+        assert!(upd(None, Some(""), Some(true))
+            .validate(Some("+15551234567"))
+            .is_err());
     }
 
     #[test]
     fn profile_update_clear_phone_ok() {
-        assert!(upd(None, Some(""), None).validate(Some("+15551234567")).is_ok());
+        assert!(upd(None, Some(""), None)
+            .validate(Some("+15551234567"))
+            .is_ok());
     }
 }
