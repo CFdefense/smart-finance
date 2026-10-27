@@ -30,6 +30,38 @@ struct SandboxPublicTokenResponse {
     public_token: String,
 }
 
+/// Fire a sandbox webhook to trigger Plaid's transaction generator.
+async fn fire_sandbox_webhook(
+    http: &reqwest::Client,
+    base_url: &str,
+    client_id: &str,
+    secret: &str,
+    access_token: &str,
+    webhook_code: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let body = serde_json::json!({
+        "client_id": client_id,
+        "secret": secret,
+        "access_token": access_token,
+        "webhook_code": webhook_code
+    });
+
+    let resp = http
+        .post(format!("{base_url}/sandbox/item/fire_webhook"))
+        .json(&body)
+        .send()
+        .await?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let text = resp.text().await.unwrap_or_default();
+        eprintln!(
+            "  Warning: /sandbox/item/fire_webhook ({webhook_code}) returned {status}: {text}"
+        );
+    }
+    Ok(())
+}
+
 /// Request a sandbox public token from Plaid using custom credentials.
 async fn create_sandbox_public_token(
     http: &reqwest::Client,
@@ -252,60 +284,96 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .await?;
         }
 
+        println!("  Triggering Plaid sandbox transaction generation...");
+        let _ = fire_sandbox_webhook(
+            &http,
+            &base_url,
+            &client_id,
+            &secret,
+            &exchange.access_token,
+            "SYNC_UPDATES_AVAILABLE",
+        )
+        .await;
+
         println!("  Synchronizing transactions from Plaid...");
         let mut cursor: Option<String> = None;
         let mut total_tx = 0;
 
-        loop {
-            let page = plaid
-                .sync_transactions(&exchange.access_token, cursor.clone())
-                .await?;
-            total_tx += page.added.len();
+        for attempt in 1..=5 {
+            let mut current_cursor = cursor.clone();
+            let mut attempt_tx = 0;
 
-            for tx in &page.added {
+            loop {
+                let page = plaid
+                    .sync_transactions(&exchange.access_token, current_cursor.clone())
+                    .await?;
+                let added_count = page.added.len();
+                attempt_tx += added_count;
+
+                for tx in &page.added {
+                    sqlx::query!(
+                        r#"
+                        INSERT INTO plaid_transactions
+                            (transaction_id, account_id, name, amount, date, pending, updated_at)
+                        VALUES ($1, $2, $3, $4, $5, $6, NOW())
+                        ON CONFLICT (transaction_id) DO UPDATE SET
+                            name       = EXCLUDED.name,
+                            amount     = EXCLUDED.amount,
+                            date       = EXCLUDED.date,
+                            pending    = EXCLUDED.pending,
+                            updated_at = NOW()
+                        "#,
+                        tx.transaction_id,
+                        tx.account_id,
+                        tx.name,
+                        tx.amount,
+                        tx.date,
+                        tx.pending
+                    )
+                    .execute(&pool)
+                    .await?;
+                }
+
                 sqlx::query!(
                     r#"
-                    INSERT INTO plaid_transactions
-                        (transaction_id, account_id, name, amount, date, pending, updated_at)
-                    VALUES ($1, $2, $3, $4, $5, $6, NOW())
-                    ON CONFLICT (transaction_id) DO UPDATE SET
-                        name       = EXCLUDED.name,
-                        amount     = EXCLUDED.amount,
-                        date       = EXCLUDED.date,
-                        pending    = EXCLUDED.pending,
+                    INSERT INTO plaid_sync_cursors (item_id, cursor, has_more, updated_at)
+                    VALUES ($1, $2, $3, NOW())
+                    ON CONFLICT (item_id) DO UPDATE SET
+                        cursor     = EXCLUDED.cursor,
+                        has_more   = EXCLUDED.has_more,
                         updated_at = NOW()
                     "#,
-                    tx.transaction_id,
-                    tx.account_id,
-                    tx.name,
-                    tx.amount,
-                    tx.date,
-                    tx.pending
+                    exchange.item_id,
+                    page.next_cursor,
+                    page.has_more
                 )
                 .execute(&pool)
                 .await?;
+
+                current_cursor = Some(page.next_cursor);
+                if !page.has_more {
+                    break;
+                }
             }
 
-            sqlx::query!(
-                r#"
-                INSERT INTO plaid_sync_cursors (item_id, cursor, has_more, updated_at)
-                VALUES ($1, $2, $3, NOW())
-                ON CONFLICT (item_id) DO UPDATE SET
-                    cursor     = EXCLUDED.cursor,
-                    has_more   = EXCLUDED.has_more,
-                    updated_at = NOW()
-                "#,
-                exchange.item_id,
-                page.next_cursor,
-                page.has_more
-            )
-            .execute(&pool)
-            .await?;
+            total_tx += attempt_tx;
+            cursor = current_cursor;
 
-            if !page.has_more {
+            if total_tx > 0 || attempt == 5 {
                 break;
             }
-            cursor = Some(page.next_cursor);
+
+            // In Plaid Sandbox, transactions take 1 second to populate after SYNC_UPDATES_AVAILABLE
+            tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await;
+            let _ = fire_sandbox_webhook(
+                &http,
+                &base_url,
+                &client_id,
+                &secret,
+                &exchange.access_token,
+                "SYNC_UPDATES_AVAILABLE",
+            )
+            .await;
         }
 
         println!("  Synced {total_tx} transaction(s).");
