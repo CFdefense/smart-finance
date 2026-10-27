@@ -2069,6 +2069,7 @@ dependencies = [
  "axum",
  "chrono",
  "dotenvy",
+ "hex",
  "http",
  "http-body-util",
  "regex",

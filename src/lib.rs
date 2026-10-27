@@ -10,6 +10,7 @@ pub mod log;
 pub mod middleware;
 pub mod models;
 pub mod plaid;
+pub mod seeder;
 pub mod swagger;
 #[cfg(test)]
 mod tests;
@@ -30,7 +31,14 @@ use tower_http::cors::CorsLayer;
 /// Panics if `frontend_url` cannot be parsed into a valid [`HeaderValue`].
 pub async fn create_router(frontend_url: &str, plaid: plaid::client::PlaidClient) -> Router {
     let pool = db::create_pool().await;
-    let cookie_key = Key::generate();
+    let cookie_key_hex =
+        std::env::var("COOKIE_KEY").expect("COOKIE_KEY environment variable is required");
+
+    let cookie_key_bytes =
+        hex::decode(&cookie_key_hex).expect("COOKIE_KEY must contain valid hexadecimal characters");
+
+    let cookie_key = Key::try_from(cookie_key_bytes.as_slice())
+        .expect("COOKIE_KEY must decode to exactly 64 bytes");
 
     // Nest the routes
     let routes = AxumRouter::new()

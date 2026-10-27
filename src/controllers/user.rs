@@ -1,10 +1,14 @@
-//! User authentication controller — login, signup, logout.
+//! User authentication and profile controller — login, signup, logout, profile.
 
 use argon2::{
     password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
     Argon2,
 };
-use axum::{routing::post, Extension, Json};
+#[allow(unused_imports)] // `put` used only in test/release builds (plain axum::Router)
+use axum::{
+    routing::{get, post, put},
+    Extension, Json,
+};
 use sqlx::PgPool;
 use tower_cookies::{
     cookie::{
@@ -20,8 +24,8 @@ use crate::{
     controllers::AxumRouter,
     error::{ApiResult, AppError},
     middleware::{middleware_auth, AuthUser},
-    models::http::user::{LoginRequest, SignupRequest},
-    models::sql::user::UserRow,
+    models::http::user::{LoginRequest, ProfileResponse, SignupRequest, UpdateProfileRequest},
+    models::sql::user::{UserProfileRow, UserRow},
 };
 
 /// Abstracts cookie writing so handlers can be tested without a real cookie jar.
@@ -53,7 +57,7 @@ fn set_cookie(user_id: i32, is_expired: bool, cookies: &mut impl CookieStore, ke
 
     let token = format!("user-{}.{}.sign", user_id, expires.unix_timestamp());
 
-    debug!("set_cookie: token={token} production={on_production}");
+    debug!("set_cookie: production={on_production}");
 
     let cookie = Cookie::build(("auth-token", token))
         .domain(domain.to_string())
@@ -86,7 +90,7 @@ fn set_cookie(user_id: i32, is_expired: bool, cookies: &mut impl CookieStore, ke
         content = SignupRequest,
         content_type = "application/json",
         description = "Email must be unique. Password is validated server-side.",
-        example = json!({"email": "alice@example.com", "password": "Secret_123"})
+        example = json!({"first_name": "Alice", "last_name": "Smith", "email": "alice@example.com", "password": "Secret_123"})
     ),
     responses(
         (status = 200, description = "Account created and cookie set"),
@@ -102,7 +106,7 @@ pub async fn api_signup(
     Extension(pool): Extension<PgPool>,
     Json(payload): Json<SignupRequest>,
 ) -> ApiResult<()> {
-    debug!("HANDLER ->> POST /api/user/signup payload={payload:?}");
+    debug!("HANDLER ->> POST /api/user/signup");
 
     if let Err(e) = payload.validate() {
         return Err(AppError::Validation(e));
@@ -113,7 +117,7 @@ pub async fn api_signup(
     // Check email uniqueness
     let existing = sqlx::query_as!(
         UserRow,
-        "SELECT id, email, password_hash FROM users WHERE email = $1",
+        "SELECT id, email, password_hash, account_status FROM users WHERE email = $1",
         email
     )
     .fetch_optional(&pool)
@@ -134,7 +138,13 @@ pub async fn api_signup(
     // Insert user
     let user = sqlx::query_as!(
         UserRow,
-        "INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email, password_hash",
+        r#"
+        INSERT INTO users (first_name, last_name, email, password_hash) 
+        VALUES ($1, $2, $3, $4) 
+        RETURNING id, email, password_hash, account_status
+        "#,
+        payload.first_name.trim(),
+        payload.last_name.trim(),
         email,
         password_hash
     )
@@ -158,7 +168,9 @@ pub async fn api_signup(
     request_body(
         content = LoginRequest,
         content_type = "application/json",
-        example = json!({"email": "alice@example.com", "password": "Secret_123"})
+        example = json!({
+            "email": "alice@example.com",
+            "password": "Secret_123"})
     ),
     responses(
         (status = 200, description = "Login successful, cookie set"),
@@ -177,7 +189,7 @@ pub async fn api_login(
 
     let user_result = sqlx::query_as!(
         UserRow,
-        "SELECT id, email, password_hash FROM users WHERE email = $1",
+        "SELECT id, email, password_hash, account_status FROM users WHERE email = $1",
         payload.email
     )
     .fetch_optional(&pool)
@@ -186,6 +198,9 @@ pub async fn api_login(
     match user_result {
         Ok(Some(user)) => {
             debug!("login: found user id={} email={}", user.id, user.email);
+            if user.account_status != "active" {
+                return Err(AppError::BadRequest("invalid credentials".to_string()));
+            }
 
             let parsed = PasswordHash::new(&user.password_hash)
                 .map_err(|e| AppError::Internal(format!("hash parse error: {e:?}")))?;
@@ -199,6 +214,24 @@ pub async fn api_login(
         }
         Ok(None) | Err(_) => Err(AppError::BadRequest("invalid credentials".to_string())),
     }
+}
+
+/// Check whether the current session is authenticated.
+///
+/// GET /api/user/me
+#[utoipa::path(
+    get,
+    path = "/me",
+    summary = "Check the current authenticated session",
+    responses(
+        (status = 200, description = "Authenticated"),
+        (status = 401, description = "Not authenticated")
+    ),
+    security(("auth-token" = [])),
+    tag = "User"
+)]
+pub async fn api_me(Extension(_user): Extension<AuthUser>) -> ApiResult<()> {
+    Ok(())
 }
 
 /// Log out the current user.
@@ -217,6 +250,7 @@ pub async fn api_login(
     security(("auth-token" = [])),
     tag = "User"
 )]
+
 pub async fn api_logout(
     mut cookies: Cookies,
     Extension(key): Extension<Key>,
@@ -227,12 +261,130 @@ pub async fn api_logout(
     Ok(())
 }
 
-/// `OpenAPI` doc for user authentication routes.
+/// Return the authenticated user's notification preferences.
+///
+/// `GET /api/user/profile`
+#[utoipa::path(
+    get,
+    path = "/profile",
+    summary = "Get the current user's notification preferences",
+    responses(
+        (status = 200, description = "Profile returned", body = ProfileResponse),
+        (status = 401, description = "Not authenticated")
+    ),
+    security(("auth-token" = [])),
+    tag = "User"
+)]
+pub async fn api_get_profile(
+    Extension(user): Extension<AuthUser>,
+    Extension(pool): Extension<PgPool>,
+) -> ApiResult<Json<ProfileResponse>> {
+    debug!("HANDLER ->> GET /api/user/profile user_id={}", user.id);
+
+    let row = sqlx::query_as!(
+        UserProfileRow,
+        r#"
+        SELECT email, email_notifications, phone_number, sms_notifications
+        FROM users
+        WHERE id = $1
+        "#,
+        user.id
+    )
+    .fetch_one(&pool)
+    .await
+    .map_err(AppError::from)?;
+
+    Ok(Json(ProfileResponse {
+        email: row.email,
+        email_notifications: row.email_notifications,
+        phone_number: row.phone_number,
+        sms_notifications: row.sms_notifications,
+    }))
+}
+
+/// Update the authenticated user's notification preferences.
+///
+/// All fields are optional; omitted fields are left unchanged.
+/// Send `phone_number: ""` to clear the stored phone number.
+///
+/// `PUT /api/user/profile`
+#[utoipa::path(
+    put,
+    path = "/profile",
+    summary = "Update the current user's notification preferences",
+    request_body(
+        content = UpdateProfileRequest,
+        content_type = "application/json",
+        description = "All fields optional. Omit a field to leave it unchanged.",
+        example = json!({"email_notifications": true, "phone_number": "+15551234567", "sms_notifications": true})
+    ),
+    responses(
+        (status = 200, description = "Profile updated"),
+        (status = 400, description = "Validation failure"),
+        (status = 401, description = "Not authenticated")
+    ),
+    security(("auth-token" = [])),
+    tag = "User"
+)]
+pub async fn api_update_profile(
+    Extension(user): Extension<AuthUser>,
+    Extension(pool): Extension<PgPool>,
+    Json(payload): Json<UpdateProfileRequest>,
+) -> ApiResult<()> {
+    debug!("HANDLER ->> PUT /api/user/profile user_id={}", user.id);
+
+    let existing_phone: Option<String> =
+        sqlx::query_scalar!("SELECT phone_number FROM users WHERE id = $1", user.id)
+            .fetch_one(&pool)
+            .await
+            .map_err(AppError::from)?;
+
+    if let Err(e) = payload.validate(existing_phone.as_deref()) {
+        return Err(AppError::Validation(e));
+    }
+
+    // Determine the phone update intent:
+    //   None in payload  => no change (COALESCE keeps current value)
+    //   Some("")         => clear (set to NULL, force sms off)
+    //   Some(v)          => set to v
+    let clear_phone = payload.phone_number.as_deref() == Some("");
+    let new_phone: Option<String> = payload.phone_number.filter(|p| !p.is_empty());
+
+    sqlx::query!(
+        r#"
+        UPDATE users SET
+          email_notifications = COALESCE($1, email_notifications),
+          phone_number        = CASE
+                                  WHEN $2 THEN NULL
+                                  WHEN $3::TEXT IS NOT NULL THEN $3::TEXT
+                                  ELSE phone_number
+                                END,
+          sms_notifications   = CASE
+                                  WHEN $2 THEN false
+                                  ELSE COALESCE($4, sms_notifications)
+                                END
+        WHERE id = $5
+        "#,
+        payload.email_notifications, // $1 Option<bool>
+        clear_phone,                 // $2 bool — true => NULL phone + false SMS
+        new_phone,                   // $3 Option<String>
+        payload.sms_notifications,   // $4 Option<bool>
+        user.id                      // $5 i32
+    )
+    .execute(&pool)
+    .await
+    .map_err(AppError::from)?;
+
+    Ok(())
+}
+
+/// `OpenAPI` doc for user authentication and profile routes.
 ///
 /// Constructed only by the `#[openapi]` macro and the root [`crate::swagger::ApiDoc`].
 #[derive(OpenApi)]
 #[openapi(
-    paths(api_signup, api_login, api_logout),
+    paths(api_signup, api_login, api_logout, api_me, api_get_profile, api_update_profile),
+    components(schemas(ProfileResponse, UpdateProfileRequest)),
     info(title = "User Routes", description = "Authentication endpoints."),
     tags((name = "User"))
 )]
@@ -242,10 +394,13 @@ pub struct UserApiDoc;
 /// Builds the user route group.
 ///
 /// Public routes: `POST /signup`, `POST /login`.
-/// Protected route (requires valid `auth-token` cookie): `POST /logout`.
+/// Protected routes (require valid `auth-token` cookie):
+/// `POST /logout`, `GET /me`, `GET /profile`, `PUT /profile`.
 pub fn user_routes() -> AxumRouter {
     AxumRouter::new()
         .route("/logout", post(api_logout))
+        .route("/me", get(api_me))
+        .route("/profile", get(api_get_profile).put(api_update_profile))
         .route_layer(axum::middleware::from_fn(middleware_auth))
         .route("/signup", post(api_signup))
         .route("/login", post(api_login))

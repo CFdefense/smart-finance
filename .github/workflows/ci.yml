@@ -29,6 +29,7 @@ jobs:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/smart_finance_test
       FRONTEND_URL: http://localhost:4200
       BIND_ADDRESS: 127.0.0.1:3001
+      COOKIE_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
     steps:
       - name: Checkout

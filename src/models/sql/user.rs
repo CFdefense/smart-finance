@@ -10,4 +10,20 @@ pub struct UserRow {
     pub email: String,
     /// Argon2 hashed password.
     pub password_hash: String,
+    /// Account status: active, inactive, suspended.
+    pub account_status: String,
+}
+
+/// Row model for reading notification preferences from the `users` table.
+///
+/// Returned by `GET /api/user/profile`.
+pub struct UserProfileRow {
+    /// Account email address.
+    pub email: String,
+    /// Whether the user has opted in to email notifications.
+    pub email_notifications: bool,
+    /// E.164 phone number, or `None` if not set.
+    pub phone_number: Option<String>,
+    /// Whether the user has opted in to SMS notifications.
+    pub sms_notifications: bool,
 }

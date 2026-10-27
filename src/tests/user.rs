@@ -1,4 +1,4 @@
-//! Login and logout integration tests.
+//! Login, logout, and profile integration tests.
 
 use axum::{
     body::Body,
@@ -7,7 +7,7 @@ use axum::{
 use serde_json::json;
 use tower::ServiceExt;
 
-use super::fixtures::{cleanup, test_app, test_pool, unique_email};
+use super::fixtures::{authenticated_cookie, cleanup, test_app, test_pool, unique_email};
 
 // ─── Signup tests ─────────────────────────────────────────────────────────────
 
@@ -24,7 +24,7 @@ async fn signup_success() {
                 .uri("/api/user/signup")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    json!({"email": &email, "password": "Secret_123"}).to_string(),
+                    json!({"first_name": "Alice", "last_name": "Smith", "email": &email, "password": "Secret_123"}).to_string(),
                 ))
                 .unwrap(),
         )
@@ -49,7 +49,7 @@ async fn signup_duplicate_email() {
                 .uri("/api/user/signup")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    json!({"email": &email, "password": "Secret_123"}).to_string(),
+                    json!({"first_name": "Alice", "last_name": "Smith", "email": &email, "password": "Secret_123"}).to_string(),
                 ))
                 .unwrap(),
         )
@@ -64,7 +64,7 @@ async fn signup_duplicate_email() {
                 .uri("/api/user/signup")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    json!({"email": &email, "password": "Secret_123"}).to_string(),
+                    json!({"first_name": "Alice", "last_name": "Smith", "email": &email, "password": "Secret_123"}).to_string(),
                 ))
                 .unwrap(),
         )
@@ -107,7 +107,7 @@ async fn signup_bad_password() {
                 .uri("/api/user/signup")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    json!({"email": &email, "password": "weak"}).to_string(),
+                    json!({"first_name": "Alice", "last_name": "Smith", "email": &email, "password": "weak"}).to_string(),
                 ))
                 .unwrap(),
         )
@@ -133,7 +133,7 @@ async fn login_success() {
                 .uri("/api/user/signup")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    json!({"email": &email, "password": "Secret_123"}).to_string(),
+                    json!({"first_name": "Alice", "last_name": "Smith", "email": &email, "password": "Secret_123"}).to_string(),
                 ))
                 .unwrap(),
         )
@@ -171,7 +171,7 @@ async fn login_wrong_password() {
                 .uri("/api/user/signup")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    json!({"email": &email, "password": "Secret_123"}).to_string(),
+                    json!({"first_name": "Alice", "last_name": "Smith", "email": &email, "password": "Secret_123"}).to_string(),
                 ))
                 .unwrap(),
         )
@@ -218,6 +218,233 @@ async fn login_unknown_email() {
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
+#[tokio::test]
+async fn login_suspended_account() {
+    let app = test_app().await;
+    let pool = test_pool().await;
+    let email = unique_email("login_suspended");
+
+    // First, create an active account.
+    let signup_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/user/signup")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "first_name": "Test",
+                        "last_name": "User",
+                        "email": &email,
+                        "password": "Secret_123"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(signup_response.status(), StatusCode::OK);
+
+    // Simulate an administrator suspending the account.
+    sqlx::query("UPDATE users SET account_status = 'suspended' WHERE email = $1")
+        .bind(&email)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    // Attempt to log in using the correct password.
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/user/login")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "email": &email,
+                        "password": "Secret_123"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    cleanup(&pool, &email).await;
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn suspended_account_cannot_use_existing_session() {
+    let app = test_app().await;
+    let pool = test_pool().await;
+    let email = unique_email("suspended_session");
+
+    // Create an account and receive an authentication cookie.
+    let signup_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/user/signup")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "first_name": "Test",
+                        "last_name": "User",
+                        "email": &email,
+                        "password": "Secret_123"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(signup_response.status(), StatusCode::OK);
+
+    // Save the cookie issued during signup.
+    let cookie = signup_response
+        .headers()
+        .get("set-cookie")
+        .expect("signup should set a cookie")
+        .to_str()
+        .unwrap()
+        .split(';')
+        .next()
+        .unwrap()
+        .to_string();
+
+    // Confirm the session works while the account is active.
+    let active_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/user/me")
+                .header("cookie", &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(active_response.status(), StatusCode::OK);
+
+    // Simulate an administrator suspending the account.
+    sqlx::query("UPDATE users SET account_status = 'suspended' WHERE email = $1")
+        .bind(&email)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    // Attempt to reuse the same cookie after suspension.
+    let suspended_response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/user/me")
+                .header("cookie", &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    cleanup(&pool, &email).await;
+
+    assert_eq!(suspended_response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn disabled_account_cannot_use_existing_session() {
+    let app = test_app().await;
+    let pool = test_pool().await;
+    let email = unique_email("disabled_session");
+
+    // Create an account and receive an authentication cookie.
+    let signup_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/user/signup")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "first_name": "Test",
+                        "last_name": "User",
+                        "email": &email,
+                        "password": "Secret_123"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(signup_response.status(), StatusCode::OK);
+
+    // Save the cookie issued during signup.
+    let cookie = signup_response
+        .headers()
+        .get("set-cookie")
+        .expect("signup should set a cookie")
+        .to_str()
+        .unwrap()
+        .split(';')
+        .next()
+        .unwrap()
+        .to_string();
+
+    // Confirm the session works while the account is active.
+    let active_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/user/me")
+                .header("cookie", &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(active_response.status(), StatusCode::OK);
+
+    // Simulate a disabling of the account.
+    sqlx::query("UPDATE users SET account_status = 'disabled' WHERE email = $1")
+        .bind(&email)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    // Attempt to reuse the same cookie after suspension.
+    let disabled_response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/user/me")
+                .header("cookie", &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    cleanup(&pool, &email).await;
+
+    assert_eq!(disabled_response.status(), StatusCode::UNAUTHORIZED);
+}
+
 // ─── Logout tests ─────────────────────────────────────────────────────────────
 
 #[tokio::test]
@@ -253,7 +480,7 @@ async fn logout_success() {
                 .uri("/api/user/signup")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    json!({"email": &email, "password": "Secret_123"}).to_string(),
+                    json!({"first_name": "Alice", "last_name": "Smith", "email": &email, "password": "Secret_123"}).to_string(),
                 ))
                 .unwrap(),
         )
@@ -286,4 +513,256 @@ async fn logout_success() {
 
     cleanup(&pool, &email).await;
     assert_eq!(response.status(), StatusCode::OK);
+}
+
+// ─── Profile tests ────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn get_profile_unauthenticated() {
+    let app = test_app().await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/user/profile")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn get_profile_returns_defaults() {
+    let app = test_app().await;
+    let pool = test_pool().await;
+    let email = unique_email("profile_defaults");
+
+    let cookie = authenticated_cookie(app.clone(), &email).await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/user/profile")
+                .header("cookie", &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    cleanup(&pool, &email).await;
+    assert_eq!(json["email_notifications"], false);
+    assert_eq!(json["phone_number"], serde_json::Value::Null);
+    assert_eq!(json["sms_notifications"], false);
+}
+
+#[tokio::test]
+async fn put_profile_unauthenticated() {
+    let app = test_app().await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri("/api/user/profile")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"email_notifications": true}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn put_profile_opt_in_email() {
+    let app = test_app().await;
+    let pool = test_pool().await;
+    let email = unique_email("profile_email_optin");
+
+    let cookie = authenticated_cookie(app.clone(), &email).await;
+
+    let put_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri("/api/user/profile")
+                .header("content-type", "application/json")
+                .header("cookie", &cookie)
+                .body(Body::from(r#"{"email_notifications": true}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(put_resp.status(), StatusCode::OK);
+
+    let get_resp = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/user/profile")
+                .header("cookie", &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let body = axum::body::to_bytes(get_resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    cleanup(&pool, &email).await;
+    assert_eq!(json["email_notifications"], true);
+}
+
+#[tokio::test]
+async fn put_profile_set_phone_and_sms() {
+    let app = test_app().await;
+    let pool = test_pool().await;
+    let email = unique_email("profile_sms");
+
+    let cookie = authenticated_cookie(app.clone(), &email).await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri("/api/user/profile")
+                .header("content-type", "application/json")
+                .header("cookie", &cookie)
+                .body(Body::from(
+                    json!({"phone_number": "+15551234567", "sms_notifications": true}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    cleanup(&pool, &email).await;
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn put_profile_sms_without_phone_rejected() {
+    let app = test_app().await;
+    let pool = test_pool().await;
+    let email = unique_email("profile_sms_nophone");
+
+    let cookie = authenticated_cookie(app.clone(), &email).await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri("/api/user/profile")
+                .header("content-type", "application/json")
+                .header("cookie", &cookie)
+                .body(Body::from(r#"{"sms_notifications": true}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    cleanup(&pool, &email).await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn put_profile_invalid_phone_format_rejected() {
+    let app = test_app().await;
+    let pool = test_pool().await;
+    let email = unique_email("profile_badphone");
+
+    let cookie = authenticated_cookie(app.clone(), &email).await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri("/api/user/profile")
+                .header("content-type", "application/json")
+                .header("cookie", &cookie)
+                .body(Body::from(r#"{"phone_number": "5551234567"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    cleanup(&pool, &email).await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn put_profile_clear_phone_disables_sms() {
+    let app = test_app().await;
+    let pool = test_pool().await;
+    let email = unique_email("profile_clear_phone");
+
+    let cookie = authenticated_cookie(app.clone(), &email).await;
+
+    // Set phone and enable SMS
+    app.clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri("/api/user/profile")
+                .header("content-type", "application/json")
+                .header("cookie", &cookie)
+                .body(Body::from(
+                    json!({"phone_number": "+15551234567", "sms_notifications": true}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    // Clear phone number
+    app.clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri("/api/user/profile")
+                .header("content-type", "application/json")
+                .header("cookie", &cookie)
+                .body(Body::from(r#"{"phone_number": ""}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    // Confirm sms_notifications is false and phone is null
+    let get_resp = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/user/profile")
+                .header("cookie", &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let body = axum::body::to_bytes(get_resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    cleanup(&pool, &email).await;
+    assert_eq!(json["phone_number"], serde_json::Value::Null);
+    assert_eq!(json["sms_notifications"], false);
 }
