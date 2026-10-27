@@ -1,8 +1,8 @@
-
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { ProfileService } from '../app/services/profile.service';
+import { HttpErrorResponse } from '@angular/common/http';
 
 @Component({
   imports: [FormsModule],
@@ -67,28 +67,55 @@ export class UserProfile implements OnInit {
       return;
     }
 
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.email.trim())) {
+      this.errorMessage.set('Please enter a valid email address.');
+      return;
+    }
+
+    const phone = this.phoneNumber.trim();
+
+    if (phone && !/^\+[1-9]\d{7,14}$/.test(phone)) {
+      this.errorMessage.set('Phone number must include the country code, such as +15551234567.');
+      return;
+    }
+
+    if (this.smsNotifications && !phone) {
+      this.errorMessage.set('Please enter a phone number to enable SMS notifications.');
+      return;
+    }
+
     this.saving.set(true);
 
-    this.profileService.updateProfile({
-      first_name: this.firstName,
-      last_name: this.lastName,
-      email: this.email,
-      email_notifications: this.emailNotifications,
-      phone_number: this.phoneNumber,
-      sms_notifications: this.phoneNumber.trim()
-        ? this.smsNotifications
-        : false,
-    }).subscribe({
-      next: () => {
-        this.saving.set(false);
-        this.profileMessage.set('Profile updated successfully!');
-        this.loadProfile();
-      },
-      error: () => {
-        this.saving.set(false);
-        this.errorMessage.set('Unable to save profile changes.');
-      },
-    });
+    this.profileService
+      .updateProfile({
+        first_name: this.firstName,
+        last_name: this.lastName,
+        email: this.email,
+        email_notifications: this.emailNotifications,
+        phone_number: this.phoneNumber,
+        sms_notifications: this.phoneNumber.trim() ? this.smsNotifications : false,
+      })
+      .subscribe({
+        next: () => {
+          this.saving.set(false);
+          this.profileMessage.set('Profile updated successfully!');
+          this.loadProfile();
+        },
+
+        error: (error: HttpErrorResponse) => {
+          this.saving.set(false);
+
+          if (error.status === 409) {
+            this.errorMessage.set('That email address is already in use.');
+          } else if (error.status === 400) {
+            this.errorMessage.set('Please check your profile information and try again.');
+          } else if (error.status === 401) {
+            this.errorMessage.set('Your session has expired. Please log in again.');
+          } else {
+            this.errorMessage.set('Unable to save profile changes. Please try again.');
+          }
+        },
+      });
   }
 
   updatePassword(): void {
@@ -102,22 +129,24 @@ export class UserProfile implements OnInit {
 
     this.changingPassword.set(true);
 
-    this.profileService.changePassword({
-      current_password: this.currentPassword,
-      new_password: this.newPassword,
-    }).subscribe({
-      next: () => {
-        this.changingPassword.set(false);
-        this.currentPassword = '';
-        this.newPassword = '';
-        this.confirmPassword = '';
-        this.passwordMessage.set('Password updated successfully!');
-      },
-      error: () => {
-        this.changingPassword.set(false);
-        this.errorMessage.set('Unable to change password. Check your current and new passwords.');
-      },
-    });
+    this.profileService
+      .changePassword({
+        current_password: this.currentPassword,
+        new_password: this.newPassword,
+      })
+      .subscribe({
+        next: () => {
+          this.changingPassword.set(false);
+          this.currentPassword = '';
+          this.newPassword = '';
+          this.confirmPassword = '';
+          this.passwordMessage.set('Password updated successfully!');
+        },
+        error: () => {
+          this.changingPassword.set(false);
+          this.errorMessage.set('Unable to change password. Check your current and new passwords.');
+        },
+      });
   }
 
   backToDashboard(): void {
