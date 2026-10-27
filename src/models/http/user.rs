@@ -47,6 +47,8 @@ pub struct ProfileResponse {
     pub phone_number: Option<String>,
     /// Whether the user has opted in to SMS notifications.
     pub sms_notifications: bool,
+    /// Carrier email-to-SMS gateway domain (e.g. `tmomail.net`), or `null` if not set.
+    pub sms_carrier_gateway: Option<String>,
 }
 
 /// Request body for `PUT /api/user/profile`.
@@ -62,6 +64,8 @@ pub struct UpdateProfileRequest {
     pub phone_number: Option<String>,
     /// Opt in or out of SMS notifications.
     pub sms_notifications: Option<bool>,
+    /// Carrier email-to-SMS gateway domain (e.g. `tmomail.net`), `""` to clear, or absent to leave unchanged.
+    pub sms_carrier_gateway: Option<String>,
 }
 
 impl UpdateProfileRequest {
@@ -71,10 +75,16 @@ impl UpdateProfileRequest {
     /// - If `phone_number` is `Some(s)` and non-empty, it must be E.164 format.
     /// - If the effective `sms_notifications` after the update would be `true`
     ///   and there would be no phone number, returns an error.
+    /// - If the effective `sms_notifications` would be `true` and there would be
+    ///   no carrier gateway, returns an error.
     ///
     /// `existing_phone` is the phone number currently stored for the user,
     /// used to determine the effective state when `phone_number` is omitted.
-    pub fn validate(&self, existing_phone: Option<&str>) -> Result<(), String> {
+    pub fn validate(
+        &self,
+        existing_phone: Option<&str>,
+        existing_gateway: Option<&str>,
+    ) -> Result<(), String> {
         // Validate format if a new non-empty phone is provided
         if let Some(phone) = &self.phone_number {
             if !phone.is_empty() && !PHONE_E164_REGEX.is_match(phone) {
@@ -90,9 +100,19 @@ impl UpdateProfileRequest {
             None => existing_phone,
         };
 
+        // Effective gateway after this update (same pattern as phone)
+        let effective_gateway: Option<&str> = match &self.sms_carrier_gateway {
+            Some(g) if g.is_empty() => None,
+            Some(g) => Some(g.as_str()),
+            None => existing_gateway,
+        };
+
         let effective_sms = self.sms_notifications.unwrap_or(false);
         if effective_sms && effective_phone.map_or(true, str::is_empty) {
             return Err("sms_notifications requires a phone_number".to_string());
+        }
+        if effective_sms && effective_gateway.map_or(true, str::is_empty) {
+            return Err("sms_notifications requires an sms_carrier_gateway".to_string());
         }
 
         Ok(())
@@ -276,59 +296,94 @@ mod tests {
 
     // ── UpdateProfileRequest::validate ──────────────────────────────────
 
-    fn upd(email: Option<bool>, phone: Option<&str>, sms: Option<bool>) -> UpdateProfileRequest {
+    fn upd(
+        email: Option<bool>,
+        phone: Option<&str>,
+        sms: Option<bool>,
+        gateway: Option<&str>,
+    ) -> UpdateProfileRequest {
         UpdateProfileRequest {
             email_notifications: email,
             phone_number: phone.map(str::to_string),
             sms_notifications: sms,
+            sms_carrier_gateway: gateway.map(str::to_string),
         }
     }
 
     #[test]
     fn profile_update_all_none_is_ok() {
-        assert!(upd(None, None, None).validate(None).is_ok());
+        assert!(upd(None, None, None, None).validate(None, None).is_ok());
     }
 
     #[test]
     fn profile_update_valid_phone_accepted() {
-        assert!(upd(None, Some("+15551234567"), None).validate(None).is_ok());
-    }
-
-    #[test]
-    fn profile_update_bad_phone_rejected() {
-        assert!(upd(None, Some("5551234567"), None).validate(None).is_err());
-    }
-
-    #[test]
-    fn profile_update_sms_true_no_phone_rejected() {
-        assert!(upd(None, None, Some(true)).validate(None).is_err());
-    }
-
-    #[test]
-    fn profile_update_sms_true_with_new_phone_ok() {
-        assert!(upd(None, Some("+15551234567"), Some(true))
-            .validate(None)
+        assert!(upd(None, Some("+15551234567"), None, None)
+            .validate(None, None)
             .is_ok());
     }
 
     #[test]
+    fn profile_update_bad_phone_rejected() {
+        assert!(upd(None, Some("5551234567"), None, None)
+            .validate(None, None)
+            .is_err());
+    }
+
+    #[test]
+    fn profile_update_sms_true_no_phone_rejected() {
+        assert!(upd(None, None, Some(true), None)
+            .validate(None, None)
+            .is_err());
+    }
+
+    #[test]
+    fn profile_update_sms_true_with_new_phone_ok() {
+        assert!(
+            upd(None, Some("+15551234567"), Some(true), Some("tmomail.net"))
+                .validate(None, None)
+                .is_ok()
+        );
+    }
+
+    #[test]
     fn profile_update_sms_true_with_existing_phone_ok() {
-        assert!(upd(None, None, Some(true))
-            .validate(Some("+15551234567"))
+        assert!(upd(None, None, Some(true), None)
+            .validate(Some("+15551234567"), Some("tmomail.net"))
             .is_ok());
     }
 
     #[test]
     fn profile_update_clear_phone_with_sms_true_rejected() {
-        assert!(upd(None, Some(""), Some(true))
-            .validate(Some("+15551234567"))
+        assert!(upd(None, Some(""), Some(true), Some("tmomail.net"))
+            .validate(Some("+15551234567"), None)
             .is_err());
     }
 
     #[test]
     fn profile_update_clear_phone_ok() {
-        assert!(upd(None, Some(""), None)
-            .validate(Some("+15551234567"))
+        assert!(upd(None, Some(""), None, None)
+            .validate(Some("+15551234567"), None)
             .is_ok());
+    }
+
+    #[test]
+    fn profile_update_sms_true_no_gateway_rejected() {
+        assert!(upd(None, Some("+15551234567"), Some(true), None)
+            .validate(None, None)
+            .is_err());
+    }
+
+    #[test]
+    fn profile_update_sms_true_with_existing_gateway_ok() {
+        assert!(upd(None, None, Some(true), None)
+            .validate(Some("+15551234567"), Some("vtext.com"))
+            .is_ok());
+    }
+
+    #[test]
+    fn profile_update_clear_gateway_with_sms_true_rejected() {
+        assert!(upd(None, None, Some(true), Some(""))
+            .validate(Some("+15551234567"), Some("tmomail.net"))
+            .is_err());
     }
 }
