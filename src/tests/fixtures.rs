@@ -192,7 +192,7 @@ pub async fn authenticated_cookie(app: Router, email: &str) -> String {
                 .uri("/api/user/signup")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    json!({"email": email, "password": "Secret_123"}).to_string(),
+                    json!({"first_name": "Alice", "last_name": "Smith", "email": email, "password": "Secret_123"}).to_string(),
                 ))
                 .unwrap(),
         )

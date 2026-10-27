@@ -1,0 +1,67 @@
+<div class="signup-container">
+  <h1>Create an Account</h1>
+
+  <form (ngSubmit)="onSignup()">
+    <div>
+      <label for="firstName">First Name</label>
+      <input
+        id="firstName"
+        type="text"
+        name="firstName"
+        [(ngModel)]="firstName"
+        placeholder="Enter your first name"
+        required />
+    </div>
+
+    <div>
+      <label for="lastName">Last Name</label>
+      <input
+        id="lastName"
+        type="text"
+        name="lastName"
+        [(ngModel)]="lastName"
+        placeholder="Enter your last name"
+        required />
+    </div>
+
+    <div>
+      <label for="email">Email</label>
+      <input
+        id="email"
+        type="email"
+        name="email"
+        [(ngModel)]="email"
+        placeholder="Enter your email"
+        required />
+    </div>
+
+    <div>
+      <label for="password">Password</label>
+      <input
+        id="password"
+        type="password"
+        name="password"
+        [(ngModel)]="password"
+        placeholder="Create a password"
+        autocomplete="new-password"
+        required />
+      <p class="password-hint">
+        Password must be 8–128 characters and contain at least one uppercase letter, one lowercase
+        letter, and one number. Use standard ASCII characters.
+      </p>
+    </div>
+
+    <button type="submit" [disabled]="isSubmitting()">
+      {{ isSubmitting() ? 'Creating Account...' : 'Create Account' }}
+    </button>
+
+    @if (errorMessage()) {
+      <p role="alert">{{ errorMessage() }}</p>
+    }
+  </form>
+
+  <p>
+    Already have an account?
+    <a routerLink="/login">Log in</a>
+  </p>
+</div>

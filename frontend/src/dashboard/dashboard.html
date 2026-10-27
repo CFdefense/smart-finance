@@ -1,20 +1,32 @@
 <head>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=account_circle,person,logout" />
+  <link
+    rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=account_circle,person,logout" />
 </head>
 
 <main class="main">
-    <div class="header">
-        <div>
-            <p class="title">Hello, User</p>
-        </div>
-        <div class="profile-dropdown">
-            <div class="icons">
-                <span class="material-symbols-outlined account">account_circle</span>
-            </div>
-            <div class="profile-dropdown-content">
-                <div class="profile-option"><span class="material-symbols-outlined person" role="button" tabindex="0" (click)="openProfile()">person</span><a tabindex="0" role="button" (click)="openProfile()">Profile</a></div>
-                <div class="logout-option"><span class="material-symbols-outlined logout" role="button" tabindex="0" (click)="onLogout()">logout</span><a tabindex="0" role="button" (click)="onLogout()">Logout</a></div>
-            </div>
-        </div>
+  <div class="header">
+    <div>
+      <p class="title">Hello, User</p>
     </div>
+    <div class="profile-dropdown">
+      <div class="icons">
+        <span class="material-symbols-outlined account">account_circle</span>
+      </div>
+      <div class="profile-dropdown-content">
+        <div class="profile-option">
+          <button type="button" (click)="openProfile()">
+            <span class="material-symbols-outlined person">person</span>
+            Profile
+          </button>
+        </div>
+        <div class="logout-option">
+          <button type="button" (click)="onLogout()">
+            <span class="material-symbols-outlined logout" aria-hidden="true">logout</span>
+            Logout
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 </main>
