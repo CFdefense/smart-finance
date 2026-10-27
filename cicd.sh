@@ -31,9 +31,7 @@ ensure_tool() {
 
 ensure_tool sqlx              "cargo install sqlx-cli --no-default-features --features postgres --locked"
 ensure_tool cargo-tarpaulin   "cargo install cargo-tarpaulin --locked"
-(cd ./frontend && ensure_tool npx angular-eslint "ng add angular-eslint")
-(cd ./frontend && ensure_tool npx prettier "npm install prettier --save-dev")
-(cd ./frontend && ensure_tool npx test "npm install --save-dev @vitest/coverage-v8")
+[ -d "./frontend/node_modules/@angular-eslint/builder" ] || (cd ./frontend && npm install)
 ensure_tool uv                'curl -LsSf https://astral.sh/uv/install.sh | sh && export PATH="$HOME/.local/bin:$PATH"'
 
 # Load .env when running locally; in CI DATABASE_URL is set via env
@@ -54,7 +52,7 @@ run_openapi()             { step "Generate openapi.json";             cargo run 
 run_nglint()              { step "Run lint";                          (cd ./frontend && npx ng lint); }
 run_prettier_check()      { step "Prettier check";                    (cd ./frontend && npx prettier --check "src/**/*.ts" && npx prettier --check "src/**/*.css" && npx prettier --check "src/**/*.html" && pass ".prettierrc"); }
 run_angular_build()       { step "Run angular build";                 (cd ./frontend && npx ng build); }
-run_test_coverage()       { step "Test coverage (≥90% coverage)";     (cd ./frontend && npx ng test --coverage); }
+run_test_coverage()       { step "Test coverage (≥90% coverage)";     (cd ./frontend && npx ng test --coverage --watch=false); }
 run_py_sync()             { step "Python dependencies (locked)";      (cd ai-service && uv sync --locked) && pass "py sync"; }
 run_py_fmt()              { step "Python format check";               (cd ai-service && uv run --locked ruff format --check .) && pass "py fmt"; }
 run_py_lint()             { step "Python lint";                       (cd ai-service && uv run --locked ruff check .) && pass "py lint"; }
