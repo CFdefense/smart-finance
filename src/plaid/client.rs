@@ -242,4 +242,91 @@ impl PlaidClient {
             .await
             .map_err(|e| AppError::Internal(format!("Plaid response parse error: {e}")))
     }
+
+    /// Create a sandbox public token with custom user credentials.
+    ///
+    /// Calls `POST /sandbox/public_token/create`. Allows automated linking of
+    /// specific sandbox user personas without browser UI interaction.
+    pub async fn create_sandbox_public_token(
+        &self,
+        institution_id: &str,
+        username: &str,
+        password: &str,
+    ) -> Result<String, AppError> {
+        let body = serde_json::json!({
+            "client_id": self.client_id,
+            "secret": self.secret,
+            "institution_id": institution_id,
+            "initial_products": ["transactions"],
+            "options": {
+                "override_username": username,
+                "override_password": password
+            }
+        });
+
+        let resp = self
+            .http
+            .post(format!("{}/sandbox/public_token/create", self.base_url))
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| AppError::Internal(format!("Plaid request failed: {e}")))?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let text = resp.text().await.unwrap_or_default();
+            return Err(AppError::Internal(format!(
+                "Plaid /sandbox/public_token/create returned {status}: {text}"
+            )));
+        }
+
+        let parsed: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| AppError::Internal(format!("Plaid response parse error: {e}")))?;
+
+        parsed
+            .get("public_token")
+            .and_then(serde_json::Value::as_str)
+            .map(String::from)
+            .ok_or_else(|| {
+                AppError::Internal("Missing public_token in Plaid sandbox response".to_string())
+            })
+    }
+
+    /// Fire a webhook simulation event in Plaid Sandbox.
+    ///
+    /// Calls `POST /sandbox/item/fire_webhook` with the specified `webhook_code`
+    /// (e.g. `SYNC_UPDATES_AVAILABLE` or `DEFAULT_UPDATE`) to trigger mock
+    /// transaction processing.
+    pub async fn fire_sandbox_webhook(
+        &self,
+        access_token: &str,
+        webhook_code: &str,
+    ) -> Result<(), AppError> {
+        let body = serde_json::json!({
+            "client_id": self.client_id,
+            "secret": self.secret,
+            "access_token": access_token,
+            "webhook_code": webhook_code
+        });
+
+        let resp = self
+            .http
+            .post(format!("{}/sandbox/item/fire_webhook", self.base_url))
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| AppError::Internal(format!("Plaid request failed: {e}")))?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let text = resp.text().await.unwrap_or_default();
+            return Err(AppError::Internal(format!(
+                "Plaid /sandbox/item/fire_webhook returned {status}: {text}"
+            )));
+        }
+
+        Ok(())
+    }
 }

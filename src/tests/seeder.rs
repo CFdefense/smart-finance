@@ -4,20 +4,13 @@ use argon2::{
     password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
     Argon2,
 };
-use serde::Deserialize;
 
-use crate::models::http::user::SignupRequest;
-
-#[derive(Debug, Deserialize)]
-struct TesterFixture {
-    email: String,
-    first_name: String,
-    last_name: String,
-    password: String,
-    institution_id: String,
-    sandbox_username: String,
-    sandbox_password: String,
-}
+use super::fixtures::{cleanup, mock_plaid_url, test_pool, unique_email};
+use crate::{
+    models::http::user::SignupRequest,
+    plaid::client::PlaidClient,
+    seeder::{hash_password, seed_tester_profile, TesterFixture},
+};
 
 #[test]
 fn test_sandbox_fixtures_validity() {
@@ -80,5 +73,65 @@ fn test_sandbox_fixtures_validity() {
             "password hash verification failed for {}",
             tester.email
         );
+
+        // Verify seeder's hash_password helper
+        let helper_hash = hash_password(&tester.password).expect("hash_password should succeed");
+        let parsed_helper = PasswordHash::new(&helper_hash).expect("hash parsing should succeed");
+        assert!(
+            Argon2::default()
+                .verify_password(tester.password.as_bytes(), &parsed_helper)
+                .is_ok(),
+            "helper hash verification failed for {}",
+            tester.email
+        );
     }
+}
+
+#[tokio::test]
+async fn test_seed_tester_profile_lifecycle() {
+    let pool = test_pool().await;
+    let plaid = PlaidClient::with_base_url(mock_plaid_url());
+    let email = unique_email("seed_test");
+
+    let tester = TesterFixture {
+        email: email.clone(),
+        first_name: "Test".to_string(),
+        last_name: "User".to_string(),
+        password: "Password123".to_string(),
+        institution_id: "ins_109508".to_string(),
+        sandbox_username: "custom_test".to_string(),
+        sandbox_password: "pass_good".to_string(),
+    };
+
+    // 1. Initial seed — creates user, links item, accounts, and syncs transactions
+    let res = seed_tester_profile(&pool, &plaid, &tester, false)
+        .await
+        .expect("initial seed must succeed");
+
+    assert!(res.created_user, "should create new user");
+    assert!(!res.skipped, "should not skip initial seed");
+    assert_eq!(res.accounts_saved, 1, "should save mock account");
+    assert_eq!(res.transactions_synced, 2, "should sync mock transactions");
+
+    // 2. Second seed without reset — should skip
+    let res_skip = seed_tester_profile(&pool, &plaid, &tester, false)
+        .await
+        .expect("second seed should succeed without error");
+
+    assert!(
+        res_skip.skipped,
+        "second seed should skip already linked user"
+    );
+
+    // 3. Third seed with reset — should delete and re-seed
+    let res_reset = seed_tester_profile(&pool, &plaid, &tester, true)
+        .await
+        .expect("reset seed should succeed");
+
+    assert!(res_reset.created_user, "reset seed should recreate user");
+    assert!(!res_reset.skipped, "reset seed should not skip");
+    assert_eq!(res_reset.accounts_saved, 1);
+
+    // Clean up
+    cleanup(&pool, &email).await;
 }
