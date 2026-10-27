@@ -15,11 +15,23 @@ docs/tarpaulin-report.html
 # Agent planning artifacts
 .sdd/
 docs/plans/
-agent/
-anomaly/
+/agent/
+/anomaly/
 
 # Tarpaulin LLVM coverage raw profile data
 *.profraw
 
 # Generated OpenAPI spec (produced by cargo run --bin gen-openapi)
 docs/openapi.json
+
+# Python virtual environment.
+.venv/
+
+# Python's compiled bytecode cache, created automatically when code runs.
+__pycache__/
+
+# Personal vscode settings
+.vscode/
+
+# Python test coverage
+.coverage
