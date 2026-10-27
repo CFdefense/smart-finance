@@ -1,11 +1,12 @@
-//! User authentication controller — login, signup, logout.
+//! User authentication and profile controller — login, signup, logout, profile.
 
 use argon2::{
     password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
     Argon2,
 };
+#[allow(unused_imports)] // `put` used only in test/release builds (plain axum::Router)
 use axum::{
-    routing::{get, post},
+    routing::{get, post, put},
     Extension, Json,
 };
 use sqlx::PgPool;
@@ -23,8 +24,8 @@ use crate::{
     controllers::AxumRouter,
     error::{ApiResult, AppError},
     middleware::{middleware_auth, AuthUser},
-    models::http::user::{LoginRequest, SignupRequest},
-    models::sql::user::UserRow,
+    models::http::user::{LoginRequest, ProfileResponse, SignupRequest, UpdateProfileRequest},
+    models::sql::user::{UserProfileRow, UserRow},
 };
 
 /// Abstracts cookie writing so handlers can be tested without a real cookie jar.
@@ -260,12 +261,130 @@ pub async fn api_logout(
     Ok(())
 }
 
-/// `OpenAPI` doc for user authentication routes.
+/// Return the authenticated user's notification preferences.
+///
+/// `GET /api/user/profile`
+#[utoipa::path(
+    get,
+    path = "/profile",
+    summary = "Get the current user's notification preferences",
+    responses(
+        (status = 200, description = "Profile returned", body = ProfileResponse),
+        (status = 401, description = "Not authenticated")
+    ),
+    security(("auth-token" = [])),
+    tag = "User"
+)]
+pub async fn api_get_profile(
+    Extension(user): Extension<AuthUser>,
+    Extension(pool): Extension<PgPool>,
+) -> ApiResult<Json<ProfileResponse>> {
+    debug!("HANDLER ->> GET /api/user/profile user_id={}", user.id);
+
+    let row = sqlx::query_as!(
+        UserProfileRow,
+        r#"
+        SELECT email, email_notifications, phone_number, sms_notifications
+        FROM users
+        WHERE id = $1
+        "#,
+        user.id
+    )
+    .fetch_one(&pool)
+    .await
+    .map_err(AppError::from)?;
+
+    Ok(Json(ProfileResponse {
+        email: row.email,
+        email_notifications: row.email_notifications,
+        phone_number: row.phone_number,
+        sms_notifications: row.sms_notifications,
+    }))
+}
+
+/// Update the authenticated user's notification preferences.
+///
+/// All fields are optional; omitted fields are left unchanged.
+/// Send `phone_number: ""` to clear the stored phone number.
+///
+/// `PUT /api/user/profile`
+#[utoipa::path(
+    put,
+    path = "/profile",
+    summary = "Update the current user's notification preferences",
+    request_body(
+        content = UpdateProfileRequest,
+        content_type = "application/json",
+        description = "All fields optional. Omit a field to leave it unchanged.",
+        example = json!({"email_notifications": true, "phone_number": "+15551234567", "sms_notifications": true})
+    ),
+    responses(
+        (status = 200, description = "Profile updated"),
+        (status = 400, description = "Validation failure"),
+        (status = 401, description = "Not authenticated")
+    ),
+    security(("auth-token" = [])),
+    tag = "User"
+)]
+pub async fn api_update_profile(
+    Extension(user): Extension<AuthUser>,
+    Extension(pool): Extension<PgPool>,
+    Json(payload): Json<UpdateProfileRequest>,
+) -> ApiResult<()> {
+    debug!("HANDLER ->> PUT /api/user/profile user_id={}", user.id);
+
+    let existing_phone: Option<String> =
+        sqlx::query_scalar!("SELECT phone_number FROM users WHERE id = $1", user.id)
+            .fetch_one(&pool)
+            .await
+            .map_err(AppError::from)?;
+
+    if let Err(e) = payload.validate(existing_phone.as_deref()) {
+        return Err(AppError::Validation(e));
+    }
+
+    // Determine the phone update intent:
+    //   None in payload  => no change (COALESCE keeps current value)
+    //   Some("")         => clear (set to NULL, force sms off)
+    //   Some(v)          => set to v
+    let clear_phone = payload.phone_number.as_deref() == Some("");
+    let new_phone: Option<String> = payload.phone_number.filter(|p| !p.is_empty());
+
+    sqlx::query!(
+        r#"
+        UPDATE users SET
+          email_notifications = COALESCE($1, email_notifications),
+          phone_number        = CASE
+                                  WHEN $2 THEN NULL
+                                  WHEN $3::TEXT IS NOT NULL THEN $3::TEXT
+                                  ELSE phone_number
+                                END,
+          sms_notifications   = CASE
+                                  WHEN $2 THEN false
+                                  ELSE COALESCE($4, sms_notifications)
+                                END
+        WHERE id = $5
+        "#,
+        payload.email_notifications, // $1 Option<bool>
+        clear_phone,                 // $2 bool — true => NULL phone + false SMS
+        new_phone,                   // $3 Option<String>
+        payload.sms_notifications,   // $4 Option<bool>
+        user.id                      // $5 i32
+    )
+    .execute(&pool)
+    .await
+    .map_err(AppError::from)?;
+
+    Ok(())
+}
+
+/// `OpenAPI` doc for user authentication and profile routes.
 ///
 /// Constructed only by the `#[openapi]` macro and the root [`crate::swagger::ApiDoc`].
 #[derive(OpenApi)]
 #[openapi(
-    paths(api_signup, api_login, api_logout, api_me),
+    paths(api_signup, api_login, api_logout, api_me, api_get_profile, api_update_profile),
+    components(schemas(ProfileResponse, UpdateProfileRequest)),
     info(title = "User Routes", description = "Authentication endpoints."),
     tags((name = "User"))
 )]
@@ -276,11 +395,12 @@ pub struct UserApiDoc;
 ///
 /// Public routes: `POST /signup`, `POST /login`.
 /// Protected routes (require valid `auth-token` cookie):
-/// `POST /logout` and `GET /me`.
+/// `POST /logout`, `GET /me`, `GET /profile`, `PUT /profile`.
 pub fn user_routes() -> AxumRouter {
     AxumRouter::new()
         .route("/logout", post(api_logout))
         .route("/me", get(api_me))
+        .route("/profile", get(api_get_profile).put(api_update_profile))
         .route_layer(axum::middleware::from_fn(middleware_auth))
         .route("/signup", post(api_signup))
         .route("/login", post(api_login))
