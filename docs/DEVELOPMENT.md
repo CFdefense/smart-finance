@@ -21,9 +21,33 @@ cp .env.example .env  # defaults work out of the box
 # 3. Run migrations
 sqlx migrate run
 
-# 4. Start the server (debug mode — Swagger UI available at /swagger)
+# 4. Seed Plaid Sandbox dummy data for testers (optional)
+cargo run --bin seed-sandbox
+
+# 5. Start the server (debug mode — Swagger UI available at /swagger)
 cargo run
 ```
+
+---
+
+## Seeding Plaid Sandbox Data
+
+To populate PostgreSQL with pre-configured tester accounts, linked institutions, financial accounts, and live Plaid Sandbox transactions:
+
+```bash
+# 1. Ensure .env has valid PLAID_CLIENT_ID and PLAID_SECRET credentials
+# 2. Run the seeder
+cargo run --bin seed-sandbox
+
+# To reset tester accounts and re-sync fresh sandbox data:
+cargo run --bin seed-sandbox -- --reset
+```
+
+The seeder creates 4 tester accounts configured in [`fixtures/sandbox-users.json`](../fixtures/sandbox-users.json) with default password `Password123`:
+- `jeremy@test.com` (`custom_jfrank` / `pass_good`)
+- `libby@test.com` (`custom_lfoley` / `pass_good`)
+- `mitchell@test.com` (`custom_mlevy` / `pass_good`)
+- `christian@test.com` (`custom_cfarrell` / `pass_good`)
 
 ---
 
