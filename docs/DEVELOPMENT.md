@@ -30,6 +30,13 @@ cargo run
 
 ---
 
+## Connecting to live PSQL Database
+```bash
+psql "postgres://postgres:postgres@localhost:5432/smart_finance"
+```
+
+---
+
 ## Seeding Plaid Sandbox Data
 
 To populate PostgreSQL with pre-configured tester accounts, linked institutions, financial accounts, and live Plaid Sandbox transactions:
