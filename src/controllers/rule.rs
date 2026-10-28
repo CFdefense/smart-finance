@@ -1,9 +1,8 @@
 //! Rule endpoints — user-written spending rules scoped to one or more accounts.
 //!
 //! Rules are plain sentences ("I don't want to spend any money on food"). The backend only
-//! stores them and their account scope; the AI agent reads and applies them.
-
-use std::collections::HashMap;
+//! stores them and their account scope; the AI agent reads and applies them. A rule with no
+//! linked accounts applies to all of the user's accounts.
 
 use axum::{
     extract::{Path, Query},
@@ -11,7 +10,7 @@ use axum::{
     routing::get,
     Extension, Json,
 };
-use sqlx::{PgConnection, PgPool};
+use sqlx::{PgConnection, PgExecutor, PgPool};
 use tracing::debug;
 use utoipa::OpenApi;
 
@@ -55,7 +54,7 @@ async fn ensure_owned_accounts(
     }
 }
 
-/// Replaces the rule's targeted accounts.
+/// Replaces the rule's targeted accounts. An empty list means "all accounts".
 async fn set_rule_accounts(
     conn: &mut PgConnection,
     rule_id: i32,
@@ -78,31 +77,26 @@ async fn set_rule_accounts(
     Ok(())
 }
 
-/// Loads the targeted accounts of the given rules, keyed by rule id.
-async fn load_accounts(
-    conn: &mut PgConnection,
-    rule_ids: &[i32],
-) -> ApiResult<HashMap<i32, Vec<String>>> {
-    let rows = sqlx::query!(
-        "SELECT rule_id, account_id FROM rule_accounts WHERE rule_id = ANY($1) ORDER BY account_id",
-        rule_ids
+/// Fetches one of the user's rules with its linked accounts, or `NotFound`.
+async fn find_rule<'e>(exec: impl PgExecutor<'e>, id: i32, user_id: i32) -> ApiResult<RuleRow> {
+    sqlx::query_as!(
+        RuleRow,
+        r#"
+        SELECT r.id, r.user_id, r.description, r.enabled, r.created_at, r.updated_at,
+               COALESCE(array_agg(ra.account_id ORDER BY ra.account_id)
+                        FILTER (WHERE ra.account_id IS NOT NULL), '{}') AS "account_ids!"
+        FROM rules r
+        LEFT JOIN rule_accounts ra ON ra.rule_id = r.id
+        WHERE r.id = $1 AND r.user_id = $2
+        GROUP BY r.id
+        "#,
+        id,
+        user_id
     )
-    .fetch_all(conn)
+    .fetch_optional(exec)
     .await
-    .map_err(AppError::from)?;
-    let mut map: HashMap<i32, Vec<String>> = HashMap::new();
-    for row in rows {
-        map.entry(row.rule_id).or_default().push(row.account_id);
-    }
-    Ok(map)
-}
-
-async fn respond(conn: &mut PgConnection, row: &RuleRow) -> ApiResult<RuleResponse> {
-    let mut accounts = load_accounts(conn, &[row.id]).await?;
-    Ok(RuleResponse::new(
-        row,
-        accounts.remove(&row.id).unwrap_or_default(),
-    ))
+    .map_err(AppError::from)?
+    .ok_or(AppError::NotFound)
 }
 
 /// Create a rule.
@@ -139,26 +133,24 @@ pub async fn api_create_rule(
     let mut tx = pool.begin().await.map_err(AppError::from)?;
     ensure_owned_accounts(&mut tx, user.id, &account_ids).await?;
 
-    let row = sqlx::query_as!(
-        RuleRow,
+    let id = sqlx::query_scalar!(
         r#"
-        INSERT INTO rules (user_id, description, all_accounts, enabled)
-        VALUES ($1, $2, $3, COALESCE($4, TRUE))
-        RETURNING id, user_id, description, all_accounts, enabled, created_at, updated_at
+        INSERT INTO rules (user_id, description, enabled)
+        VALUES ($1, $2, COALESCE($3, TRUE))
+        RETURNING id
         "#,
         user.id,
         payload.description.trim(),
-        account_ids.is_empty(),
         payload.enabled
     )
     .fetch_one(&mut *tx)
     .await
     .map_err(AppError::from)?;
-    set_rule_accounts(&mut tx, row.id, &account_ids).await?;
-    let response = respond(&mut tx, &row).await?;
+    set_rule_accounts(&mut tx, id, &account_ids).await?;
+    let row = find_rule(&mut *tx, id, user.id).await?;
     tx.commit().await.map_err(AppError::from)?;
 
-    Ok((StatusCode::CREATED, Json(response)))
+    Ok((StatusCode::CREATED, Json(RuleResponse::new(&row))))
 }
 
 /// List the user's rules.
@@ -186,18 +178,23 @@ pub async fn api_list_rules(
     Query(query): Query<ListQuery>,
 ) -> ApiResult<Json<RulesResponse>> {
     debug!("HANDLER ->> GET /api/rules user_id={}", user.id);
+    // `account_id` only filters the caller's own rules, so it needs no ownership check.
+    // Rules with no linked accounts apply to all accounts and always match.
     let rows = sqlx::query_as!(
         RuleRow,
         r#"
-        SELECT r.id, r.user_id, r.description, r.all_accounts, r.enabled,
-               r.created_at, r.updated_at
+        SELECT r.id, r.user_id, r.description, r.enabled, r.created_at, r.updated_at,
+               COALESCE(array_agg(ra.account_id ORDER BY ra.account_id)
+                        FILTER (WHERE ra.account_id IS NOT NULL), '{}') AS "account_ids!"
         FROM rules r
+        LEFT JOIN rule_accounts ra ON ra.rule_id = r.id
         WHERE r.user_id = $1
           AND ($2::text IS NULL
-               OR r.all_accounts
-               OR EXISTS (SELECT 1 FROM rule_accounts ra
-                          WHERE ra.rule_id = r.id AND ra.account_id = $2))
+               OR NOT EXISTS (SELECT 1 FROM rule_accounts x WHERE x.rule_id = r.id)
+               OR EXISTS (SELECT 1 FROM rule_accounts x
+                          WHERE x.rule_id = r.id AND x.account_id = $2))
           AND ($3::bool IS NULL OR r.enabled = $3)
+        GROUP BY r.id
         ORDER BY r.created_at DESC, r.id DESC
         "#,
         user.id,
@@ -208,13 +205,7 @@ pub async fn api_list_rules(
     .await
     .map_err(AppError::from)?;
 
-    let ids: Vec<i32> = rows.iter().map(|r| r.id).collect();
-    let mut conn = pool.acquire().await.map_err(AppError::from)?;
-    let mut accounts = load_accounts(&mut conn, &ids).await?;
-    let rules = rows
-        .iter()
-        .map(|r| RuleResponse::new(r, accounts.remove(&r.id).unwrap_or_default()))
-        .collect();
+    let rules = rows.iter().map(RuleResponse::new).collect();
     Ok(Json(RulesResponse { rules }))
 }
 
@@ -240,19 +231,8 @@ pub async fn api_get_rule(
     Path(id): Path<i32>,
 ) -> ApiResult<Json<RuleResponse>> {
     debug!("HANDLER ->> GET /api/rules/{id} user_id={}", user.id);
-    let row = sqlx::query_as!(
-        RuleRow,
-        "SELECT id, user_id, description, all_accounts, enabled, created_at, updated_at
-         FROM rules WHERE id = $1 AND user_id = $2",
-        id,
-        user.id
-    )
-    .fetch_optional(&pool)
-    .await
-    .map_err(AppError::from)?
-    .ok_or(AppError::NotFound)?;
-    let mut conn = pool.acquire().await.map_err(AppError::from)?;
-    Ok(Json(respond(&mut conn, &row).await?))
+    let row = find_rule(&pool, id, user.id).await?;
+    Ok(Json(RuleResponse::new(&row)))
 }
 
 /// Replace a rule.
@@ -292,32 +272,29 @@ pub async fn api_update_rule(
     let mut tx = pool.begin().await.map_err(AppError::from)?;
     ensure_owned_accounts(&mut tx, user.id, &account_ids).await?;
 
-    let row = sqlx::query_as!(
-        RuleRow,
+    sqlx::query_scalar!(
         r#"
         UPDATE rules SET
-            description  = $3,
-            all_accounts = $4,
-            enabled      = COALESCE($5, enabled),
-            updated_at   = NOW()
+            description = $3,
+            enabled     = COALESCE($4, enabled),
+            updated_at  = NOW()
         WHERE id = $1 AND user_id = $2
-        RETURNING id, user_id, description, all_accounts, enabled, created_at, updated_at
+        RETURNING id
         "#,
         id,
         user.id,
         payload.description.trim(),
-        account_ids.is_empty(),
         payload.enabled
     )
     .fetch_optional(&mut *tx)
     .await
     .map_err(AppError::from)?
     .ok_or(AppError::NotFound)?;
-    set_rule_accounts(&mut tx, row.id, &account_ids).await?;
-    let response = respond(&mut tx, &row).await?;
+    set_rule_accounts(&mut tx, id, &account_ids).await?;
+    let row = find_rule(&mut *tx, id, user.id).await?;
     tx.commit().await.map_err(AppError::from)?;
 
-    Ok(Json(response))
+    Ok(Json(RuleResponse::new(&row)))
 }
 
 /// Delete a rule.
