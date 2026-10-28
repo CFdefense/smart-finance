@@ -98,7 +98,7 @@ main {
   display: flex;
   justify-content: space-around;
   width: 100%;
-  max-width: 820px;
+  max-width: 950px;
   margin-bottom: 3rem;
 }
 
@@ -134,6 +134,7 @@ main {
   padding-bottom: 10px;
   margin-top: 1em;
   font-size: 1.5rem;
+  width: 400px;
 }
 
 .login-button {
@@ -162,7 +163,7 @@ main {
   background-color: rgb(187, 205, 254);
 }
 
-@media screen and (max-width: 700px) {
+@media screen and (max-width: 1000px) {
   .content {
     flex-direction: column;
     width: max-content;
