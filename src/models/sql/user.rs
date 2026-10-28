@@ -17,7 +17,6 @@ pub struct UserRow {
 /// Row model for reading notification preferences from the `users` table.
 ///
 /// Returned by `GET /api/user/profile`.
-
 pub struct UserProfileRow {
     /// User's first name.
     pub first_name: String,
