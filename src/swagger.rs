@@ -46,7 +46,10 @@ impl Modify for SecurityAddon {
         description = "The public API documentation for the Smart Finance web application."
     ),
     nest(
+        (path = "/api/budgets", api = crate::controllers::budget::BudgetApiDoc),
+        (path = "/api/goals", api = crate::controllers::goal::GoalApiDoc),
         (path = "/api/plaid", api = crate::controllers::plaid::PlaidApiDoc),
+        (path = "/api/rules", api = crate::controllers::rule::RuleApiDoc),
         (path = "/api/user", api = crate::controllers::user::UserApiDoc)
     ),
     servers(

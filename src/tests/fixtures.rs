@@ -129,7 +129,12 @@ fn mock_plaid_router() -> Router {
                         "name": "Coffee",
                         "amount": 4.5,
                         "date": "2024-01-01",
-                        "pending": false
+                        "pending": false,
+                        "personal_finance_category": if n == 1 {
+                            json!({"primary": "FOOD_AND_DRINK", "detailed": "FOOD_AND_DRINK_COFFEE"})
+                        } else {
+                            Value::Null
+                        }
                     })
                 };
                 // First page (no cursor) has more; the follow-up page modifies/removes.
@@ -246,4 +251,153 @@ pub async fn authenticated_cookie(app: Router, email: &str) -> String {
         .to_string();
 
     set_cookie.split(';').next().unwrap().trim().to_string()
+}
+
+/// Sends a request (optionally authenticated and with a JSON body) and returns `(status, json body)`.
+///
+/// `cookie` may be empty for unauthenticated calls. The body is `Value::Null` when the
+/// response is empty or not JSON.
+///
+/// # Panics
+///
+/// Panics if the request cannot be built or the router fails to respond.
+pub async fn call(
+    app: &Router,
+    method: &str,
+    uri: &str,
+    cookie: &str,
+    body: Option<&str>,
+) -> (StatusCode, Value) {
+    let mut builder = Request::builder().method(method).uri(uri);
+    if !cookie.is_empty() {
+        builder = builder.header("cookie", cookie);
+    }
+    let body = match body {
+        Some(b) => {
+            builder = builder.header("content-type", "application/json");
+            Body::from(b.to_string())
+        }
+        None => Body::empty(),
+    };
+    let response = app
+        .clone()
+        .oneshot(builder.body(body).unwrap())
+        .await
+        .unwrap();
+    let status = response.status();
+    let bytes = http_body_util::BodyExt::collect(response.into_body())
+        .await
+        .unwrap()
+        .to_bytes();
+    let json = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
+    (status, json)
+}
+
+/// Looks up a user's database id by email.
+///
+/// # Panics
+///
+/// Panics if the user does not exist.
+pub async fn user_id(pool: &PgPool, email: &str) -> i32 {
+    sqlx::query_scalar("SELECT id FROM users WHERE email = $1")
+        .bind(email)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+/// Returns an ID that is unique across tests and runs (Plaid account/item IDs are global).
+///
+/// # Panics
+///
+/// Panics if system time is before [`UNIX_EPOCH`].
+pub fn unique_id(prefix: &str) -> String {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    use std::time::{SystemTime, UNIX_EPOCH};
+    static COUNTER: AtomicU32 = AtomicU32::new(0);
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .subsec_nanos();
+    let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+    format!("{prefix}-{nanos}-{n}")
+}
+
+/// Seeds a Plaid link plus one account (`account_type`, e.g. `depository`) for `user_id`.
+///
+/// Returns the new `account_id`. Rows are removed when the user is deleted
+/// (`ON DELETE CASCADE`), so [`cleanup`] is enough.
+///
+/// # Panics
+///
+/// Panics if the inserts fail.
+pub async fn seed_account(
+    pool: &PgPool,
+    user_id: i32,
+    account_type: &str,
+    balance: Option<f64>,
+) -> String {
+    let account_id = unique_id("acct");
+    let item_id = unique_id("item");
+    sqlx::query("INSERT INTO plaid_links (user_id, item_id, access_token) VALUES ($1, $2, $3)")
+        .bind(user_id)
+        .bind(&item_id)
+        .bind("access-seeded")
+        .execute(pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO plaid_accounts (account_id, item_id, name, account_type, current_balance)
+         VALUES ($1, $2, 'Seeded', $3, $4)",
+    )
+    .bind(&account_id)
+    .bind(&item_id)
+    .bind(account_type)
+    .bind(balance)
+    .execute(pool)
+    .await
+    .unwrap();
+    account_id
+}
+
+/// Sets an account's current balance.
+///
+/// # Panics
+///
+/// Panics if the update fails.
+pub async fn set_balance(pool: &PgPool, account_id: &str, balance: f64) {
+    sqlx::query("UPDATE plaid_accounts SET current_balance = $1 WHERE account_id = $2")
+        .bind(balance)
+        .bind(account_id)
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
+/// Seeds a transaction on `account_id` and returns its `transaction_id`.
+///
+/// # Panics
+///
+/// Panics if the insert fails.
+pub async fn seed_transaction(
+    pool: &PgPool,
+    account_id: &str,
+    amount: f64,
+    date: chrono::NaiveDate,
+    category: &str,
+) -> String {
+    let transaction_id = unique_id("tx");
+    sqlx::query(
+        "INSERT INTO plaid_transactions (transaction_id, account_id, name, amount, date, category)
+         VALUES ($1, $2, 'Seeded', $3, $4, $5)",
+    )
+    .bind(&transaction_id)
+    .bind(account_id)
+    .bind(amount)
+    .bind(date)
+    .bind(category)
+    .execute(pool)
+    .await
+    .unwrap();
+    transaction_id
 }

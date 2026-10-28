@@ -42,6 +42,9 @@ pub async fn create_router(frontend_url: &str, plaid: plaid::client::PlaidClient
 
     // Nest the routes
     let routes = AxumRouter::new()
+        .nest("/budgets", controllers::budget::budget_routes())
+        .nest("/goals", controllers::goal::goal_routes())
+        .nest("/rules", controllers::rule::rule_routes())
         .nest("/user", controllers::user::user_routes())
         .nest("/plaid", controllers::plaid::plaid_routes());
 
@@ -59,7 +62,7 @@ pub async fn create_router(frontend_url: &str, plaid: plaid::client::PlaidClient
                 .expect("Invalid FRONTEND_URL format"),
         )
         .allow_credentials(true)
-        .allow_methods([Method::GET, Method::POST, Method::DELETE])
+        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
         .allow_headers([
             http::header::CONTENT_TYPE,
             http::header::ACCEPT,

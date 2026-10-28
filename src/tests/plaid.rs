@@ -7,7 +7,8 @@ use axum::{
 use tower::ServiceExt;
 
 use super::fixtures::{
-    authenticated_cookie, cleanup, test_app, test_pool, unique_email, MOCK_FAIL_500, MOCK_FAIL_BODY,
+    authenticated_cookie, call, cleanup, seed_account, seed_transaction, test_app, test_pool,
+    unique_email, user_id, MOCK_FAIL_500, MOCK_FAIL_BODY,
 };
 
 // ─── Auth-gate tests (no Plaid credentials required) ─────────────────────────
@@ -444,39 +445,6 @@ async fn link_token_authenticated() {
 
 // ─── Mock-Plaid tests (local mock server, no real credentials) ───────────────
 
-/// Sends an authenticated request and returns `(status, json body)`.
-async fn call(
-    app: &axum::Router,
-    method: &str,
-    uri: &str,
-    cookie: &str,
-    body: Option<&str>,
-) -> (StatusCode, serde_json::Value) {
-    let mut builder = Request::builder()
-        .method(method)
-        .uri(uri)
-        .header("cookie", cookie);
-    let body = match body {
-        Some(b) => {
-            builder = builder.header("content-type", "application/json");
-            Body::from(b.to_string())
-        }
-        None => Body::empty(),
-    };
-    let response = app
-        .clone()
-        .oneshot(builder.body(body).unwrap())
-        .await
-        .unwrap();
-    let status = response.status();
-    let bytes = http_body_util::BodyExt::collect(response.into_body())
-        .await
-        .unwrap()
-        .to_bytes();
-    let json = serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null);
-    (status, json)
-}
-
 #[tokio::test]
 async fn plaid_full_flow_with_mock() {
     let app = test_app().await;
@@ -539,6 +507,8 @@ async fn plaid_full_flow_with_mock() {
     assert_eq!(json["limit"], 200);
     assert_eq!(json["total"], 1);
     assert_eq!(json["transactions"][0]["transaction_id"], "tx1-mock");
+    // Plaid's FOOD_AND_DRINK / FOOD_AND_DRINK_COFFEE maps to FOOD_DINING
+    assert_eq!(json["transactions"][0]["category"], "FOOD_DINING");
 
     cleanup(&pool, &email).await;
 }
@@ -622,4 +592,134 @@ async fn plaid_upstream_error_status_returns_500() {
 #[tokio::test]
 async fn plaid_unparseable_response_returns_500() {
     assert_plaid_failures_are_500(MOCK_FAIL_BODY, "plaid_badbody").await;
+}
+
+// ─── Transaction categories ──────────────────────────────────────────────────
+
+#[tokio::test]
+async fn update_transaction_category_success_and_validation() {
+    let app = test_app().await;
+    let pool = test_pool().await;
+    let email = unique_email("cat_update");
+    let cookie = authenticated_cookie(app.clone(), &email).await;
+    let uid = user_id(&pool, &email).await;
+    let acct = seed_account(&pool, uid, "depository", Some(100.0)).await;
+    let date = chrono::NaiveDate::from_ymd_opt(2024, 1, 1).unwrap();
+    let tx = seed_transaction(&pool, &acct, 12.0, date, "OTHER").await;
+    let uri = format!("/api/plaid/transactions/{tx}/category");
+
+    let (status, json) = call(
+        &app,
+        "PUT",
+        &uri,
+        &cookie,
+        Some(r#"{"category":"GROCERIES"}"#),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["category"], "GROCERIES");
+    assert_eq!(json["transaction_id"], tx);
+
+    // Unknown category is rejected by deserialization (422 from the Json extractor)
+    let (status, _) = call(&app, "PUT", &uri, &cookie, Some(r#"{"category":"NOPE"}"#)).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+
+    // Missing body field
+    let (status, _) = call(&app, "PUT", &uri, &cookie, Some(r#"{}"#)).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+
+    cleanup(&pool, &email).await;
+}
+
+#[tokio::test]
+async fn update_transaction_category_not_found_and_foreign() {
+    let app = test_app().await;
+    let pool = test_pool().await;
+    let email_a = unique_email("cat_own_a");
+    let email_b = unique_email("cat_own_b");
+    let cookie_a = authenticated_cookie(app.clone(), &email_a).await;
+    let cookie_b = authenticated_cookie(app.clone(), &email_b).await;
+    let uid_a = user_id(&pool, &email_a).await;
+    let acct = seed_account(&pool, uid_a, "depository", None).await;
+    let date = chrono::NaiveDate::from_ymd_opt(2024, 1, 1).unwrap();
+    let tx = seed_transaction(&pool, &acct, 5.0, date, "OTHER").await;
+    let uri = format!("/api/plaid/transactions/{tx}/category");
+    let body = Some(r#"{"category":"SHOPPING"}"#);
+
+    // User B cannot touch user A's transaction
+    let (status, _) = call(&app, "PUT", &uri, &cookie_b, body).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    // Unknown transaction id
+    let (status, _) = call(
+        &app,
+        "PUT",
+        "/api/plaid/transactions/does-not-exist/category",
+        &cookie_a,
+        body,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    // Unauthenticated
+    let (status, _) = call(&app, "PUT", &uri, "", body).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+
+    // A's row is untouched
+    let (_, json) = call(&app, "GET", "/api/plaid/transactions", &cookie_a, None).await;
+    assert_eq!(json["transactions"][0]["category"], "OTHER");
+
+    cleanup(&pool, &email_a).await;
+    cleanup(&pool, &email_b).await;
+}
+
+#[tokio::test]
+async fn category_override_survives_resync() {
+    let app = test_app().await;
+    let pool = test_pool().await;
+    let email = unique_email("cat_sticky");
+    let cookie = authenticated_cookie(app.clone(), &email).await;
+    let uid = user_id(&pool, &email).await;
+
+    let suffix = email.replace(['+', '@', '.'], "");
+    sqlx::query("INSERT INTO plaid_links (user_id, item_id, access_token) VALUES ($1, $2, $3)")
+        .bind(uid)
+        .bind(format!("item-{suffix}"))
+        .bind(format!("access-{suffix}"))
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    // The first sync pass processes tx1 (added, then modified) and removes tx2.
+    call(&app, "POST", "/api/plaid/transactions/sync", &cookie, None).await;
+    let tx = format!("tx1-{suffix}");
+    let uri = format!("/api/plaid/transactions/{tx}/category");
+    let (status, _) = call(
+        &app,
+        "PUT",
+        &uri,
+        &cookie,
+        Some(r#"{"category":"ENTERTAINMENT"}"#),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    // Reset the cursor so the next sync replays the pages and upserts tx1 again.
+    sqlx::query("DELETE FROM plaid_sync_cursors WHERE item_id = $1")
+        .bind(format!("item-{suffix}"))
+        .execute(&pool)
+        .await
+        .unwrap();
+    call(&app, "POST", "/api/plaid/transactions/sync", &cookie, None).await;
+
+    let (_, json) = call(&app, "GET", "/api/plaid/transactions", &cookie, None).await;
+    cleanup(&pool, &email).await;
+    let category = json["transactions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["transaction_id"] == tx.as_str())
+        .map(|t| t["category"].clone())
+        .expect("tx1 present after re-sync");
+    assert_eq!(category, "ENTERTAINMENT");
 }
