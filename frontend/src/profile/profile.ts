@@ -20,6 +20,7 @@ export class UserProfile implements OnInit {
   emailNotifications = false;
   phoneNumber = '';
   smsNotifications = false;
+  smsCarrierGateway = '';
 
   currentPassword = '';
   newPassword = '';
@@ -49,6 +50,7 @@ export class UserProfile implements OnInit {
         this.emailNotifications = profile.email_notifications;
         this.phoneNumber = profile.phone_number ?? '';
         this.smsNotifications = profile.sms_notifications;
+        this.smsCarrierGateway = profile.sms_carrier_gateway ?? '';
         this.loading.set(false);
       },
       error: () => {
@@ -84,6 +86,11 @@ export class UserProfile implements OnInit {
       return;
     }
 
+    if (this.smsNotifications && !this.smsCarrierGateway) {
+      this.errorMessage.set('Please select your mobile carrier to enable SMS notifications.');
+      return;
+    }
+
     this.saving.set(true);
 
     this.profileService
@@ -94,6 +101,7 @@ export class UserProfile implements OnInit {
         email_notifications: this.emailNotifications,
         phone_number: this.phoneNumber,
         sms_notifications: this.phoneNumber.trim() ? this.smsNotifications : false,
+        sms_carrier_gateway: this.smsCarrierGateway,
       })
       .subscribe({
         next: () => {

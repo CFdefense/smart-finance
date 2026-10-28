@@ -1,4 +1,3 @@
-
 import { inject, Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
@@ -10,6 +9,7 @@ export interface UserProfile {
   email_notifications: boolean;
   phone_number: string | null;
   sms_notifications: boolean;
+  sms_carrier_gateway: string | null;
 }
 
 export interface UpdateProfileRequest {
@@ -19,6 +19,7 @@ export interface UpdateProfileRequest {
   email_notifications?: boolean;
   phone_number?: string;
   sms_notifications?: boolean;
+  sms_carrier_gateway?: string;
 }
 
 export interface ChangePasswordRequest {
@@ -34,29 +35,14 @@ export class ProfileService {
   private readonly baseUrl = 'http://localhost:3001/api/user';
 
   getProfile(): Observable<UserProfile> {
-    return this.http.get<UserProfile>(
-      `${this.baseUrl}/profile`,
-      { withCredentials: true },
-    );
+    return this.http.get<UserProfile>(`${this.baseUrl}/profile`, { withCredentials: true });
   }
 
-  updateProfile(
-    changes: UpdateProfileRequest,
-  ): Observable<void> {
-    return this.http.put<void>(
-      `${this.baseUrl}/profile`,
-      changes,
-      { withCredentials: true },
-    );
+  updateProfile(changes: UpdateProfileRequest): Observable<void> {
+    return this.http.put<void>(`${this.baseUrl}/profile`, changes, { withCredentials: true });
   }
 
-  changePassword(
-    passwords: ChangePasswordRequest,
-  ): Observable<void> {
-    return this.http.put<void>(
-      `${this.baseUrl}/password`,
-      passwords,
-      { withCredentials: true },
-    );
+  changePassword(passwords: ChangePasswordRequest): Observable<void> {
+    return this.http.put<void>(`${this.baseUrl}/password`, passwords, { withCredentials: true });
   }
 }

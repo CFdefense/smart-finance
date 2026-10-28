@@ -1,9 +1,6 @@
-
 <main class="profile-page">
   <header class="header">
-    <button type="button" (click)="backToDashboard()">
-      ← Back to Dashboard
-    </button>
+    <button type="button" (click)="backToDashboard()">← Back to Dashboard</button>
     <h1>Profile Settings</h1>
   </header>
 
@@ -19,38 +16,18 @@
 
       <form (ngSubmit)="saveProfile()">
         <label for="firstName">First Name</label>
-        <input
-          id="firstName"
-          name="firstName"
-          [(ngModel)]="firstName"
-          required
-        />
+        <input id="firstName" name="firstName" [(ngModel)]="firstName" required />
 
         <label for="lastName">Last Name</label>
-        <input
-          id="lastName"
-          name="lastName"
-          [(ngModel)]="lastName"
-          required
-        />
+        <input id="lastName" name="lastName" [(ngModel)]="lastName" required />
 
         <label for="email">Email Address</label>
-        <input
-          id="email"
-          name="email"
-          type="email"
-          [(ngModel)]="email"
-          required
-        />
+        <input id="email" name="email" type="email" [(ngModel)]="email" required />
 
         <h2>Notification Preferences</h2>
 
         <label class="checkbox-label">
-          <input
-            type="checkbox"
-            name="emailNotifications"
-            [(ngModel)]="emailNotifications"
-          />
+          <input type="checkbox" name="emailNotifications" [(ngModel)]="emailNotifications" />
           Enable Email Notifications
         </label>
 
@@ -60,16 +37,21 @@
           name="phoneNumber"
           type="tel"
           placeholder="+15551234567"
-          [(ngModel)]="phoneNumber"
-        />
+          [(ngModel)]="phoneNumber" />
+
+        <label for="smsCarrierGateway">Mobile Carrier</label>
+        <select id="smsCarrierGateway" name="smsCarrierGateway" [(ngModel)]="smsCarrierGateway">
+          <option value="">Select your carrier</option>
+          <option value="tmomail.net">T-Mobile</option>
+          <option value="vtext.com">Verizon</option>
+        </select>
 
         <label class="checkbox-label">
           <input
             type="checkbox"
             name="smsNotifications"
             [(ngModel)]="smsNotifications"
-            [disabled]="!phoneNumber.trim()"
-          />
+            [disabled]="!phoneNumber.trim()" />
           Enable SMS Notifications
         </label>
 
@@ -93,8 +75,7 @@
           name="currentPassword"
           type="password"
           [(ngModel)]="currentPassword"
-          required
-        />
+          required />
 
         <label for="newPassword">New Password</label>
         <input
@@ -102,8 +83,7 @@
           name="newPassword"
           type="password"
           [(ngModel)]="newPassword"
-          required
-        />
+          required />
 
         <label for="confirmPassword">Confirm New Password</label>
         <input
@@ -111,8 +91,7 @@
           name="confirmPassword"
           type="password"
           [(ngModel)]="confirmPassword"
-          required
-        />
+          required />
 
         <button type="submit" [disabled]="changingPassword()">
           {{ changingPassword() ? 'Updating...' : 'Change Password' }}
