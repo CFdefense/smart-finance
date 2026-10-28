@@ -1,5 +1,7 @@
 //! Validation helpers and serde utilities shared by budget, goal and rule models.
 
+use crate::global::MAX_AMOUNT;
+use chrono::{NaiveDate, Utc};
 use serde::{Deserialize, Deserializer};
 
 /// Rounds a monetary value to cents to hide floating-point noise.
@@ -34,6 +36,30 @@ pub fn validate_positive_amount(field: &str, value: f64) -> Result<(), String> {
     Ok(())
 }
 
+/// Validates that a date is strictly in the future.
+pub fn validate_future(field: &str, date: NaiveDate, today: NaiveDate) -> Result<(), String> {
+    if date <= today {
+        return Err(format!("{field} must be in the future"));
+    }
+    Ok(())
+}
+
+/// Validates that an account ID is non-empty and does not exceed 200 characters.
+pub fn validate_account_id(id: &str) -> Result<(), String> {
+    if id.trim().is_empty() || id.len() > 200 {
+        return Err("account_id must be a non-empty account identifier".to_string());
+    }
+    Ok(())
+}
+
+/// Validates that a baseline balance is finite and within the allowed amount limit.
+pub fn validate_baseline(value: f64) -> Result<(), String> {
+    if !value.is_finite() || value.abs() > MAX_AMOUNT {
+        return Err("baseline_balance must be a finite amount".to_string());
+    }
+    Ok(())
+}
+
 /// Serde helper distinguishing an absent field (`None`) from an explicit `null` (`Some(None)`).
 ///
 /// Use with `#[serde(default, deserialize_with = "double_option")]` on `Option<Option<T>>`.
@@ -43,6 +69,19 @@ where
     D: Deserializer<'de>,
 {
     Option::<T>::deserialize(deserializer).map(Some)
+}
+
+/// Uses NaiveDate to return todays date in UTC
+pub fn today() -> NaiveDate {
+    Utc::now().date_naive()
+}
+
+/// Percentage of the target reached, clamped to `0..=100`.
+pub fn progress_percent(current: f64, target: f64) -> f64 {
+    if target <= 0.0 {
+        return 0.0;
+    }
+    round_cents((current / target * 100.0).clamp(0.0, 100.0))
 }
 
 #[cfg(test)]

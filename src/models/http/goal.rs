@@ -1,21 +1,17 @@
 //! HTTP request and response models for goal routes.
 
-use crate::global::MAX_AMOUNT;
+use crate::global::{GOAL_MAX_DESCRIPTION, GOAL_MAX_NOTE, MAX_AMOUNT};
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 use crate::models::{
     common::{
-        double_option, round_cents, validate_max_len, validate_name, validate_positive_amount,
+        double_option, progress_percent, round_cents, validate_account_id, validate_baseline,
+        validate_future, validate_max_len, validate_name, validate_positive_amount,
     },
     sql::goal::{ContributionRow, GoalRow},
 };
-
-/// Maximum length of a goal description.
-const MAX_DESCRIPTION: usize = 500;
-/// Maximum length of a contribution note.
-const MAX_NOTE: usize = 200;
 
 /// Lifecycle state of a goal. Always derived, never stored.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
@@ -50,14 +46,6 @@ pub fn derive_status(archived: bool, current: f64, target: f64) -> GoalStatus {
     } else {
         GoalStatus::Active
     }
-}
-
-/// Percentage of the target reached, clamped to `0..=100`.
-pub fn progress_percent(current: f64, target: f64) -> f64 {
-    if target <= 0.0 {
-        return 0.0;
-    }
-    round_cents((current / target * 100.0).clamp(0.0, 100.0))
 }
 
 /// Whether the goal is on pace for its target date (linear from creation to target date).
@@ -117,7 +105,7 @@ impl CreateGoalRequest {
         validate_name(&self.name)?;
         validate_positive_amount("target_amount", self.target_amount)?;
         if let Some(d) = &self.description {
-            validate_max_len("description", d, MAX_DESCRIPTION)?;
+            validate_max_len("description", d, GOAL_MAX_DESCRIPTION)?;
         }
         if let Some(date) = self.target_date {
             validate_future("target_date", date, today)?;
@@ -179,7 +167,7 @@ impl UpdateGoalRequest {
             validate_name(name)?;
         }
         if let Some(Some(d)) = &self.description {
-            validate_max_len("description", d, MAX_DESCRIPTION)?;
+            validate_max_len("description", d, GOAL_MAX_DESCRIPTION)?;
         }
         if let Some(t) = self.target_amount {
             validate_positive_amount("target_amount", t)?;
@@ -198,27 +186,6 @@ impl UpdateGoalRequest {
         }
         Ok(())
     }
-}
-
-fn validate_future(field: &str, date: NaiveDate, today: NaiveDate) -> Result<(), String> {
-    if date <= today {
-        return Err(format!("{field} must be in the future"));
-    }
-    Ok(())
-}
-
-fn validate_account_id(id: &str) -> Result<(), String> {
-    if id.trim().is_empty() || id.len() > 200 {
-        return Err("account_id must be a non-empty account identifier".to_string());
-    }
-    Ok(())
-}
-
-fn validate_baseline(value: f64) -> Result<(), String> {
-    if !value.is_finite() || value.abs() > MAX_AMOUNT {
-        return Err("baseline_balance must be a finite amount".to_string());
-    }
-    Ok(())
 }
 
 /// Request body for `POST /api/goals/{id}/contributions`.
@@ -246,7 +213,7 @@ impl CreateContributionRequest {
             return Err("date cannot be in the future".to_string());
         }
         if let Some(n) = &self.note {
-            validate_max_len("note", n, MAX_NOTE)?;
+            validate_max_len("note", n, GOAL_MAX_NOTE)?;
         }
         Ok(())
     }
