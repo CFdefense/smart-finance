@@ -115,14 +115,12 @@ pub async fn api_create_budget(
 
     // This table enforces uniqueness by category, so sqlx::Error::Database returned if duplicate
     match result {
-        Ok(_) => return Ok(StatusCode::CREATED),
-        Err(sqlx::Error::Database(error)) if error.is_unique_violation() => {
-            return Err(AppError::Conflict(
-                "Email address already in use".to_string(),
-            ))
-        }
-        Err(e) => return Err(AppError::from(e)),
-    };
+        Ok(_) => Ok(StatusCode::CREATED),
+        Err(sqlx::Error::Database(error)) if error.is_unique_violation() => Err(
+            AppError::Conflict("Email address already in use".to_string()),
+        ),
+        Err(e) => Err(AppError::from(e)),
+    }
 }
 
 /// List the user's budgets with spending for a month.
