@@ -426,9 +426,8 @@ pub async fn api_update_profile(
 
     match result {
         Ok(_) => Ok(()),
-        // PostgreSQL SQLSTATE 23505 indicates a unique constraint violation.
-        // Return HTTP 409 when the requested email is already in use.
-        Err(sqlx::Error::Database(error)) if error.code().as_deref() == Some("23505") => Err(
+        // Convert unique constraint violations into HTTP 409 conflicts.
+        Err(sqlx::Error::Database(error)) if error.is_unique_violation() => Err(
             AppError::Conflict("Email address already in use".to_string()),
         ),
         Err(error) => Err(AppError::from(error)),
