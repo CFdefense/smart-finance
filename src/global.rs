@@ -11,3 +11,6 @@ pub const LATEST_LOG: &str = "latest.log";
 
 /// Session duration in seconds (3 days). Used for both cookie issuance and refresh.
 pub const SESSION_DURATION_SECS: i64 = 60 * 60 * 24 * 3; // 3 days
+
+/// Largest accepted monetary amount (guards against absurd values and float overflow).
+pub const MAX_AMOUNT: f64 = 1_000_000_000.0;
