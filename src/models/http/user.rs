@@ -314,7 +314,9 @@ mod tests {
 
     #[test]
     fn profile_update_all_none_is_ok() {
-        assert!(upd(None, None, None, None).validate(None, None, false).is_ok());
+        assert!(upd(None, None, None, None)
+            .validate(None, None, false)
+            .is_ok());
     }
 
     #[test]

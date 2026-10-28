@@ -344,9 +344,11 @@ pub async fn api_update_profile(
         .map(|r| (r.phone_number, r.sms_carrier_gateway, r.sms_notifications))
         .map_err(AppError::from)?;
 
-    if let Err(e) =
-        payload.validate(existing_phone.as_deref(), existing_gateway.as_deref(), existing_sms)
-    {
+    if let Err(e) = payload.validate(
+        existing_phone.as_deref(),
+        existing_gateway.as_deref(),
+        existing_sms,
+    ) {
         return Err(AppError::Validation(e));
     }
 
