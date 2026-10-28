@@ -75,13 +75,13 @@
         </button>
 
         @if (errorMessage()) {
-          <p role="alert">{{ errorMessage() }}</p>
+          <p role="alert" class="error-message">{{ errorMessage() }}</p>
         }
       </div>
     </form>
 
     <div class="back-to-login-container">
-      <p>
+      <p class="back-to-login-label">
         Already have an account?
         <a routerLink="/login">Log in</a>
       </p>
