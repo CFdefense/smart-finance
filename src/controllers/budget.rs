@@ -117,7 +117,7 @@ pub async fn api_create_budget(
     match result {
         Ok(_) => Ok(StatusCode::CREATED),
         Err(sqlx::Error::Database(error)) if error.is_unique_violation() => Err(
-            AppError::Conflict("Email address already in use".to_string()),
+            AppError::Conflict("Budget category already in use".to_string()),
         ),
         Err(e) => Err(AppError::from(e)),
     }
