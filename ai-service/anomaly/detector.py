@@ -1,7 +1,7 @@
 from statistics import median
 from typing import Protocol
 
-from anomaly.data_models import FlaggedTransaction, Transaction
+from anomaly.data_models import AnomalyRequest, AnomalyResponse, FlaggedTransaction, Transaction
 from db import get_connection
 
 
@@ -49,10 +49,6 @@ class MedianDetector:
         ]
 
 
-# The detector the service uses. To switch to a better one later, change only this line.
-detector: AnomalyDetector = MedianDetector()
-
-
 def load_transactions(user_id: int) -> list[Transaction]:
     """Load all of one user's transactions from the database."""
     with get_connection() as conn:
@@ -69,9 +65,10 @@ def load_transactions(user_id: int) -> list[Transaction]:
     return [Transaction(transaction_id=r[0], name=r[1], amount=r[2], date=r[3]) for r in rows]
 
 
-def check_transactions(user_id: int, new_ids: list[str]) -> list[FlaggedTransaction]:
+def check_transactions(request: AnomalyRequest, detector: AnomalyDetector) -> AnomalyResponse:
     """Check a user's new transactions against their history and return the flagged ones."""
-    everything = load_transactions(user_id)
-    new = [t for t in everything if t.transaction_id in new_ids]
-    history = [t for t in everything if t.transaction_id not in new_ids]
-    return detector.find_anomalies(new, history)
+    everything = load_transactions(request.user_id)
+    new = [t for t in everything if t.transaction_id in request.transaction_ids]
+    history = [t for t in everything if t.transaction_id not in request.transaction_ids]
+    flagged = detector.find_anomalies(new, history)
+    return AnomalyResponse(flagged=flagged)
