@@ -1,5 +1,7 @@
 <head>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=help,savings" />
+  <link
+    rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=help,savings" />
 </head>
 
 <main class="main">
@@ -12,7 +14,7 @@
     <form (ngSubmit)="onSignup()">
       <div class="signup-items-container">
         <label for="firstName" class="form-labels">First Name</label>
-        <br/>
+        <br />
         <input
           id="firstName"
           type="text"
@@ -25,7 +27,7 @@
 
       <div class="signup-items-container">
         <label for="lastName" class="form-labels">Last Name</label>
-        <br/>
+        <br />
         <input
           id="lastName"
           type="text"
@@ -38,7 +40,7 @@
 
       <div class="signup-items-container">
         <label for="email" class="form-labels">Email</label>
-        <br/>
+        <br />
         <input
           id="email"
           type="email"
@@ -51,13 +53,16 @@
 
       <div class="signup-items-container">
         <label for="password" class="form-labels">Password</label>
-        <span class="material-symbols-outlined help">help
+        <span class="material-symbols-outlined help">
+          help
           <span class="password-hint">
-            Password must be 8-128 characters and contain at least one uppercase letter, one lowercase
-            letter, and one number. <br/> Use standard ASCII characters.
+            Password must be 8-128 characters and contain at least one uppercase letter, one
+            lowercase letter, and one number.
+            <br />
+            Use standard ASCII characters.
           </span>
         </span>
-        <br/>
+        <br />
         <input
           id="password"
           type="password"
