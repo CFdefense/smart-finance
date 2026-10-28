@@ -1,22 +1,106 @@
-<head>
-  <link
-    rel="stylesheet"
-    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=arrow_back_ios" />
-</head>
+<main class="profile-page">
+  <header class="header">
+    <button type="button" (click)="backToDashboard()">← Back to Dashboard</button>
+    <h1>Profile Settings</h1>
+  </header>
 
-<main class="main">
-  <div class="header">
-    <div class="icons">
-      <span
-        class="material-symbols-outlined"
-        role="button"
-        tabindex="0"
-        (click)="backToDashboard()">
-        arrow_back_ios
-      </span>
-    </div>
-    <div>
-      <p class="title">Profile</p>
-    </div>
-  </div>
+  @if (errorMessage()) {
+    <p class="error-message">{{ errorMessage() }}</p>
+  }
+
+  @if (loading()) {
+    <p>Loading profile...</p>
+  } @else {
+    <section class="profile-section">
+      <h2>Account Information</h2>
+
+      <form (ngSubmit)="saveProfile()">
+        <label for="firstName">First Name</label>
+        <input id="firstName" name="firstName" [(ngModel)]="firstName" required />
+
+        <label for="lastName">Last Name</label>
+        <input id="lastName" name="lastName" [(ngModel)]="lastName" required />
+
+        <label for="email">Email Address</label>
+        <input id="email" name="email" type="email" [(ngModel)]="email" required />
+
+        <h2>Notification Preferences</h2>
+
+        <label class="checkbox-label">
+          <input type="checkbox" name="emailNotifications" [(ngModel)]="emailNotifications" />
+          Enable Email Notifications
+        </label>
+
+        <label for="phoneNumber">Phone Number</label>
+        <input
+          id="phoneNumber"
+          name="phoneNumber"
+          type="tel"
+          placeholder="+15551234567"
+          [(ngModel)]="phoneNumber" />
+
+        <label for="smsCarrierGateway">Mobile Carrier</label>
+        <select id="smsCarrierGateway" name="smsCarrierGateway" [(ngModel)]="smsCarrierGateway">
+          <option value="">Select your carrier</option>
+          <option value="tmomail.net">T-Mobile</option>
+          <option value="vtext.com">Verizon</option>
+        </select>
+
+        <label class="checkbox-label">
+          <input
+            type="checkbox"
+            name="smsNotifications"
+            [(ngModel)]="smsNotifications"
+            [disabled]="!phoneNumber.trim()" />
+          Enable SMS Notifications
+        </label>
+
+        <button type="submit" [disabled]="saving()">
+          {{ saving() ? 'Saving...' : 'Save Changes' }}
+        </button>
+
+        @if (profileMessage()) {
+          <p class="success-message">{{ profileMessage() }}</p>
+        }
+      </form>
+    </section>
+
+    <section class="profile-section">
+      <h2>Change Password</h2>
+
+      <form (ngSubmit)="updatePassword()">
+        <label for="currentPassword">Current Password</label>
+        <input
+          id="currentPassword"
+          name="currentPassword"
+          type="password"
+          [(ngModel)]="currentPassword"
+          required />
+
+        <label for="newPassword">New Password</label>
+        <input
+          id="newPassword"
+          name="newPassword"
+          type="password"
+          [(ngModel)]="newPassword"
+          required />
+
+        <label for="confirmPassword">Confirm New Password</label>
+        <input
+          id="confirmPassword"
+          name="confirmPassword"
+          type="password"
+          [(ngModel)]="confirmPassword"
+          required />
+
+        <button type="submit" [disabled]="changingPassword()">
+          {{ changingPassword() ? 'Updating...' : 'Change Password' }}
+        </button>
+
+        @if (passwordMessage()) {
+          <p class="success-message">{{ passwordMessage() }}</p>
+        }
+      </form>
+    </section>
+  }
 </main>
