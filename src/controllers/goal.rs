@@ -200,7 +200,7 @@ pub async fn api_list_goals(
     let goals = rows
         .iter()
         .map(|r| GoalResponse::new(r, now))
-        .filter(|g| filter.is_none_or(|f| g.status == f))
+        .filter(|g| filter.map_or(true, |f| g.status == f))
         .collect();
 
     Ok(Json(GoalsResponse { goals }))
@@ -279,6 +279,7 @@ pub async fn api_get_goal(
     security(("auth-token" = [])),
     tag = "Goals"
 )]
+#[allow(clippy::too_many_lines)]
 pub async fn api_update_goal(
     Extension(user): Extension<AuthUser>,
     Extension(pool): Extension<PgPool>,
