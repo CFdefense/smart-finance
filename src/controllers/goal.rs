@@ -26,64 +26,16 @@ use crate::{
     },
 };
 
-/// Loads one goal (with derived inputs) owned by `user_id`.
-async fn fetch_goal(conn: &mut PgConnection, id: i32, user_id: i32) -> ApiResult<GoalRow> {
-    sqlx::query_as!(
-        GoalRow,
-        r#"
-        SELECT g.id, g.user_id, g.name, g.description, g.target_amount, g.target_date,
-               g.account_id, g.baseline_balance, g.archived, g.created_at, g.updated_at,
-               COALESCE((SELECT SUM(c.amount) FROM goal_contributions c WHERE c.goal_id = g.id), 0)
-                   AS "manual_total!",
-               a.current_balance AS account_balance
-        FROM goals g
-        LEFT JOIN plaid_accounts a ON a.account_id = g.account_id
-        WHERE g.id = $1 AND g.user_id = $2
-        "#,
-        id,
-        user_id
-    )
-    .fetch_optional(conn)
-    .await
-    .map_err(AppError::from)?
-    .ok_or(AppError::NotFound)
-}
-
-/// Locks the goal row for the rest of the transaction, or `NotFound`.
-async fn lock_goal(conn: &mut PgConnection, id: i32, user_id: i32) -> ApiResult<()> {
-    sqlx::query_scalar!(
-        "SELECT id FROM goals WHERE id = $1 AND user_id = $2 FOR UPDATE",
-        id,
-        user_id
-    )
-    .fetch_optional(conn)
-    .await
-    .map_err(AppError::from)?
-    .map(|_| ())
-    .ok_or(AppError::NotFound)
-}
-
-/// Sum of manual contributions for a goal.
-async fn manual_total(conn: &mut PgConnection, goal_id: i32) -> ApiResult<f64> {
-    let total = sqlx::query_scalar!(
-        r#"SELECT COALESCE(SUM(amount), 0) AS "total!" FROM goal_contributions WHERE goal_id = $1"#,
-        goal_id
-    )
-    .fetch_one(conn)
-    .await
-    .map_err(AppError::from)?;
-    Ok(total)
-}
-
 /// Verifies `account_id` belongs to the user and is a depository account.
 ///
-/// Returns its current balance (0 when Plaid reported none). Foreign or unknown accounts
+/// Returns its current balance (`None` when Plaid reported none). Foreign or unknown accounts
 /// are `NotFound` so existence is not leaked; other account types are a validation error.
 async fn owned_depository_balance(
     conn: &mut PgConnection,
     user_id: i32,
     account_id: &str,
-) -> ApiResult<f64> {
+) -> ApiResult<Option<f64>> {
+    // Get the account info
     let account = sqlx::query!(
         r#"
         SELECT a.account_type, a.current_balance
@@ -99,12 +51,14 @@ async fn owned_depository_balance(
     .map_err(AppError::from)?
     .ok_or(AppError::NotFound)?;
 
+    // Ensure type is depository
     if account.account_type != "depository" {
         return Err(AppError::Validation(
             "only depository (checking/savings) accounts can be linked to a goal".to_string(),
         ));
     }
-    Ok(account.current_balance.unwrap_or(0.0))
+
+    Ok(account.current_balance)
 }
 
 /// Create a goal, optionally tracking a linked account.
@@ -120,7 +74,7 @@ async fn owned_depository_balance(
         example = json!({"name": "Emergency fund", "target_amount": 5000.0, "target_date": "2030-01-01", "account_id": "plaid-account-id"})
     ),
     responses(
-        (status = 201, description = "Goal created", body = GoalResponse),
+        (status = 201, description = "Goal created"),
         (status = 400, description = "Validation failure"),
         (status = 401, description = "Not authenticated"),
         (status = 404, description = "Linked account not found")
@@ -132,29 +86,37 @@ pub async fn api_create_goal(
     Extension(user): Extension<AuthUser>,
     Extension(pool): Extension<PgPool>,
     Json(payload): Json<CreateGoalRequest>,
-) -> ApiResult<(StatusCode, Json<GoalResponse>)> {
+) -> ApiResult<StatusCode> {
     debug!("HANDLER ->> POST /api/goals user_id={}", user.id);
 
+    // Get date
     let now = today();
 
+    // Validate the payload
     payload.validate(now).map_err(AppError::Validation)?;
 
+    // Start a transaction
     let mut tx = pool.begin().await.map_err(AppError::from)?;
 
-    // Baseline is only meaningful with a linked account.
-    let baseline = match &payload.account_id {
+    // The baseline only applies to a linked account; it defaults to that account's balance.
+    let (baseline, balance) = match &payload.account_id {
         Some(account_id) => {
             let balance = owned_depository_balance(&mut tx, user.id, account_id).await?;
-            Some(payload.baseline_balance.unwrap_or(balance))
+            let baseline = payload.baseline_balance.unwrap_or(balance.unwrap_or(0.0));
+            (Some(baseline), balance)
         }
-        None => None,
+        None => (None, None),
     };
 
-    let id = sqlx::query_scalar!(
+    // A new goal has no contributions yet, so the response needs no further lookup.
+    sqlx::query_as!(
+        GoalRow,
         r#"
         INSERT INTO goals (user_id, name, description, target_amount, target_date, account_id, baseline_balance)
         VALUES ($1, $2, $3, $4, $5, $6, $7)
-        RETURNING id
+        RETURNING id, user_id, name, description, target_amount, target_date,
+                  account_id, baseline_balance, archived, created_at, updated_at,
+                  0::float8 AS "manual_total!", $8::float8 AS account_balance
         "#,
         user.id,
         payload.name.trim(),
@@ -166,15 +128,17 @@ pub async fn api_create_goal(
         payload.target_amount,
         payload.target_date,
         payload.account_id,
-        baseline
+        baseline,
+        balance
     )
     .fetch_one(&mut *tx)
     .await
     .map_err(AppError::from)?;
 
-    let row = fetch_goal(&mut tx, id, user.id).await?;
+    // Commit the transaction
     tx.commit().await.map_err(AppError::from)?;
-    Ok((StatusCode::CREATED, Json(GoalResponse::new(&row, now))))
+
+    Ok(StatusCode::CREATED)
 }
 
 /// List the user's goals, optionally filtered by derived status.
@@ -199,13 +163,19 @@ pub async fn api_list_goals(
     Query(query): Query<GoalsQuery>,
 ) -> ApiResult<Json<GoalsResponse>> {
     debug!("HANDLER ->> GET /api/goals user_id={}", user.id);
-    let filter = match query.status.as_deref() {
-        None => None,
-        Some(s) => Some(GoalStatus::parse(s).ok_or_else(|| {
-            AppError::Validation("status must be ACTIVE, COMPLETED or ARCHIVED".to_string())
-        })?),
-    };
 
+    // Build the query
+    let filter = query
+        .status
+        .as_deref()
+        .map(|s| {
+            GoalStatus::parse(s).ok_or_else(|| {
+                AppError::Validation("status must be ACTIVE, COMPLETED or ARCHIVED".to_string())
+            })
+        })
+        .transpose()?;
+
+    // Query for the goals
     let rows = sqlx::query_as!(
         GoalRow,
         r#"
@@ -225,12 +195,14 @@ pub async fn api_list_goals(
     .await
     .map_err(AppError::from)?;
 
+    // Status is derived, so it is filtered after computing each response.
     let now = today();
     let goals = rows
         .iter()
         .map(|r| GoalResponse::new(r, now))
-        .filter(|g| filter.map_or(true, |f| g.status == f))
+        .filter(|g| filter.is_none_or(|f| g.status == f))
         .collect();
+
     Ok(Json(GoalsResponse { goals }))
 }
 
@@ -256,8 +228,28 @@ pub async fn api_get_goal(
     Path(id): Path<i32>,
 ) -> ApiResult<Json<GoalResponse>> {
     debug!("HANDLER ->> GET /api/goals/{id} user_id={}", user.id);
-    let mut conn = pool.acquire().await.map_err(AppError::from)?;
-    let row = fetch_goal(&mut conn, id, user.id).await?;
+
+    // Get the goal
+    let row = sqlx::query_as!(
+        GoalRow,
+        r#"
+        SELECT g.id, g.user_id, g.name, g.description, g.target_amount, g.target_date,
+               g.account_id, g.baseline_balance, g.archived, g.created_at, g.updated_at,
+               COALESCE((SELECT SUM(c.amount) FROM goal_contributions c WHERE c.goal_id = g.id), 0)
+                   AS "manual_total!",
+               a.current_balance AS account_balance
+        FROM goals g
+        LEFT JOIN plaid_accounts a ON a.account_id = g.account_id
+        WHERE g.id = $1 AND g.user_id = $2
+        "#,
+        id,
+        user.id
+    )
+    .fetch_optional(&pool)
+    .await
+    .map_err(AppError::from)?
+    .ok_or(AppError::NotFound)?;
+
     Ok(Json(GoalResponse::new(&row, today())))
 }
 
@@ -294,49 +286,72 @@ pub async fn api_update_goal(
     Json(payload): Json<UpdateGoalRequest>,
 ) -> ApiResult<Json<GoalResponse>> {
     debug!("HANDLER ->> PUT /api/goals/{id} user_id={}", user.id);
+
+    // Get the date
     let now = today();
+
+    // Validate the payload
     payload.validate(now).map_err(AppError::Validation)?;
 
+    // Start a transaction
     let mut tx = pool.begin().await.map_err(AppError::from)?;
-    lock_goal(&mut tx, id, user.id).await?;
-    let current = fetch_goal(&mut tx, id, user.id).await?;
 
-    // Work out what happens to the linked account.
-    let mut set_account = false;
-    let mut new_account: Option<String> = None;
-    let mut new_baseline: Option<f64> = None;
-    match &payload.account_id {
-        // Unlink (only does something if currently linked).
-        Some(None) => {
-            set_account = current.account_id.is_some();
+    // Read the goal and lock its row for the rest of the transaction.
+    let current = sqlx::query_as!(
+        GoalRow,
+        r#"
+        SELECT g.id, g.user_id, g.name, g.description, g.target_amount, g.target_date,
+               g.account_id, g.baseline_balance, g.archived, g.created_at, g.updated_at,
+               COALESCE((SELECT SUM(c.amount) FROM goal_contributions c WHERE c.goal_id = g.id), 0)
+                   AS "manual_total!",
+               a.current_balance AS account_balance
+        FROM goals g
+        LEFT JOIN plaid_accounts a ON a.account_id = g.account_id
+        WHERE g.id = $1 AND g.user_id = $2
+        FOR UPDATE OF g
+        "#,
+        id,
+        user.id
+    )
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(AppError::from)?
+    .ok_or(AppError::NotFound)?;
+
+    // `None` = leave the link alone, otherwise the new (account, baseline, balance);
+    // all `None` unlinks. A different account, or the same one with an explicit baseline, relinks.
+    let link = match &payload.account_id {
+        Some(None) => current.account_id.is_some().then_some((None, None, None)),
+        Some(Some(account))
+            if current.account_id.as_deref() != Some(account.as_str())
+                || payload.baseline_balance.is_some() =>
+        {
+            let balance = owned_depository_balance(&mut tx, user.id, account).await?;
+            let baseline = payload.baseline_balance.unwrap_or(balance.unwrap_or(0.0));
+            Some((Some(account.clone()), Some(baseline), balance))
         }
-        // Link: a different account, or the same one with an explicit new baseline.
-        Some(Some(account)) => {
-            let changed = current.account_id.as_deref() != Some(account.as_str());
-            if changed || payload.baseline_balance.is_some() {
-                let balance = owned_depository_balance(&mut tx, user.id, account).await?;
-                new_baseline = Some(payload.baseline_balance.unwrap_or(balance));
-                new_account = Some(account.clone());
-                set_account = true;
-            }
-        }
-        None => {}
-    }
+        _ => None,
+    };
+
+    // Validate new account info
+    let set_account = link.is_some();
+    let (new_account, new_baseline, new_balance) = link.unwrap_or_default();
 
     // Settle growth earned on the old account before moving the baseline.
+    let mut settled = 0.0;
     if set_account {
         if let (Some(_), Some(balance), Some(baseline)) = (
             &current.account_id,
             current.account_balance,
             current.baseline_balance,
         ) {
-            let growth = round_cents(balance - baseline);
-            if growth != 0.0 {
+            settled = round_cents(balance - baseline);
+            if settled != 0.0 {
                 sqlx::query!(
                     "INSERT INTO goal_contributions (goal_id, amount, contribution_date, note)
                      VALUES ($1, $2, $3, 'Settled from linked account')",
                     id,
-                    growth,
+                    settled,
                     now
                 )
                 .execute(&mut *tx)
@@ -346,6 +361,7 @@ pub async fn api_update_goal(
         }
     }
 
+    // Update other information
     let set_description = payload.description.is_some();
     let new_description = payload
         .description
@@ -355,7 +371,9 @@ pub async fn api_update_goal(
     let set_target_date = payload.target_date.is_some();
     let new_target_date = payload.target_date.flatten();
 
-    sqlx::query!(
+    // The returned row carries the totals we already know, so no second lookup is needed.
+    let row = sqlx::query_as!(
+        GoalRow,
         r#"
         UPDATE goals SET
             name             = COALESCE($3, name),
@@ -367,6 +385,9 @@ pub async fn api_update_goal(
             archived         = COALESCE($12, archived),
             updated_at       = NOW()
         WHERE id = $1 AND user_id = $2
+        RETURNING id, user_id, name, description, target_amount, target_date,
+                  account_id, baseline_balance, archived, created_at, updated_at,
+                  $13::float8 AS "manual_total!", $14::float8 AS account_balance
         "#,
         id,
         user.id,
@@ -379,14 +400,21 @@ pub async fn api_update_goal(
         set_account,
         new_account,
         new_baseline,
-        payload.archived
+        payload.archived,
+        current.manual_total + settled,
+        if set_account {
+            new_balance
+        } else {
+            current.account_balance
+        }
     )
-    .execute(&mut *tx)
+    .fetch_one(&mut *tx)
     .await
     .map_err(AppError::from)?;
 
-    let row = fetch_goal(&mut tx, id, user.id).await?;
+    // Update the transaction
     tx.commit().await.map_err(AppError::from)?;
+
     Ok(Json(GoalResponse::new(&row, now)))
 }
 
@@ -413,7 +441,7 @@ pub async fn api_delete_goal(
 ) -> ApiResult<StatusCode> {
     debug!("HANDLER ->> DELETE /api/goals/{id} user_id={}", user.id);
 
-    // Attempt delete
+    // Delete the goal
     let result = sqlx::query!(
         "DELETE FROM goals WHERE id = $1 AND user_id = $2",
         id,
@@ -423,7 +451,7 @@ pub async fn api_delete_goal(
     .await
     .map_err(AppError::from)?;
 
-    // Error if no rows affected by the delete
+    // Error if no rows affected by delete
     if result.rows_affected() == 0 {
         return Err(AppError::NotFound);
     }
@@ -467,18 +495,46 @@ pub async fn api_add_contribution(
         "HANDLER ->> POST /api/goals/{id}/contributions user_id={}",
         user.id
     );
+
+    // Get todays date
     let now = today();
+
+    // Validate the payload
     payload.validate(now).map_err(AppError::Validation)?;
 
+    // Start a transaction
     let mut tx = pool.begin().await.map_err(AppError::from)?;
-    lock_goal(&mut tx, id, user.id).await?;
-    let goal = fetch_goal(&mut tx, id, user.id).await?;
+
+    // Read the goal and lock its row so concurrent withdrawals can't both pass the check.
+    let mut goal = sqlx::query_as!(
+        GoalRow,
+        r#"
+        SELECT g.id, g.user_id, g.name, g.description, g.target_amount, g.target_date,
+               g.account_id, g.baseline_balance, g.archived, g.created_at, g.updated_at,
+               COALESCE((SELECT SUM(c.amount) FROM goal_contributions c WHERE c.goal_id = g.id), 0)
+                   AS "manual_total!",
+               a.current_balance AS account_balance
+        FROM goals g
+        LEFT JOIN plaid_accounts a ON a.account_id = g.account_id
+        WHERE g.id = $1 AND g.user_id = $2
+        FOR UPDATE OF g
+        "#,
+        id,
+        user.id
+    )
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(AppError::from)?
+    .ok_or(AppError::NotFound)?;
+
+    // Check if goal is archived and error
     if goal.archived {
         return Err(AppError::Conflict(
             "archived goals cannot receive contributions".to_string(),
         ));
     }
 
+    // Round amount and add contribution
     let amount = round_cents(payload.amount);
     if amount < 0.0 && goal.manual_total + amount < -EPSILON {
         return Err(AppError::Validation(
@@ -486,6 +542,7 @@ pub async fn api_add_contribution(
         ));
     }
 
+    // Update balance
     let row = sqlx::query_as!(
         ContributionRow,
         r#"
@@ -506,13 +563,16 @@ pub async fn api_add_contribution(
     .await
     .map_err(AppError::from)?;
 
-    let updated = fetch_goal(&mut tx, id, user.id).await?;
+    // Commit transaction
     tx.commit().await.map_err(AppError::from)?;
+
+    // The goal was read under the lock, so applying the amount here matches the database.
+    goal.manual_total += amount;
     Ok((
         StatusCode::CREATED,
         Json(ContributionCreatedResponse {
             contribution: row.into(),
-            goal: GoalResponse::new(&updated, now),
+            goal: GoalResponse::new(&goal, now),
         }),
     ))
 }
@@ -542,9 +602,19 @@ pub async fn api_list_contributions(
         "HANDLER ->> GET /api/goals/{id}/contributions user_id={}",
         user.id
     );
-    let mut conn = pool.acquire().await.map_err(AppError::from)?;
-    fetch_goal(&mut conn, id, user.id).await?;
 
+    // Confirms the goal exists and belongs to the user.
+    sqlx::query_scalar!(
+        "SELECT id FROM goals WHERE id = $1 AND user_id = $2",
+        id,
+        user.id
+    )
+    .fetch_optional(&pool)
+    .await
+    .map_err(AppError::from)?
+    .ok_or(AppError::NotFound)?;
+
+    // Get contributions
     let rows = sqlx::query_as!(
         ContributionRow,
         "SELECT id, goal_id, amount, contribution_date, note, created_at
@@ -552,7 +622,7 @@ pub async fn api_list_contributions(
          ORDER BY contribution_date DESC, id DESC",
         id
     )
-    .fetch_all(&mut *conn)
+    .fetch_all(&pool)
     .await
     .map_err(AppError::from)?;
 
@@ -593,10 +663,36 @@ pub async fn api_delete_contribution(
         "HANDLER ->> DELETE /api/goals/{id}/contributions/{cid} user_id={}",
         user.id
     );
-    let now = today();
-    let mut tx = pool.begin().await.map_err(AppError::from)?;
-    lock_goal(&mut tx, id, user.id).await?;
 
+    // Get todays date
+    let now = today();
+
+    // Start a transaction
+    let mut tx = pool.begin().await.map_err(AppError::from)?;
+
+    // Read the goal and lock its row so concurrent changes can't leave the total negative.
+    let mut goal = sqlx::query_as!(
+        GoalRow,
+        r#"
+        SELECT g.id, g.user_id, g.name, g.description, g.target_amount, g.target_date,
+               g.account_id, g.baseline_balance, g.archived, g.created_at, g.updated_at,
+               COALESCE((SELECT SUM(c.amount) FROM goal_contributions c WHERE c.goal_id = g.id), 0)
+                   AS "manual_total!",
+               a.current_balance AS account_balance
+        FROM goals g
+        LEFT JOIN plaid_accounts a ON a.account_id = g.account_id
+        WHERE g.id = $1 AND g.user_id = $2
+        FOR UPDATE OF g
+        "#,
+        id,
+        user.id
+    )
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(AppError::from)?
+    .ok_or(AppError::NotFound)?;
+
+    // Get the goal contribution
     let amount = sqlx::query_scalar!(
         "SELECT amount FROM goal_contributions WHERE id = $1 AND goal_id = $2",
         cid,
@@ -607,21 +703,26 @@ pub async fn api_delete_contribution(
     .map_err(AppError::from)?
     .ok_or(AppError::NotFound)?;
 
-    let total = manual_total(&mut tx, id).await?;
-    if amount > 0.0 && total - amount < -EPSILON {
+    // Check if this can be deleted
+    if amount > 0.0 && goal.manual_total - amount < -EPSILON {
         return Err(AppError::Conflict(
             "deleting this deposit would leave withdrawals uncovered".to_string(),
         ));
     }
 
+    // Preform the deletion
     sqlx::query!("DELETE FROM goal_contributions WHERE id = $1", cid)
         .execute(&mut *tx)
         .await
         .map_err(AppError::from)?;
 
-    let row = fetch_goal(&mut tx, id, user.id).await?;
+    // Commit the transaction
     tx.commit().await.map_err(AppError::from)?;
-    Ok(Json(GoalResponse::new(&row, now)))
+
+    // Update the balance on the response object
+    goal.manual_total -= amount;
+
+    Ok(Json(GoalResponse::new(&goal, now)))
 }
 
 /// `OpenAPI` doc for goal routes.

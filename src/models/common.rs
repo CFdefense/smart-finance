@@ -71,7 +71,7 @@ where
     Option::<T>::deserialize(deserializer).map(Some)
 }
 
-/// Uses NaiveDate to return todays date in UTC
+/// Uses `NaiveDate` to return todays date in UTC
 pub fn today() -> NaiveDate {
     Utc::now().date_naive()
 }

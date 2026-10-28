@@ -102,17 +102,28 @@ pub struct CreateGoalRequest {
 impl CreateGoalRequest {
     /// Validates all fields against `today`.
     pub fn validate(&self, today: NaiveDate) -> Result<(), String> {
+        // Validate the name
         validate_name(&self.name)?;
+
+        // Ensure the amount is positive
         validate_positive_amount("target_amount", self.target_amount)?;
+
+        // Validate length of description
         if let Some(d) = &self.description {
             validate_max_len("description", d, GOAL_MAX_DESCRIPTION)?;
         }
+
+        // Ensure the date is in the future
         if let Some(date) = self.target_date {
             validate_future("target_date", date, today)?;
         }
+
+        // Ensure account id is valid
         if let Some(id) = &self.account_id {
             validate_account_id(id)?;
         }
+
+        // Validate initial balance
         if let Some(b) = self.baseline_balance {
             if self.account_id.is_none() {
                 return Err("baseline_balance requires account_id".to_string());
