@@ -31,4 +31,6 @@ pub struct UserProfileRow {
     pub phone_number: Option<String>,
     /// Whether SMS notifications are enabled.
     pub sms_notifications: bool,
+    /// Carrier email-to-SMS gateway domain (e.g. `tmomail.net`), or `None` if not set.
+    pub sms_carrier_gateway: Option<String>,
 }

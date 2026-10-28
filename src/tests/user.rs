@@ -649,7 +649,12 @@ async fn put_profile_set_phone_and_sms() {
                 .header("content-type", "application/json")
                 .header("cookie", &cookie)
                 .body(Body::from(
-                    json!({"phone_number": "+15551234567", "sms_notifications": true}).to_string(),
+                    json!({
+                        "phone_number": "+15551234567",
+                        "sms_notifications": true,
+                        "sms_carrier_gateway": "tmomail.net"
+                    })
+                    .to_string(),
                 ))
                 .unwrap(),
         )

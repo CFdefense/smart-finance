@@ -286,7 +286,8 @@ pub async fn api_get_profile(
     let row = sqlx::query_as!(
         UserProfileRow,
         r#"
-        SELECT first_name, last_name, email, email_notifications, phone_number, sms_notifications
+        SELECT first_name, last_name, email, email_notifications,
+               phone_number, sms_notifications, sms_carrier_gateway
         FROM users
         WHERE id = $1
         "#,
@@ -303,6 +304,7 @@ pub async fn api_get_profile(
         email_notifications: row.email_notifications,
         phone_number: row.phone_number,
         sms_notifications: row.sms_notifications,
+        sms_carrier_gateway: row.sms_carrier_gateway,
     }))
 }
 
@@ -315,7 +317,7 @@ pub async fn api_get_profile(
 #[utoipa::path(
     put,
     path = "/profile",
-    summary = "Update the current user's notification preferences",
+    summary = "Update the current user's profile information and notification preferences",
     request_body(
         content = UpdateProfileRequest,
         content_type = "application/json",
@@ -337,13 +339,21 @@ pub async fn api_update_profile(
 ) -> ApiResult<()> {
     debug!("HANDLER ->> PUT /api/user/profile user_id={}", user.id);
 
-    let existing_phone: Option<String> =
-        sqlx::query_scalar!("SELECT phone_number FROM users WHERE id = $1", user.id)
-            .fetch_one(&pool)
-            .await
-            .map_err(AppError::from)?;
+    let (existing_phone, existing_gateway, existing_sms): (Option<String>, Option<String>, bool) =
+        sqlx::query!(
+            "SELECT phone_number, sms_carrier_gateway, sms_notifications FROM users WHERE id = $1",
+            user.id
+        )
+        .fetch_one(&pool)
+        .await
+        .map(|r| (r.phone_number, r.sms_carrier_gateway, r.sms_notifications))
+        .map_err(AppError::from)?;
 
-    if let Err(e) = payload.validate(existing_phone.as_deref()) {
+    if let Err(e) = payload.validate(
+        existing_phone.as_deref(),
+        existing_gateway.as_deref(),
+        existing_sms,
+    ) {
         return Err(AppError::Validation(e));
     }
 
@@ -353,6 +363,8 @@ pub async fn api_update_profile(
     //   Some(v)          => set to v
     let clear_phone = payload.phone_number.as_deref() == Some("");
     let new_phone: Option<String> = payload.phone_number.filter(|p| !p.is_empty());
+    let clear_gateway = payload.sms_carrier_gateway.as_deref() == Some("");
+    let new_gateway: Option<String> = payload.sms_carrier_gateway.filter(|g| !g.is_empty());
 
     let new_first_name = payload
         .first_name
@@ -382,15 +394,22 @@ pub async fn api_update_profile(
                 WHEN $2 THEN false
                 ELSE COALESCE($4, sms_notifications)
             END,
-            first_name = COALESCE($5::TEXT, first_name),
-            last_name = COALESCE($6::TEXT, last_name),
-            email = COALESCE($7::TEXT, email)
-        WHERE id = $8
+            sms_carrier_gateway = CASE
+                WHEN $5 THEN NULL
+                WHEN $6::TEXT IS NOT NULL THEN $6::TEXT
+                ELSE sms_carrier_gateway
+            END,
+            first_name = COALESCE($7::TEXT, first_name),
+            last_name = COALESCE($8::TEXT, last_name),
+            email = COALESCE($9::TEXT, email)
+        WHERE id = $10
         "#,
         payload.email_notifications,
         clear_phone,
         new_phone,
         payload.sms_notifications,
+        clear_gateway,
+        new_gateway,
         new_first_name,
         new_last_name,
         new_email,
@@ -401,11 +420,9 @@ pub async fn api_update_profile(
 
     match result {
         Ok(_) => Ok(()),
-
         Err(sqlx::Error::Database(error)) if error.code().as_deref() == Some("23505") => Err(
             AppError::Conflict("Email address already in use".to_string()),
         ),
-
         Err(error) => Err(AppError::from(error)),
     }
 }
