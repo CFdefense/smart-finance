@@ -4,12 +4,10 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-use crate::models::{common::validate_max_len, sql::rule::RuleRow};
-
-/// Maximum length of a rule sentence.
-const MAX_DESCRIPTION: usize = 500;
-/// Maximum number of accounts a single rule can target.
-const MAX_ACCOUNTS: usize = 50;
+use crate::{
+    global::{MAX_RULE_ACCOUNTS, MAX_RULE_DESCRIPTION},
+    models::{common::validate_max_len, sql::rule::RuleRow},
+};
 
 /// Request body for `POST /api/rules` and `PUT /api/rules/{id}` (PUT replaces the rule).
 #[derive(Debug, Deserialize, ToSchema)]
@@ -31,12 +29,14 @@ impl RuleRequest {
         if self.description.trim().is_empty() {
             return Err("description must not be empty".to_string());
         }
-        validate_max_len("description", &self.description, MAX_DESCRIPTION)?;
+        validate_max_len("description", &self.description, MAX_RULE_DESCRIPTION)?;
         if self.account_ids.iter().any(|a| a.trim().is_empty()) {
             return Err("account_ids must not contain empty values".to_string());
         }
-        if self.unique_account_ids().len() > MAX_ACCOUNTS {
-            return Err(format!("a rule can target at most {MAX_ACCOUNTS} accounts"));
+        if self.unique_account_ids().len() > MAX_RULE_ACCOUNTS {
+            return Err(format!(
+                "a rule can target at most {MAX_RULE_ACCOUNTS} accounts"
+            ));
         }
         Ok(())
     }
@@ -52,7 +52,6 @@ impl RuleRequest {
         seen
     }
 }
-
 /// A stored rule.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct RuleResponse {
@@ -60,9 +59,7 @@ pub struct RuleResponse {
     pub id: i32,
     /// The user's sentence.
     pub description: String,
-    /// `true` when the rule applies to every account the user owns (`account_ids` is then empty).
-    pub all_accounts: bool,
-    /// Accounts the rule targets.
+    /// Accounts the rule targets. Empty means the rule applies to **all** of the user's accounts.
     pub account_ids: Vec<String>,
     /// Whether the rule is active.
     pub enabled: bool,
@@ -71,13 +68,12 @@ pub struct RuleResponse {
 }
 
 impl RuleResponse {
-    /// Builds a response from a row and its targeted accounts.
-    pub fn new(row: &RuleRow, account_ids: Vec<String>) -> Self {
+    /// Builds a response from a row (which already carries its targeted accounts).
+    pub fn new(row: &RuleRow) -> Self {
         Self {
             id: row.id,
             description: row.description.clone(),
-            all_accounts: row.all_accounts,
-            account_ids,
+            account_ids: row.account_ids.clone(),
             enabled: row.enabled,
             created_at: row.created_at,
         }
@@ -117,8 +113,12 @@ mod test {
         assert!(req("no food", &[]).validate().is_ok());
         assert!(req("   ", &[]).validate().is_err());
         assert!(req("", &[]).validate().is_err());
-        assert!(req(&"x".repeat(500), &[]).validate().is_ok());
-        assert!(req(&"x".repeat(501), &[]).validate().is_err());
+        assert!(req(&"x".repeat(MAX_RULE_DESCRIPTION), &[])
+            .validate()
+            .is_ok());
+        assert!(req(&"x".repeat(MAX_RULE_DESCRIPTION + 1), &[])
+            .validate()
+            .is_err());
     }
 
     #[test]
