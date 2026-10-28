@@ -6,7 +6,7 @@ use utoipa::ToSchema;
 
 use crate::models::{
     category::Category,
-    http::common::{round_cents, validate_name, validate_positive_amount},
+    common::{round_cents, validate_name, validate_positive_amount},
     sql::budget::BudgetRow,
 };
 
@@ -160,7 +160,7 @@ pub struct BudgetsResponse {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::models::http::common::MAX_AMOUNT;
+    use crate::models::common::MAX_AMOUNT;
     use chrono::Utc;
 
     fn row(limit: f64) -> BudgetRow {
