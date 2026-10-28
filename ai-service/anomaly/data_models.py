@@ -17,6 +17,9 @@ class Transaction(BaseModel):
     name: str
     amount: float
     date: date
+    # Not loaded from the database yet, so always None for now. Detectors that use it
+    # must fall back to the whole history when it's missing.
+    category: str | None = None
 
 
 class FlaggedTransaction(BaseModel):
