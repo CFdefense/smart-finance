@@ -2,9 +2,6 @@
 
 use serde::{Deserialize, Deserializer};
 
-/// Largest accepted monetary amount (guards against absurd values and float overflow).
-pub const MAX_AMOUNT: f64 = 1_000_000_000.0;
-
 /// Rounds a monetary value to cents to hide floating-point noise.
 pub fn round_cents(value: f64) -> f64 {
     (value * 100.0).round() / 100.0

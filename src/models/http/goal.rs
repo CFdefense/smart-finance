@@ -1,5 +1,6 @@
 //! HTTP request and response models for goal routes.
 
+use crate::global::MAX_AMOUNT;
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -7,7 +8,6 @@ use utoipa::ToSchema;
 use crate::models::{
     common::{
         double_option, round_cents, validate_max_len, validate_name, validate_positive_amount,
-        MAX_AMOUNT,
     },
     sql::goal::{ContributionRow, GoalRow},
 };
