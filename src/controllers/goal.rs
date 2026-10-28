@@ -6,7 +6,6 @@ use axum::{
     routing::{delete, get},
     Extension, Json,
 };
-use chrono::{NaiveDate, Utc};
 use sqlx::{PgConnection, PgPool};
 use tracing::debug;
 use utoipa::OpenApi;
@@ -14,9 +13,10 @@ use utoipa::OpenApi;
 use crate::{
     controllers::AxumRouter,
     error::{ApiResult, AppError},
+    global::EPSILON,
     middleware::{middleware_auth, AuthUser},
     models::{
-        common::round_cents,
+        common::{round_cents, today},
         http::goal::{
             ContributionCreatedResponse, ContributionResponse, ContributionsResponse,
             CreateContributionRequest, CreateGoalRequest, GoalResponse, GoalStatus, GoalsQuery,
@@ -25,13 +25,6 @@ use crate::{
         sql::goal::{ContributionRow, GoalRow},
     },
 };
-
-/// Tolerance when checking that the manual total stays non-negative (half a cent).
-const EPSILON: f64 = 0.005;
-
-fn today() -> NaiveDate {
-    Utc::now().date_naive()
-}
 
 /// Loads one goal (with derived inputs) owned by `user_id`.
 async fn fetch_goal(conn: &mut PgConnection, id: i32, user_id: i32) -> ApiResult<GoalRow> {
@@ -141,7 +134,9 @@ pub async fn api_create_goal(
     Json(payload): Json<CreateGoalRequest>,
 ) -> ApiResult<(StatusCode, Json<GoalResponse>)> {
     debug!("HANDLER ->> POST /api/goals user_id={}", user.id);
+
     let now = today();
+
     payload.validate(now).map_err(AppError::Validation)?;
 
     let mut tx = pool.begin().await.map_err(AppError::from)?;
@@ -417,6 +412,8 @@ pub async fn api_delete_goal(
     Path(id): Path<i32>,
 ) -> ApiResult<StatusCode> {
     debug!("HANDLER ->> DELETE /api/goals/{id} user_id={}", user.id);
+
+    // Attempt delete
     let result = sqlx::query!(
         "DELETE FROM goals WHERE id = $1 AND user_id = $2",
         id,
@@ -425,9 +422,12 @@ pub async fn api_delete_goal(
     .execute(&pool)
     .await
     .map_err(AppError::from)?;
+
+    // Error if no rows affected by the delete
     if result.rows_affected() == 0 {
         return Err(AppError::NotFound);
     }
+
     Ok(StatusCode::NO_CONTENT)
 }
 
