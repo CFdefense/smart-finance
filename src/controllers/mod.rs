@@ -5,6 +5,7 @@
 //! it is a plain [`axum::Router`].
 
 pub mod plaid;
+pub mod rule;
 pub mod user;
 
 /// A plain [`axum::Router`] in test and release builds.
