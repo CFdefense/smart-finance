@@ -55,6 +55,34 @@ pub struct ProfileResponse {
     pub sms_carrier_gateway: Option<String>,
 }
 
+/// Supported SMS carrier gateways.
+#[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq, ToSchema)]
+pub enum SmsCarrierGateway {
+    /// T-Mobile's email-to-SMS gateway.
+    #[serde(rename = "tmomail.net")]
+    TMobile,
+
+    /// Verizon's email-to-SMS gateway.
+    #[serde(rename = "vtext.com")]
+    Verizon,
+
+    /// Represents clearing the selected carrier gateway.
+    #[serde(rename = "")]
+    None,
+}
+
+impl SmsCarrierGateway {
+    /// Returns the gateway domain used by the notification service.
+    /// None represents a request to clear the carrier selection.
+    pub fn as_domain(self) -> Option<&'static str> {
+        match self {
+            Self::TMobile => Some("tmomail.net"),
+            Self::Verizon => Some("vtext.com"),
+            Self::None => None,
+        }
+    }
+}
+
 /// Request body for `PUT /api/user/profile`.
 ///
 /// All fields are optional — omitted fields are left unchanged.
@@ -75,7 +103,7 @@ pub struct UpdateProfileRequest {
     /// Opt in or out of SMS notifications.
     pub sms_notifications: Option<bool>,
     /// Carrier email-to-SMS gateway domain (e.g. `tmomail.net`), `""` to clear, or absent to leave unchanged.
-    pub sms_carrier_gateway: Option<String>,
+    pub sms_carrier_gateway: Option<SmsCarrierGateway>,
 }
 
 impl UpdateProfileRequest {
@@ -131,10 +159,10 @@ impl UpdateProfileRequest {
             None => existing_phone,
         };
 
-        // Effective gateway after this update (same pattern as phone)
-        let effective_gateway: Option<&str> = match &self.sms_carrier_gateway {
-            Some(g) if g.is_empty() => None,
-            Some(g) => Some(g.as_str()),
+        // Use the requested carrier, or retain the existing one.
+        // SmsCarrierGateway::None explicitly clears the carrier.
+        let effective_gateway: Option<&str> = match self.sms_carrier_gateway {
+            Some(gateway) => gateway.as_domain(),
             None => existing_gateway,
         };
 
@@ -357,7 +385,12 @@ mod tests {
             email_notifications: email,
             phone_number: phone.map(str::to_string),
             sms_notifications: sms,
-            sms_carrier_gateway: gateway.map(str::to_string),
+            sms_carrier_gateway: gateway.map(|value| match value {
+                "tmomail.net" => SmsCarrierGateway::TMobile,
+                "vtext.com" => SmsCarrierGateway::Verizon,
+                "" => SmsCarrierGateway::None,
+                _ => panic!("Unsupported gateway in test fixture"),
+            }),
         }
     }
 
@@ -449,5 +482,20 @@ mod tests {
         assert!(upd(None, None, None, Some(""))
             .validate(Some("+15551234567"), Some("tmomail.net"), true)
             .is_err());
+    }
+
+    /// Verifies that only supported SMS carrier gateways can be deserialized.
+    #[test]
+    fn sms_carrier_gateway_deserialization() {
+        // Supported carriers should deserialize successfully.
+        assert!(serde_json::from_str::<SmsCarrierGateway>("\"tmomail.net\"").is_ok());
+
+        assert!(serde_json::from_str::<SmsCarrierGateway>("\"vtext.com\"").is_ok());
+
+        // An empty string represents clearing the carrier.
+        assert!(serde_json::from_str::<SmsCarrierGateway>("\"\"").is_ok());
+
+        // Unsupported carriers should be rejected.
+        assert!(serde_json::from_str::<SmsCarrierGateway>("\"unsupported.com\"").is_err());
     }
 }

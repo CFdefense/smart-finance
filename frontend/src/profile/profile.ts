@@ -34,9 +34,18 @@ export class UserProfile implements OnInit {
   passwordMessage = signal('');
   errorMessage = signal('');
 
+  /**
+   * Loads the user's profile when the component initializes.
+   */
+
   ngOnInit(): void {
     this.loadProfile();
   }
+
+  /**
+   * Retrieves the user's profile and populates the form fields.
+   * Updates the loading and error states based on the response.
+   */
 
   loadProfile(): void {
     this.loading.set(true);
@@ -48,6 +57,7 @@ export class UserProfile implements OnInit {
         this.lastName = profile.last_name;
         this.email = profile.email;
         this.emailNotifications = profile.email_notifications;
+        // Use empty strings for optional fields so the form inputs remain editable.
         this.phoneNumber = profile.phone_number ?? '';
         this.smsNotifications = profile.sms_notifications;
         this.smsCarrierGateway = profile.sms_carrier_gateway ?? '';
@@ -59,6 +69,11 @@ export class UserProfile implements OnInit {
       },
     });
   }
+
+  /**
+   * Validates the profile fields and submits changes to the backend.
+   * Displays the appropriate success or error message.
+   */
 
   saveProfile(): void {
     this.profileMessage.set('');
@@ -100,6 +115,7 @@ export class UserProfile implements OnInit {
         email: this.email,
         email_notifications: this.emailNotifications,
         phone_number: this.phoneNumber,
+        // Disable SMS notifications when no phone number is provided.
         sms_notifications: this.phoneNumber.trim() ? this.smsNotifications : false,
         sms_carrier_gateway: this.smsCarrierGateway,
       })
@@ -125,6 +141,11 @@ export class UserProfile implements OnInit {
         },
       });
   }
+
+  /**
+   * Validates the password confirmation and submits a password change.
+   * Clears the password fields after a successful update.
+   */
 
   updatePassword(): void {
     this.passwordMessage.set('');
@@ -156,6 +177,10 @@ export class UserProfile implements OnInit {
         },
       });
   }
+
+  /**
+   * Navigates the user back to the dashboard.
+   */
 
   backToDashboard(): void {
     this.router.navigate(['/dashboard']);

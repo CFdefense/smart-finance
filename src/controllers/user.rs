@@ -25,7 +25,8 @@ use crate::{
     error::{ApiResult, AppError},
     middleware::{middleware_auth, AuthUser},
     models::http::user::{
-        ChangePasswordRequest, LoginRequest, ProfileResponse, SignupRequest, UpdateProfileRequest,
+        ChangePasswordRequest, LoginRequest, ProfileResponse, SignupRequest, SmsCarrierGateway,
+        UpdateProfileRequest,
     },
     models::sql::user::{UserProfileRow, UserRow},
 };
@@ -363,8 +364,13 @@ pub async fn api_update_profile(
     //   Some(v)          => set to v
     let clear_phone = payload.phone_number.as_deref() == Some("");
     let new_phone: Option<String> = payload.phone_number.filter(|p| !p.is_empty());
-    let clear_gateway = payload.sms_carrier_gateway.as_deref() == Some("");
-    let new_gateway: Option<String> = payload.sms_carrier_gateway.filter(|g| !g.is_empty());
+
+    // Convert the carrier enum into the database's string representation.
+    let clear_gateway = matches!(payload.sms_carrier_gateway, Some(SmsCarrierGateway::None));
+
+    let new_gateway: Option<String> = payload
+        .sms_carrier_gateway
+        .and_then(|gateway| gateway.as_domain().map(str::to_string));
 
     let new_first_name = payload
         .first_name
@@ -420,6 +426,8 @@ pub async fn api_update_profile(
 
     match result {
         Ok(_) => Ok(()),
+        // PostgreSQL SQLSTATE 23505 indicates a unique constraint violation.
+        // Return HTTP 409 when the requested email is already in use.
         Err(sqlx::Error::Database(error)) if error.code().as_deref() == Some("23505") => Err(
             AppError::Conflict("Email address already in use".to_string()),
         ),
