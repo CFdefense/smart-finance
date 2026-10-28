@@ -3,8 +3,8 @@
 -- `category_overridden` protects user-chosen categories from being reset by a re-sync.
 
 ALTER TABLE plaid_transactions
-    ADD COLUMN category TEXT NOT NULL DEFAULT 'OTHER',
-    ADD COLUMN category_overridden BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT 'OTHER',
+    ADD COLUMN IF NOT EXISTS category_overridden BOOLEAN NOT NULL DEFAULT FALSE,
     ADD CONSTRAINT plaid_transactions_category_valid CHECK (category IN (
         'SHOPPING', 'ENTERTAINMENT', 'UTILITIES', 'HEALTHCARE',
         'FOOD_DINING', 'GROCERIES', 'TRANSPORTATION', 'OTHER'

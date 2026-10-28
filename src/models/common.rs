@@ -1,5 +1,6 @@
 //! Validation helpers and serde utilities shared by budget, goal and rule models.
 
+use crate::global::MAX_AMOUNT;
 use serde::{Deserialize, Deserializer};
 
 /// Rounds a monetary value to cents to hide floating-point noise.

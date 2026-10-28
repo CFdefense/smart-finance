@@ -6,6 +6,7 @@
 #
 # Usage:
 #   ./cicd.sh              # full pipeline
+#   ./cicd.sh reset-db     # drop, recreate and migrate the database only
 #   ./cicd.sh fmt          # formatting only
 #   ./cicd.sh clippy       # clippy only
 #   ./cicd.sh python       # python checks only
@@ -29,6 +30,39 @@ ensure_tool() {
     fi
 }
 
+# ── Database helpers ──────────────────────────────────────────────────────────
+# Splits DATABASE_URL into DB_NAME and an ADMIN_URL that points at the
+# maintenance "postgres" database (you can't drop a DB you're connected to).
+db_parts() {
+    local base="${DATABASE_URL%%\?*}"          # strip ?query
+    local query="${DATABASE_URL#"$base"}"      # keep ?query (may be empty)
+    DB_NAME="${base##*/}"
+    ADMIN_URL="${base%/*}/postgres${query}"
+}
+
+# Run SQL against the maintenance DB: host psql if available, else the compose db container.
+psql_admin() {
+    if command -v psql &>/dev/null && psql "$ADMIN_URL" -v ON_ERROR_STOP=1 -qc "$1" 2>/dev/null; then
+        return 0
+    fi
+    docker compose exec -T db psql -U "${POSTGRES_USER:-postgres}" -d postgres \
+        -v ON_ERROR_STOP=1 -qc "$1"
+}
+
+# ── Reset database: drop (killing other sessions), recreate, migrate ──────────
+run_reset_db() {
+    step "Reset database"
+    db_parts
+    case "$DB_NAME" in
+        *prod*) fail "refusing to reset database '$DB_NAME'" ;;
+    esac
+    # WITH (FORCE) (Postgres 13+) terminates other connections, then drops.
+    psql_admin "DROP DATABASE IF EXISTS \"${DB_NAME}\" WITH (FORCE);"
+    sqlx database create --database-url "$DATABASE_URL"
+    sqlx migrate run --database-url "$DATABASE_URL"
+    pass "database reset and migrations applied"
+}
+
 ensure_tool sqlx              "cargo install sqlx-cli --no-default-features --features postgres --locked"
 ensure_tool cargo-tarpaulin   "cargo install cargo-tarpaulin --locked"
 ensure_tool uv                'curl -LsSf https://astral.sh/uv/install.sh | sh && export PATH="$HOME/.local/bin:$PATH"'
@@ -42,7 +76,16 @@ fi
 
 FILTER="${1:-all}"
 
-run_migrate()             { step "Migrations";                        sqlx migrate run && pass "migrations"; }
+# Locally: always start from a clean database so a half-applied or edited
+# migration can never cause "already exists" errors. In CI the service DB is fresh.
+run_migrate() {
+    if [ -z "${CI:-}" ]; then
+        run_reset_db
+    else
+        step "Migrations"; sqlx migrate run && pass "migrations"
+    fi
+}
+
 run_fmt()                 { step "Format check";                      cargo fmt --check && pass "fmt"; }
 run_clippy()              { step "Clippy";                            cargo clippy -- -D warnings && pass "clippy"; }
 run_build()               { step "Build";                             cargo build --locked && pass "build"; }
@@ -59,13 +102,14 @@ run_py_lint()             { step "Python lint";                       (cd ai-ser
 run_py_test()             { step "Python tests (≥75% coverage)";      (cd ai-service && uv run --locked pytest) && pass "py tests"; }
 
 case "$FILTER" in
+  reset-db) run_reset_db ;;
   fmt)     run_fmt ;;
   clippy)  run_clippy ;;
   python)  run_migrate; run_py_sync; run_py_fmt; run_py_lint; run_py_test ;;
   test)    run_migrate; run_unit_coverage; run_integration_coverage ;;
   openapi) run_migrate; run_openapi ;;
   all)
-    run_migrate
+    run_reset_db   # drops, recreates and migrates, so no separate run_migrate here
     run_fmt
     run_clippy
     run_build
@@ -81,5 +125,5 @@ case "$FILTER" in
     run_angular_build
     run_test_coverage
     echo -e "\n${GREEN}✓ All CI checks passed.${NC}" ;;
-  *)  echo "Usage: $0 [fmt|clippy|python|test|openapi|all]"; exit 1 ;;
+  *)  echo "Usage: $0 [reset-db|fmt|clippy|python|test|openapi|all]"; exit 1 ;;
 esac

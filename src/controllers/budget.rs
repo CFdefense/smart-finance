@@ -18,6 +18,7 @@ use crate::{
     error::{ApiResult, AppError},
     middleware::{middleware_auth, AuthUser},
     models::{
+        category::Category,
         http::budget::{
             parse_month, BudgetQuery, BudgetResponse, BudgetsResponse, CreateBudgetRequest,
             MonthWindow, UpdateBudgetRequest,
@@ -31,14 +32,17 @@ async fn spent_by_category(
     pool: &PgPool,
     user_id: i32,
     window: &MonthWindow,
-) -> ApiResult<HashMap<String, f64>> {
+) -> ApiResult<HashMap<Category, f64>> {
     let rows = sqlx::query!(
         r#"
         SELECT t.category AS "category!", COALESCE(SUM(t.amount), 0) AS "spent!"
         FROM plaid_transactions t
         JOIN plaid_accounts a ON a.account_id = t.account_id
         JOIN plaid_links i ON i.item_id = a.item_id
-        WHERE i.user_id = $1 AND t.amount > 0 AND t.date >= $2 AND t.date < $3
+        WHERE i.user_id = $1
+          AND t.amount > 0
+          AND t.date >= $2
+          AND t.date < $3
         GROUP BY t.category
         "#,
         user_id,
@@ -48,38 +52,17 @@ async fn spent_by_category(
     .fetch_all(pool)
     .await
     .map_err(AppError::from)?;
-    Ok(rows.into_iter().map(|r| (r.category, r.spent)).collect())
-}
 
-/// Loads one budget owned by `user_id`, or `NotFound`.
-async fn load_budget(pool: &PgPool, user_id: i32, id: i32) -> ApiResult<BudgetRow> {
-    sqlx::query_as!(
-        BudgetRow,
-        "SELECT id, user_id, name, category, monthly_limit, active, created_at, updated_at
-         FROM budgets WHERE id = $1 AND user_id = $2",
-        id,
-        user_id
-    )
-    .fetch_optional(pool)
-    .await
-    .map_err(AppError::from)?
-    .ok_or(AppError::NotFound)
-}
+    rows.into_iter()
+        .map(|r| {
+            let category = r
+                .category
+                .parse::<Category>()
+                .map_err(|_| AppError::Internal("Failed to parse category".to_string()))?;
 
-/// Builds the response for one budget in the month selected by `month`.
-async fn respond(
-    pool: &PgPool,
-    user_id: i32,
-    row: &BudgetRow,
-    month: Option<&str>,
-) -> ApiResult<BudgetResponse> {
-    let window = parse_month(month, Utc::now().date_naive()).map_err(AppError::Validation)?;
-    let spent = spent_by_category(pool, user_id, &window).await?;
-    Ok(BudgetResponse::new(
-        row,
-        &window,
-        spent.get(&row.category).copied().unwrap_or(0.0),
-    ))
+            Ok((category, r.spent))
+        })
+        .collect()
 }
 
 /// Create a monthly budget for a category.
@@ -97,7 +80,7 @@ async fn respond(
         example = json!({"name": "Eating out", "category": "FOOD_DINING", "monthly_limit": 400.0})
     ),
     responses(
-        (status = 201, description = "Budget created", body = BudgetResponse),
+        (status = 201, description = "Budget created"),
         (status = 400, description = "Validation failure"),
         (status = 401, description = "Not authenticated"),
         (status = 409, description = "A budget for this category already exists")
@@ -109,10 +92,11 @@ pub async fn api_create_budget(
     Extension(user): Extension<AuthUser>,
     Extension(pool): Extension<PgPool>,
     Json(payload): Json<CreateBudgetRequest>,
-) -> ApiResult<(StatusCode, Json<BudgetResponse>)> {
+) -> ApiResult<StatusCode> {
     debug!("HANDLER ->> POST /api/budgets user_id={}", user.id);
     payload.validate().map_err(AppError::Validation)?;
 
+    // Create the budget
     let result = sqlx::query_as!(
         BudgetRow,
         r#"
@@ -129,9 +113,10 @@ pub async fn api_create_budget(
     .fetch_one(&pool)
     .await;
 
-    let row = match result {
+    // This table enforces uniqueness by category, so sqlx::Error::Database returned if duplicate
+    match result {
         Ok(row) => row,
-        Err(sqlx::Error::Database(e)) if e.code().as_deref() == Some("23505") => {
+        Err(sqlx::Error::Database(_)) => {
             return Err(AppError::Conflict(
                 "a budget for this category already exists".to_string(),
             ));
@@ -139,8 +124,7 @@ pub async fn api_create_budget(
         Err(e) => return Err(AppError::from(e)),
     };
 
-    let body = respond(&pool, user.id, &row, None).await?;
-    Ok((StatusCode::CREATED, Json(body)))
+    Ok(StatusCode::CREATED)
 }
 
 /// List the user's budgets with spending for a month.
@@ -165,9 +149,12 @@ pub async fn api_list_budgets(
     Query(query): Query<BudgetQuery>,
 ) -> ApiResult<Json<BudgetsResponse>> {
     debug!("HANDLER ->> GET /api/budgets user_id={}", user.id);
+
+    // Validate the month
     let window = parse_month(query.month.as_deref(), Utc::now().date_naive())
         .map_err(AppError::Validation)?;
 
+    // Select budget from the database
     let rows = sqlx::query_as!(
         BudgetRow,
         "SELECT id, user_id, name, category, monthly_limit, active, created_at, updated_at
@@ -178,10 +165,23 @@ pub async fn api_list_budgets(
     .await
     .map_err(AppError::from)?;
 
+    // Calculate spent
     let spent = spent_by_category(&pool, user.id, &window).await?;
     let budgets = rows
         .iter()
-        .map(|r| BudgetResponse::new(r, &window, spent.get(&r.category).copied().unwrap_or(0.0)))
+        .map(|r| {
+            let category = Category::parse(&r.category);
+
+            BudgetResponse::new(
+                r,
+                &window,
+                category
+                    .as_ref()
+                    .and_then(|c| spent.get(c))
+                    .copied()
+                    .unwrap_or(0.0),
+            )
+        })
         .collect();
 
     Ok(Json(BudgetsResponse {
@@ -217,10 +217,35 @@ pub async fn api_get_budget(
     Query(query): Query<BudgetQuery>,
 ) -> ApiResult<Json<BudgetResponse>> {
     debug!("HANDLER ->> GET /api/budgets/{id} user_id={}", user.id);
-    let row = load_budget(&pool, user.id, id).await?;
-    Ok(Json(
-        respond(&pool, user.id, &row, query.month.as_deref()).await?,
-    ))
+
+    // Parse the month
+    let window = parse_month(query.month.as_deref(), Utc::now().date_naive())
+        .map_err(AppError::Validation)?;
+
+    // Look up the budget id in the database
+    let row = sqlx::query_as!(
+        BudgetRow,
+        "SELECT id, user_id, name, category, monthly_limit, active, created_at, updated_at
+         FROM budgets WHERE id = $1 AND user_id = $2",
+        id,
+        user.id
+    )
+    .fetch_optional(&pool)
+    .await
+    .map_err(AppError::from)?
+    .ok_or(AppError::NotFound)?;
+
+    // Calculate spending across the user's accounts for the requested month
+    let spent = spent_by_category(&pool, user.id, &window).await?;
+    let category = Category::parse(&row.category);
+
+    let spent_amount = category
+        .as_ref()
+        .and_then(|c| spent.get(c))
+        .copied()
+        .unwrap_or(0.0);
+
+    Ok(Json(BudgetResponse::new(&row, &window, spent_amount)))
 }
 
 /// Update a budget's name, limit or active flag.
@@ -257,6 +282,7 @@ pub async fn api_update_budget(
     debug!("HANDLER ->> PUT /api/budgets/{id} user_id={}", user.id);
     payload.validate().map_err(AppError::Validation)?;
 
+    // Attempt update
     let row = sqlx::query_as!(
         BudgetRow,
         r#"
@@ -266,7 +292,8 @@ pub async fn api_update_budget(
             active        = COALESCE($5, active),
             updated_at    = NOW()
         WHERE id = $1 AND user_id = $2
-        RETURNING id, user_id, name, category, monthly_limit, active, created_at, updated_at
+        RETURNING id, user_id, name, category, monthly_limit, active,
+                  created_at, updated_at
         "#,
         id,
         user.id,
@@ -279,7 +306,20 @@ pub async fn api_update_budget(
     .map_err(AppError::from)?
     .ok_or(AppError::NotFound)?;
 
-    Ok(Json(respond(&pool, user.id, &row, None).await?))
+    // Validate the month
+    let window = parse_month(None, Utc::now().date_naive()).map_err(AppError::Validation)?;
+
+    // Calculate spending across the user's accounts for the requested month
+    let spent = spent_by_category(&pool, user.id, &window).await?;
+    let category = Category::parse(&row.category);
+
+    let spent_amount = category
+        .as_ref()
+        .and_then(|c| spent.get(c))
+        .copied()
+        .unwrap_or(0.0);
+
+    Ok(Json(BudgetResponse::new(&row, &window, spent_amount)))
 }
 
 /// Delete a budget.
@@ -304,6 +344,8 @@ pub async fn api_delete_budget(
     Path(id): Path<i32>,
 ) -> ApiResult<StatusCode> {
     debug!("HANDLER ->> DELETE /api/budgets/{id} user_id={}", user.id);
+
+    // Attempt delete
     let result = sqlx::query!(
         "DELETE FROM budgets WHERE id = $1 AND user_id = $2",
         id,
@@ -313,9 +355,11 @@ pub async fn api_delete_budget(
     .await
     .map_err(AppError::from)?;
 
+    // Error if we failed to find the item to delete
     if result.rows_affected() == 0 {
         return Err(AppError::NotFound);
     }
+
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -336,7 +380,7 @@ pub async fn api_delete_budget(
         UpdateBudgetRequest,
         BudgetResponse,
         BudgetsResponse,
-        crate::models::category::Category
+        Category
     )),
     info(title = "Budget Routes", description = "Monthly category budgets."),
     tags((name = "Budgets"))

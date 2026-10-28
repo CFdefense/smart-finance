@@ -1,10 +1,11 @@
 //! Spending categories shared by transactions, budgets and rules.
 
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 use utoipa::ToSchema;
 
 /// A spending category (matches the `CategoryType` enumeration in the class diagram).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema, Hash)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum Category {
     /// General retail purchases.
@@ -23,6 +24,24 @@ pub enum Category {
     Transportation,
     /// Anything that does not fit another category.
     Other,
+}
+
+impl FromStr for Category {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "SHOPPING" => Ok(Self::Shopping),
+            "ENTERTAINMENT" => Ok(Self::Entertainment),
+            "UTILITIES" => Ok(Self::Utilities),
+            "HEALTHCARE" => Ok(Self::Healthcare),
+            "FOOD_DINING" => Ok(Self::FoodDining),
+            "GROCERIES" => Ok(Self::Groceries),
+            "TRANSPORTATION" => Ok(Self::Transportation),
+            "OTHER" => Ok(Self::Other),
+            _ => Err(format!("Invalid category: {value}")),
+        }
+    }
 }
 
 impl Category {

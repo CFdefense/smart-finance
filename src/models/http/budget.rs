@@ -160,7 +160,7 @@ pub struct BudgetsResponse {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::models::common::MAX_AMOUNT;
+    use crate::global::MAX_AMOUNT;
     use chrono::Utc;
 
     fn row(limit: f64) -> BudgetRow {
