@@ -12,7 +12,7 @@ h1 {
     'Apple Color Emoji',
     'Segoe UI Emoji',
     'Segoe UI Symbol';
-  display: inline-block;
+  display: none;
   justify-content: flex-start;
   padding-left: 60px;
 }
