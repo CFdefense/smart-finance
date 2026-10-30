@@ -2,4 +2,5 @@
 
 pub mod budget;
 pub mod plaid;
+pub mod rules;
 pub mod user;
