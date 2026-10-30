@@ -47,6 +47,7 @@ impl Modify for SecurityAddon {
     ),
     nest(
         (path = "/api/plaid", api = crate::controllers::plaid::PlaidApiDoc),
+        (path = "/api/rules", api = crate::controllers::rules::RuleApiDoc),
         (path = "/api/user", api = crate::controllers::user::UserApiDoc)
     ),
     servers(

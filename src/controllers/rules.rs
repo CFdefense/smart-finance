@@ -19,7 +19,7 @@ use crate::{
     error::{ApiResult, AppError},
     middleware::{middleware_auth, AuthUser},
     models::{
-        http::rule::{ListQuery, RuleRequest, RuleResponse, RulesResponse},
+        http::rules::{ListQuery, RuleRequest, RuleResponse, RulesResponse},
         sql::rule::RuleRow,
     },
 };

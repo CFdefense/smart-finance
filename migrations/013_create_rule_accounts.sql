@@ -3,7 +3,7 @@
 
 CREATE TABLE IF NOT EXISTS rule_accounts (
     rule_id    INT  NOT NULL REFERENCES rules(id) ON DELETE CASCADE,
-    account_id TEXT NOT NULL,
+    account_id TEXT NOT NULL REFERENCES plaid_accounts(account_id) ON DELETE CASCADE
     PRIMARY KEY (rule_id, account_id)
 );
 
