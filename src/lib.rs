@@ -43,6 +43,7 @@ pub async fn create_router(frontend_url: &str, plaid: plaid::client::PlaidClient
     // Nest the routes
     let routes = AxumRouter::new()
         .nest("/user", controllers::user::user_routes())
+        .nest("/goal", controllers::budget::budget_routes())
         .nest("/plaid", controllers::plaid::plaid_routes());
 
     // Build the api router
