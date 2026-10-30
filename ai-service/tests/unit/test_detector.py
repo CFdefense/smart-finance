@@ -3,7 +3,7 @@
 from datetime import date
 
 import anomaly.detector as detector_module
-from anomaly.data_models import FlaggedTransaction, Transaction
+from anomaly.data_models import AnomalyRequest, FlaggedTransaction, Transaction
 from anomaly.detector import MedianDetector
 
 detector = MedianDetector()
@@ -22,34 +22,35 @@ class FakeDetector:
 
     def find_anomalies(self, new, history):
         """Remember the inputs and flag everything that is new."""
-        self.new, self.history = new, history
+        self.new, self.history = new, history  # Save new vs history to make sure they're right.
         return [FlaggedTransaction(transaction=t, reason="fake") for t in new]
 
 
 def test_check_splits_new_transactions_from_history(monkeypatch):
     """check_transactions sends the requested IDs as 'new' and everything else as history."""
     fake = FakeDetector()
-    monkeypatch.setattr(detector_module, "detector", fake)
     monkeypatch.setattr(
         detector_module,
         "load_transactions",
         lambda user_id: [txn("old1", 10), txn("old2", 20), txn("t4", 900)],
     )
 
-    flagged = detector_module.check_transactions(7, ["t4"])
+    response = detector_module.check_transactions(
+        AnomalyRequest(user_id=7, transaction_ids=["t4"]), fake
+    )
 
     assert [t.transaction_id for t in fake.new] == ["t4"]
     assert [t.transaction_id for t in fake.history] == ["old1", "old2"]
-    assert [f.transaction.transaction_id for f in flagged] == ["t4"]
+    assert [f.transaction.transaction_id for f in response.flagged] == ["t4"]
 
 
 def test_unknown_ids_are_ignored(monkeypatch):
     """IDs that aren't this user's transactions are never checked."""
     fake = FakeDetector()
-    monkeypatch.setattr(detector_module, "detector", fake)
     monkeypatch.setattr(detector_module, "load_transactions", lambda user_id: [txn("old1", 10)])
 
-    assert detector_module.check_transactions(7, ["someone_elses_txn"]) == []
+    request = AnomalyRequest(user_id=7, transaction_ids=["someone_elses_txn"])
+    assert detector_module.check_transactions(request, fake).flagged == []
 
 
 def test_flags_new_purchase_over_three_times_typical():

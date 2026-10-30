@@ -4,6 +4,7 @@
 //! that route handlers can register `OpenAPI` metadata. In test and release builds
 //! it is a plain [`axum::Router`].
 
+pub mod budget;
 pub mod goals;
 pub mod plaid;
 pub mod user;

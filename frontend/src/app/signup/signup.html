@@ -1,67 +1,95 @@
-<div class="signup-container">
-  <h1>Create an Account</h1>
+<head>
+  <link
+    rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=help,savings" />
+</head>
 
-  <form (ngSubmit)="onSignup()">
-    <div>
-      <label for="firstName">First Name</label>
-      <input
-        id="firstName"
-        type="text"
-        name="firstName"
-        [(ngModel)]="firstName"
-        placeholder="Enter your first name"
-        required />
-    </div>
+<main class="main">
+  <div class="savings-logo">
+    <span class="material-symbols-outlined savings">savings</span>
+  </div>
+  <div class="signup-container">
+    <h1 class="signup-label">Create an Account</h1>
 
-    <div>
-      <label for="lastName">Last Name</label>
-      <input
-        id="lastName"
-        type="text"
-        name="lastName"
-        [(ngModel)]="lastName"
-        placeholder="Enter your last name"
-        required />
-    </div>
+    <form (ngSubmit)="onSignup()">
+      <div class="signup-items-container">
+        <label for="firstName" class="form-labels">First Name</label>
+        <br />
+        <input
+          id="firstName"
+          type="text"
+          name="firstName"
+          class="signup"
+          [(ngModel)]="firstName"
+          placeholder="Enter your first name"
+          required />
+      </div>
 
-    <div>
-      <label for="email">Email</label>
-      <input
-        id="email"
-        type="email"
-        name="email"
-        [(ngModel)]="email"
-        placeholder="Enter your email"
-        required />
-    </div>
+      <div class="signup-items-container">
+        <label for="lastName" class="form-labels">Last Name</label>
+        <br />
+        <input
+          id="lastName"
+          type="text"
+          name="lastName"
+          class="signup"
+          [(ngModel)]="lastName"
+          placeholder="Enter your last name"
+          required />
+      </div>
 
-    <div>
-      <label for="password">Password</label>
-      <input
-        id="password"
-        type="password"
-        name="password"
-        [(ngModel)]="password"
-        placeholder="Create a password"
-        autocomplete="new-password"
-        required />
-      <p class="password-hint">
-        Password must be 8–128 characters and contain at least one uppercase letter, one lowercase
-        letter, and one number. Use standard ASCII characters.
+      <div class="signup-items-container">
+        <label for="email" class="form-labels">Email</label>
+        <br />
+        <input
+          id="email"
+          type="email"
+          name="email"
+          class="signup"
+          [(ngModel)]="email"
+          placeholder="Enter your email"
+          required />
+      </div>
+
+      <div class="signup-items-container">
+        <label for="password" class="form-labels">Password</label>
+        <span class="material-symbols-outlined help">
+          help
+          <span class="password-hint">
+            Password must be 8-128 characters and contain at least one uppercase letter, one
+            lowercase letter, and one number.
+            <br />
+            Use standard ASCII characters.
+          </span>
+        </span>
+        <br />
+        <input
+          id="password"
+          type="password"
+          name="password"
+          class="signup"
+          [(ngModel)]="password"
+          placeholder="Create a password"
+          autocomplete="new-password"
+          required />
+      </div>
+
+      <div class="create-account-container">
+        <button type="submit" [disabled]="isSubmitting()" class="create-account-button">
+          {{ isSubmitting() ? 'Creating Account...' : 'Create Account' }}
+        </button>
+
+        @if (errorMessage()) {
+          <p role="alert" class="error-message">{{ errorMessage() }}</p>
+        }
+      </div>
+    </form>
+
+    <div class="back-to-login-container">
+      <p class="back-to-login-label">
+        Already have an account?
+        <a routerLink="/login">Log in</a>
       </p>
     </div>
-
-    <button type="submit" [disabled]="isSubmitting()">
-      {{ isSubmitting() ? 'Creating Account...' : 'Create Account' }}
-    </button>
-
-    @if (errorMessage()) {
-      <p role="alert">{{ errorMessage() }}</p>
-    }
-  </form>
-
-  <p>
-    Already have an account?
-    <a routerLink="/login">Log in</a>
-  </p>
-</div>
+  </div>
+</main>
