@@ -10,7 +10,7 @@ use crate::models::{
         double_option, progress_percent, round_cents, validate_account_id, validate_baseline,
         validate_future, validate_max_len, validate_name, validate_positive_amount,
     },
-    sql::goal::GoalRow,
+    sql::goals::GoalRow,
 };
 
 /// Lifecycle state of a goal. Always derived, never stored.

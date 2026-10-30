@@ -1,5 +1,5 @@
 //! HTTP request and response models.
 
-pub mod goal;
+pub mod goals;
 pub mod plaid;
 pub mod user;

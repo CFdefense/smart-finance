@@ -19,11 +19,11 @@ use crate::{
     middleware::{middleware_auth, AuthUser},
     models::{
         common::today,
-        http::goal::{
+        http::goals::{
             CreateGoalRequest, GoalResponse, GoalStatus, GoalsQuery, GoalsResponse,
             UpdateGoalRequest,
         },
-        sql::goal::GoalRow,
+        sql::goals::GoalRow,
     },
 };
 

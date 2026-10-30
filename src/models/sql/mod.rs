@@ -1,5 +1,5 @@
 //! SQL row models.
 
-pub mod goal;
+pub mod goals;
 pub mod plaid;
 pub mod user;
