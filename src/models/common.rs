@@ -1,9 +1,7 @@
 //! Validation helpers and serde utilities shared by budget, goal and rule models.
 
+use crate::global::MAX_AMOUNT;
 use serde::{Deserialize, Deserializer};
-
-/// Largest accepted monetary amount (guards against absurd values and float overflow).
-pub const MAX_AMOUNT: f64 = 1_000_000_000.0;
 
 /// Rounds a monetary value to cents to hide floating-point noise.
 pub fn round_cents(value: f64) -> f64 {
