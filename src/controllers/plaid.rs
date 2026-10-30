@@ -1,8 +1,8 @@
 //! Plaid Financial Service Endpoints
 
 use axum::{
-    extract::Query,
-    routing::{get, post},
+    extract::{Path, Query},
+    routing::{get, post, put},
     Extension, Json,
 };
 use sqlx::PgPool;
@@ -17,7 +17,7 @@ use crate::{
         http::plaid::{
             AccountResponse, AccountsResponse, ExchangeTokenRequest, ExchangeTokenResponse,
             LinkTokenResponse, TransactionResponse, TransactionSyncResponse, TransactionsQuery,
-            TransactionsResponse,
+            TransactionsResponse, UpdateCategoryRequest,
         },
         sql::plaid::{PlaidLinkRow, PlaidSyncCursorRow},
     },
@@ -341,13 +341,18 @@ pub async fn api_plaid_sync_transactions(
                 sqlx::query!(
                     r#"
                     INSERT INTO plaid_transactions
-                        (transaction_id, account_id, name, amount, date, pending, updated_at)
-                    VALUES ($1, $2, $3, $4, $5, $6, NOW())
+                        (transaction_id, account_id, name, amount, date, pending, category, updated_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
                     ON CONFLICT (transaction_id) DO UPDATE SET
                         name       = EXCLUDED.name,
                         amount     = EXCLUDED.amount,
                         date       = EXCLUDED.date,
                         pending    = EXCLUDED.pending,
+                        category   = CASE
+                                         WHEN plaid_transactions.category_overridden
+                                         THEN plaid_transactions.category
+                                         ELSE EXCLUDED.category
+                                     END,
                         updated_at = NOW()
                     "#,
                     tx.transaction_id,
@@ -355,7 +360,8 @@ pub async fn api_plaid_sync_transactions(
                     tx.name,
                     tx.amount,
                     tx.date,
-                    tx.pending
+                    tx.pending,
+                    tx.category().as_str()
                 )
                 .execute(&pool)
                 .await
@@ -367,13 +373,18 @@ pub async fn api_plaid_sync_transactions(
                 sqlx::query!(
                     r#"
                     INSERT INTO plaid_transactions
-                        (transaction_id, account_id, name, amount, date, pending, updated_at)
-                    VALUES ($1, $2, $3, $4, $5, $6, NOW())
+                        (transaction_id, account_id, name, amount, date, pending, category, updated_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
                     ON CONFLICT (transaction_id) DO UPDATE SET
                         name       = EXCLUDED.name,
                         amount     = EXCLUDED.amount,
                         date       = EXCLUDED.date,
                         pending    = EXCLUDED.pending,
+                        category   = CASE
+                                         WHEN plaid_transactions.category_overridden
+                                         THEN plaid_transactions.category
+                                         ELSE EXCLUDED.category
+                                     END,
                         updated_at = NOW()
                     "#,
                     tx.transaction_id,
@@ -381,7 +392,8 @@ pub async fn api_plaid_sync_transactions(
                     tx.name,
                     tx.amount,
                     tx.date,
-                    tx.pending
+                    tx.pending,
+                    tx.category().as_str()
                 )
                 .execute(&pool)
                 .await
@@ -494,7 +506,8 @@ pub async fn api_plaid_get_transactions(
             t.name,
             t.amount,
             t.date,
-            t.pending
+            t.pending,
+            t.category
         FROM plaid_transactions t
         JOIN plaid_accounts a ON a.account_id = t.account_id
         JOIN plaid_links i ON i.item_id = a.item_id
@@ -535,6 +548,64 @@ pub async fn api_plaid_get_transactions(
     }))
 }
 
+/// Override the category of one of the authenticated user's transactions.
+///
+/// The override is sticky: later syncs will not replace a user-chosen category.
+///
+/// `PUT /api/plaid/transactions/{transaction_id}/category`
+#[utoipa::path(
+    put,
+    path = "/transactions/{transaction_id}/category",
+    summary = "Sets the category of a transaction",
+    params(("transaction_id" = String, Path, description = "Plaid transaction ID")),
+    request_body(
+        content = UpdateCategoryRequest,
+        content_type = "application/json",
+        example = json!({"category": "GROCERIES"})
+    ),
+    responses(
+        (status = 200, description = "Category updated", body = TransactionResponse),
+        (status = 401, description = "User is not authenticated"),
+        (status = 404, description = "Transaction not found")
+    ),
+    security(("auth-token" = [])),
+    tag = "Plaid"
+)]
+pub async fn api_plaid_update_transaction_category(
+    Extension(user): Extension<AuthUser>,
+    Extension(pool): Extension<PgPool>,
+    Path(transaction_id): Path<String>,
+    Json(payload): Json<UpdateCategoryRequest>,
+) -> ApiResult<Json<TransactionResponse>> {
+    debug!(
+        "HANDLER ->> PUT /api/plaid/transactions/{transaction_id}/category user_id={}",
+        user.id
+    );
+
+    // Ownership is enforced by joining transactions -> accounts -> links.
+    let updated = sqlx::query_as!(
+        TransactionResponse,
+        r#"
+        UPDATE plaid_transactions t
+        SET category = $3, category_overridden = TRUE, updated_at = NOW()
+        FROM plaid_accounts a
+        JOIN plaid_links i ON i.item_id = a.item_id
+        WHERE t.transaction_id = $1
+          AND a.account_id = t.account_id
+          AND i.user_id = $2
+        RETURNING t.transaction_id, t.account_id, t.name, t.amount, t.date, t.pending, t.category
+        "#,
+        transaction_id,
+        user.id,
+        payload.category.as_str()
+    )
+    .fetch_optional(&pool)
+    .await
+    .map_err(AppError::from)?;
+
+    updated.map(Json).ok_or(AppError::NotFound)
+}
+
 /// `OpenAPI` doc for Plaid financial service routes.
 ///
 /// Constructed only by the `#[openapi]` macro and the root [`crate::swagger::ApiDoc`].
@@ -545,8 +616,10 @@ pub async fn api_plaid_get_transactions(
         api_plaid_exchange_token,
         api_plaid_get_accounts,
         api_plaid_sync_transactions,
-        api_plaid_get_transactions
+        api_plaid_get_transactions,
+        api_plaid_update_transaction_category
     ),
+    components(schemas(UpdateCategoryRequest)),
     info(title = "Plaid Routes", description = "Plaid financial service endpoints."),
     tags((name = "Plaid"))
 )]
@@ -564,5 +637,9 @@ pub fn plaid_routes() -> AxumRouter {
         .route("/accounts", get(api_plaid_get_accounts))
         .route("/transactions/sync", post(api_plaid_sync_transactions))
         .route("/transactions", get(api_plaid_get_transactions))
+        .route(
+            "/transactions/{transaction_id}/category",
+            put(api_plaid_update_transaction_category),
+        )
         .route_layer(axum::middleware::from_fn(middleware_auth))
 }

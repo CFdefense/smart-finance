@@ -17,3 +17,6 @@ pub const MAX_RULE_DESCRIPTION: usize = 500;
 
 /// Maximum number of accounts a single rule can target.
 pub const MAX_RULE_ACCOUNTS: usize = 50;
+
+/// Largest accepted monetary amount (guards against absurd values and float overflow).
+pub const MAX_AMOUNT: f64 = 1_000_000_000.0;

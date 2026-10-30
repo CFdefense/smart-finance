@@ -74,6 +74,7 @@ Integration tests require Postgres to be running (`docker compose up -d db`).
 
 ```bash
 ./cicd.sh              # full pipeline (migrate, fmt, clippy, build, coverage, openapi)
+./cicd.sh --reset      # resets the database and then runs the full pipeline
 ./cicd.sh fmt          # formatting check only
 ./cicd.sh clippy       # clippy only
 ./cicd.sh test         # tests + coverage only
