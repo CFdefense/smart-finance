@@ -5,6 +5,8 @@ use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
+use crate::models::category::Category;
+
 /// Request to exchange a Plaid public token.
 #[derive(Deserialize, ToSchema)]
 pub struct ExchangeTokenRequest {
@@ -101,10 +103,7 @@ pub struct TransactionsResponse {
 }
 
 /// A singular transaction.
-///
-/// Also deserialized from the transactions in Plaid's `/transactions/sync`
-/// response (unknown Plaid fields are ignored).
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct TransactionResponse {
     /// Unique transaction ID.
     pub transaction_id: String,
@@ -118,6 +117,54 @@ pub struct TransactionResponse {
     pub date: NaiveDate,
     /// Transaction status.
     pub pending: bool,
+    /// Spending category (e.g. `FOOD_DINING`).
+    pub category: String,
+}
+
+/// Request body for `PUT /api/plaid/transactions/{transaction_id}/category`.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct UpdateCategoryRequest {
+    /// New category, e.g. `GROCERIES`.
+    pub category: Category,
+}
+
+/// A transaction as returned by Plaid's `/transactions/sync` (unknown fields are ignored).
+#[derive(Debug, Deserialize)]
+pub struct PlaidTransactionRaw {
+    /// Unique transaction ID.
+    pub transaction_id: String,
+    /// Account ID used.
+    pub account_id: String,
+    /// Transaction name.
+    pub name: String,
+    /// Transaction amount (positive = money out).
+    pub amount: f64,
+    /// Date of the transaction.
+    pub date: NaiveDate,
+    /// Whether the transaction is still pending.
+    pub pending: bool,
+    /// Plaid's personal finance category, when provided.
+    pub personal_finance_category: Option<PlaidPersonalFinanceCategory>,
+}
+
+impl PlaidTransactionRaw {
+    /// Maps Plaid's category onto the app's [`Category`] (`Other` when absent).
+    pub fn category(&self) -> Category {
+        self.personal_finance_category
+            .as_ref()
+            .map_or(Category::Other, |c| {
+                Category::from_plaid(&c.primary, c.detailed.as_deref())
+            })
+    }
+}
+
+/// Plaid's `personal_finance_category` object.
+#[derive(Debug, Deserialize)]
+pub struct PlaidPersonalFinanceCategory {
+    /// Primary category, e.g. `FOOD_AND_DRINK`.
+    pub primary: String,
+    /// Detailed category, e.g. `FOOD_AND_DRINK_GROCERIES`.
+    pub detailed: Option<String>,
 }
 
 /// Query parameters for `GET /api/plaid/transactions`.
@@ -184,9 +231,9 @@ pub struct PlaidBalancesRaw {
 #[derive(Deserialize)]
 pub struct PlaidTransactionsSyncResponse {
     /// Newly added transactions.
-    pub added: Vec<TransactionResponse>,
+    pub added: Vec<PlaidTransactionRaw>,
     /// Modified transactions.
-    pub modified: Vec<TransactionResponse>,
+    pub modified: Vec<PlaidTransactionRaw>,
     /// Removed transactions.
     pub removed: Vec<PlaidRemovedTransaction>,
     /// Cursor to pass on the next sync call.
