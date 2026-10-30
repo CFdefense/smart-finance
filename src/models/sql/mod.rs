@@ -1,5 +1,5 @@
 //! SQL row models.
 
-pub mod budget;
+pub mod budgets;
 pub mod plaid;
 pub mod user;
