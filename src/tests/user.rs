@@ -562,6 +562,9 @@ async fn get_profile_returns_defaults() {
         .unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     cleanup(&pool, &email).await;
+
+    assert_eq!(json["first_name"], "Alice");
+    assert_eq!(json["last_name"], "Smith");
     assert_eq!(json["email_notifications"], false);
     assert_eq!(json["phone_number"], serde_json::Value::Null);
     assert_eq!(json["sms_notifications"], false);
@@ -770,4 +773,345 @@ async fn put_profile_clear_phone_disables_sms() {
     cleanup(&pool, &email).await;
     assert_eq!(json["phone_number"], serde_json::Value::Null);
     assert_eq!(json["sms_notifications"], false);
+}
+
+#[tokio::test]
+async fn put_profile_updates_account_details() {
+    let app = test_app().await;
+    let pool = test_pool().await;
+    let email = unique_email("profile_edit");
+    let cookie = authenticated_cookie(app.clone(), &email).await;
+
+    // Update both names while keeping the email unchanged.
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri("/api/user/profile")
+                .header("content-type", "application/json")
+                .header("cookie", &cookie)
+                .body(Body::from(
+                    json!({
+                        "first_name": "Bob",
+                        "last_name": "Jones"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Retrieve the profile to verify the changes persisted.
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/user/profile")
+                .header("cookie", &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+
+    let profile: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+    assert_eq!(profile["first_name"], "Bob");
+    assert_eq!(profile["last_name"], "Jones");
+    assert_eq!(profile["email"], email);
+    assert_eq!(profile["email_notifications"], false);
+    assert_eq!(profile["sms_notifications"], false);
+
+    cleanup(&pool, &email).await;
+}
+
+#[tokio::test]
+async fn put_profile_updates_email() {
+    let app = test_app().await;
+    let pool = test_pool().await;
+
+    let old_email = unique_email("profile_old_email");
+    let new_email = unique_email("profile_new_email");
+    let cookie = authenticated_cookie(app.clone(), &old_email).await;
+
+    // Change the user's email address.
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri("/api/user/profile")
+                .header("content-type", "application/json")
+                .header("cookie", &cookie)
+                .body(Body::from(json!({"email": &new_email}).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Verify the new email was saved.
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/user/profile")
+                .header("cookie", &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+
+    let profile: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+    assert_eq!(profile["email"], new_email);
+
+    cleanup(&pool, &old_email).await;
+    cleanup(&pool, &new_email).await;
+}
+
+#[tokio::test]
+async fn put_profile_duplicate_email_rejected() {
+    let app = test_app().await;
+    let pool = test_pool().await;
+
+    let first_email = unique_email("profile_first");
+    let second_email = unique_email("profile_second");
+
+    let cookie = authenticated_cookie(app.clone(), &first_email).await;
+
+    // Create another user whose email is already taken.
+    let other_cookie = authenticated_cookie(app.clone(), &second_email).await;
+
+    // Attempt to change the first user's email to the second user's.
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri("/api/user/profile")
+                .header("content-type", "application/json")
+                .header("cookie", &cookie)
+                .body(Body::from(json!({"email": &second_email}).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+
+    cleanup(&pool, &first_email).await;
+    cleanup(&pool, &second_email).await;
+
+    // The second user's cookie was only needed to create their account.
+    drop(other_cookie);
+}
+
+#[tokio::test]
+async fn put_profile_invalid_email_rejected() {
+    let app = test_app().await;
+    let pool = test_pool().await;
+    let email = unique_email("profile_invalid_email");
+
+    let cookie = authenticated_cookie(app.clone(), &email).await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri("/api/user/profile")
+                .header("content-type", "application/json")
+                .header("cookie", &cookie)
+                .body(Body::from(json!({"email": "not-an-email"}).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    cleanup(&pool, &email).await;
+}
+
+#[tokio::test]
+async fn put_profile_empty_name_rejected() {
+    let app = test_app().await;
+    let pool = test_pool().await;
+    let email = unique_email("profile_empty_name");
+
+    let cookie = authenticated_cookie(app.clone(), &email).await;
+
+    for payload in [json!({"first_name": "   "}), json!({"last_name": ""})] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/api/user/profile")
+                    .header("content-type", "application/json")
+                    .header("cookie", &cookie)
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    cleanup(&pool, &email).await;
+}
+
+#[tokio::test]
+async fn change_password_success() {
+    let app = test_app().await;
+    let pool = test_pool().await;
+    let email = unique_email("password_success");
+
+    let cookie = authenticated_cookie(app.clone(), &email).await;
+
+    // The test fixture creates users with password Secret_123.
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri("/api/user/password")
+                .header("content-type", "application/json")
+                .header("cookie", &cookie)
+                .body(Body::from(
+                    json!({
+                        "current_password": "Secret_123",
+                        "new_password": "NewSecret_456"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // The old password must no longer work.
+    let old_login = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/user/login")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "email": &email,
+                        "password": "Secret_123"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(old_login.status(), StatusCode::BAD_REQUEST);
+
+    // The new password must work.
+    let new_login = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/user/login")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "email": &email,
+                        "password": "NewSecret_456"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(new_login.status(), StatusCode::OK);
+
+    cleanup(&pool, &email).await;
+}
+
+#[tokio::test]
+async fn change_password_wrong_current_password() {
+    let app = test_app().await;
+    let pool = test_pool().await;
+    let email = unique_email("password_wrong");
+
+    let cookie = authenticated_cookie(app.clone(), &email).await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri("/api/user/password")
+                .header("content-type", "application/json")
+                .header("cookie", &cookie)
+                .body(Body::from(
+                    json!({
+                        "current_password": "WrongPassword_123",
+                        "new_password": "NewSecret_456"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    cleanup(&pool, &email).await;
+}
+
+#[tokio::test]
+async fn change_password_weak_password_rejected() {
+    let app = test_app().await;
+    let pool = test_pool().await;
+    let email = unique_email("password_weak");
+
+    let cookie = authenticated_cookie(app.clone(), &email).await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri("/api/user/password")
+                .header("content-type", "application/json")
+                .header("cookie", &cookie)
+                .body(Body::from(
+                    json!({
+                        "current_password": "Secret_123",
+                        "new_password": "weak"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    cleanup(&pool, &email).await;
 }

@@ -1,6 +1,7 @@
 //! Validation helpers and serde utilities shared by budget, goal and rule models.
 
 use crate::global::MAX_AMOUNT;
+
 use chrono::{NaiveDate, Utc};
 use serde::{Deserialize, Deserializer};
 
