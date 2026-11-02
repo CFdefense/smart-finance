@@ -15,6 +15,41 @@ use tower::ServiceExt;
 
 use crate::{db, plaid::client::PlaidClient};
 
+/// Sends an authenticated JSON request and returns `(status, json body)`.
+///
+/// Pass `body: Some(json!({...}))` to send a JSON payload, or `None` for no body.
+pub async fn call(
+    app: &Router,
+    method: &str,
+    uri: &str,
+    cookie: &str,
+    body: Option<Value>,
+) -> (StatusCode, Value) {
+    let mut builder = Request::builder()
+        .method(method)
+        .uri(uri)
+        .header("cookie", cookie);
+    let body = match body {
+        Some(b) => {
+            builder = builder.header("content-type", "application/json");
+            Body::from(b.to_string())
+        }
+        None => Body::empty(),
+    };
+    let response = app
+        .clone()
+        .oneshot(builder.body(body).unwrap())
+        .await
+        .unwrap();
+    let status = response.status();
+    let bytes = http_body_util::BodyExt::collect(response.into_body())
+        .await
+        .unwrap()
+        .to_bytes();
+    let json = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
+    (status, json)
+}
+
 /// Token value that makes the mock Plaid API reply with HTTP 500.
 pub const MOCK_FAIL_500: &str = "fail-500";
 /// Token value that makes the mock Plaid API reply with HTTP 200 and an unparseable body.
@@ -246,39 +281,4 @@ pub async fn authenticated_cookie(app: Router, email: &str) -> String {
         .to_string();
 
     set_cookie.split(';').next().unwrap().trim().to_string()
-}
-
-/// Sends an authenticated JSON request and returns `(status, json body)`.
-///
-/// Pass `body: Some(json!({...}))` to send a JSON payload, or `None` for no body.
-pub async fn call(
-    app: &Router,
-    method: &str,
-    uri: &str,
-    cookie: &str,
-    body: Option<Value>,
-) -> (StatusCode, Value) {
-    let mut builder = Request::builder()
-        .method(method)
-        .uri(uri)
-        .header("cookie", cookie);
-    let body = match body {
-        Some(b) => {
-            builder = builder.header("content-type", "application/json");
-            Body::from(b.to_string())
-        }
-        None => Body::empty(),
-    };
-    let response = app
-        .clone()
-        .oneshot(builder.body(body).unwrap())
-        .await
-        .unwrap();
-    let status = response.status();
-    let bytes = http_body_util::BodyExt::collect(response.into_body())
-        .await
-        .unwrap()
-        .to_bytes();
-    let json = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
-    (status, json)
 }

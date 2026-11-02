@@ -7,6 +7,7 @@
 pub mod budget;
 pub mod goals;
 pub mod plaid;
+pub mod rules;
 pub mod user;
 
 /// A plain [`axum::Router`] in test and release builds.

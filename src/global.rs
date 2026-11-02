@@ -23,3 +23,9 @@ pub const GOAL_MAX_DESCRIPTION: usize = 500;
 
 /// Maximum length of a contribution note.
 pub const GOAL_MAX_NOTE: usize = 200;
+
+/// Maximum length of a rule sentence.
+pub const MAX_RULE_DESCRIPTION: usize = 500;
+
+/// Maximum number of accounts a single rule can target.
+pub const MAX_RULE_ACCOUNTS: usize = 50;
