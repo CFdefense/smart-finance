@@ -226,14 +226,13 @@ if [ "$FILTER" = "reset-db" ]; then
 fi
 
 # Reset only when explicitly requested with --reset.
-if [ "$FILTER" != "fmt" ] && [ "$FILTER" != "clippy" ]; then
+if [ "$FILTER" = "--reset" ]; then
+    : "${DATABASE_URL:?DATABASE_URL must be set}"
+    run_reset_db
+elif [ "$FILTER" != "fmt" ] && [ "$FILTER" != "clippy" ]; then
     : "${DATABASE_URL:?DATABASE_URL must be set}"
     ensure_tool sqlx \
         "cargo install sqlx-cli --no-default-features --features postgres --locked"
-fi
-
-if [ "$FILTER" = "--reset" ]; then
-    run_reset_db
 fi
 
 # Install dependencies for pipeline commands.
