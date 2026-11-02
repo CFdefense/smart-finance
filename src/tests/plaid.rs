@@ -4,10 +4,12 @@ use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
+use serde_json::json;
 use tower::ServiceExt;
 
 use super::fixtures::{
-    authenticated_cookie, cleanup, test_app, test_pool, unique_email, MOCK_FAIL_500, MOCK_FAIL_BODY,
+    authenticated_cookie, call, cleanup, test_app, test_pool, unique_email, MOCK_FAIL_500,
+    MOCK_FAIL_BODY,
 };
 
 // ─── Auth-gate tests (no Plaid credentials required) ─────────────────────────
@@ -444,39 +446,6 @@ async fn link_token_authenticated() {
 
 // ─── Mock-Plaid tests (local mock server, no real credentials) ───────────────
 
-/// Sends an authenticated request and returns `(status, json body)`.
-async fn call(
-    app: &axum::Router,
-    method: &str,
-    uri: &str,
-    cookie: &str,
-    body: Option<&str>,
-) -> (StatusCode, serde_json::Value) {
-    let mut builder = Request::builder()
-        .method(method)
-        .uri(uri)
-        .header("cookie", cookie);
-    let body = match body {
-        Some(b) => {
-            builder = builder.header("content-type", "application/json");
-            Body::from(b.to_string())
-        }
-        None => Body::empty(),
-    };
-    let response = app
-        .clone()
-        .oneshot(builder.body(body).unwrap())
-        .await
-        .unwrap();
-    let status = response.status();
-    let bytes = http_body_util::BodyExt::collect(response.into_body())
-        .await
-        .unwrap()
-        .to_bytes();
-    let json = serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null);
-    (status, json)
-}
-
 #[tokio::test]
 async fn plaid_full_flow_with_mock() {
     let app = test_app().await;
@@ -500,7 +469,7 @@ async fn plaid_full_flow_with_mock() {
         "POST",
         "/api/plaid/exchange-token",
         &cookie,
-        Some(r#"{"public_token":"public-mock"}"#),
+        Some(json!({"public_token": "public-mock"})),
     )
     .await;
     assert_eq!(status, StatusCode::OK);
@@ -512,7 +481,7 @@ async fn plaid_full_flow_with_mock() {
         "POST",
         "/api/plaid/exchange-token",
         &cookie,
-        Some(r#"{"public_token":"public-mock"}"#),
+        Some(json!({"public_token": "public-mock"})),
     )
     .await;
     assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
@@ -591,13 +560,12 @@ async fn assert_plaid_failures_are_500(marker: &str, prefix: &str) {
     .await
     .unwrap();
 
-    let exchange_body = format!(r#"{{"public_token":"{marker}"}}"#);
     let exchange = call(
         &app,
         "POST",
         "/api/plaid/exchange-token",
         &cookie,
-        Some(&exchange_body),
+        Some(json!({"public_token": marker})),
     )
     .await;
     let accounts = call(&app, "GET", "/api/plaid/accounts", &cookie, None).await;
