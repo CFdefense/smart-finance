@@ -1,6 +1,7 @@
 //! Integration tests.
 
 pub mod fixtures;
+pub mod goals;
 pub mod plaid;
 pub mod rules;
 pub mod seeder;
