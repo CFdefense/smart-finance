@@ -112,6 +112,25 @@ mod test {
     }
 
     #[test]
+    fn name_must_be_1_to_100_trimmed_characters() {
+        assert!(validate_name("Food").is_ok());
+        assert!(validate_name("   ").is_err());
+        assert!(validate_name(&"a".repeat(100)).is_ok());
+        assert!(validate_name(&"a".repeat(101)).is_err());
+    }
+
+    #[test]
+    fn positive_amount_rejects_zero_negative_non_finite_and_too_large() {
+        assert!(validate_positive_amount("limit", 0.01).is_ok());
+        assert!(validate_positive_amount("limit", MAX_AMOUNT).is_ok());
+        assert!(validate_positive_amount("limit", 0.0).is_err());
+        assert!(validate_positive_amount("limit", -1.0).is_err());
+        assert!(validate_positive_amount("limit", f64::NAN).is_err());
+        assert!(validate_positive_amount("limit", f64::INFINITY).is_err());
+        assert!(validate_positive_amount("limit", MAX_AMOUNT + 1.0).is_err());
+    }
+
+    #[test]
     fn round_cents_hides_float_noise() {
         assert_eq!(round_cents(0.1 + 0.2), 0.3);
     }

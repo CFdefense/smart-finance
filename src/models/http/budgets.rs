@@ -7,7 +7,7 @@ use utoipa::ToSchema;
 use crate::models::{
     category::Category,
     common::{round_cents, validate_name, validate_positive_amount},
-    sql::budget::BudgetRow,
+    sql::budgets::BudgetRow,
 };
 
 /// Request body for `POST /api/budgets`.

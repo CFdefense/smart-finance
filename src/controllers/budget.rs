@@ -19,11 +19,11 @@ use crate::{
     middleware::{middleware_auth, AuthUser},
     models::{
         category::Category,
-        http::budget::{
+        http::budgets::{
             parse_month, BudgetQuery, BudgetResponse, BudgetsResponse, CreateBudgetRequest,
             MonthWindow, UpdateBudgetRequest,
         },
-        sql::budget::BudgetRow,
+        sql::budgets::BudgetRow,
     },
 };
 

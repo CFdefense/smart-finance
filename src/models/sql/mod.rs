@@ -1,6 +1,6 @@
 //! SQL row models.
 
-pub mod budget;
+pub mod budgets;
 pub mod goals;
 pub mod plaid;
 pub mod rule;
