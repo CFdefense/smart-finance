@@ -282,4 +282,3 @@ pub async fn authenticated_cookie(app: Router, email: &str) -> String {
 
     set_cookie.split(';').next().unwrap().trim().to_string()
 }
-
