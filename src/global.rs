@@ -14,3 +14,12 @@ pub const SESSION_DURATION_SECS: i64 = 60 * 60 * 24 * 3; // 3 days
 
 /// Largest accepted monetary amount (guards against absurd values and float overflow).
 pub const MAX_AMOUNT: f64 = 1_000_000_000.0;
+
+/// Tolerance when checking that the manual total stays non-negative (half a cent).
+pub const EPSILON: f64 = 0.005;
+
+/// Maximum length of a goal description.
+pub const GOAL_MAX_DESCRIPTION: usize = 500;
+
+/// Maximum length of a contribution note.
+pub const GOAL_MAX_NOTE: usize = 200;
