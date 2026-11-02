@@ -9,7 +9,13 @@ from fastapi import FastAPI, HTTPException
 from agent import AnalyzerAgent, ChatAgent
 from agent.data_models import ChatRequest, ChatResponse
 from anomaly.data_models import AnomalyRequest, AnomalyResponse
-from anomaly.detector import MedianDetector, check_transactions
+from anomaly.detector import (
+    CombinedDetector,
+    DuplicateDetector,
+    SubscriptionIncreaseDetector,
+    ZScoreDetector,
+    check_transactions,
+)
 from db import get_connection
 
 load_dotenv()
@@ -30,7 +36,13 @@ async def lifespan(app: FastAPI):
         app.state.analyzer_agent = None
         app.state.chat_agent = None
 
-    app.state.detector = MedianDetector(multiplier=float(os.getenv("ANOMALY_MULTIPLIER", "3")))
+    app.state.detector = CombinedDetector(
+        [
+            ZScoreDetector(threshold=float(os.getenv("ANOMALY_ZSCORE_THRESHOLD", "3.5"))),
+            DuplicateDetector(),
+            SubscriptionIncreaseDetector(),
+        ]
+    )
     yield
 
     # Cleanup here if we need to
