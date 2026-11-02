@@ -117,6 +117,22 @@ mod test {
     }
 
     #[test]
+    fn from_str_round_trips_every_category() {
+        for c in ALL {
+            assert_eq!(c.as_str().parse::<Category>(), Ok(c));
+        }
+    }
+
+    #[test]
+    fn from_str_rejects_unknown_and_wrong_case() {
+        assert_eq!(
+            "food_dining".parse::<Category>(),
+            Err("Invalid category: food_dining".to_string())
+        );
+        assert!("".parse::<Category>().is_err());
+    }
+
+    #[test]
     fn parse_rejects_unknown_and_wrong_case() {
         assert_eq!(Category::parse("food_dining"), None);
         assert_eq!(Category::parse("NOPE"), None);

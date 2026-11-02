@@ -248,3 +248,40 @@ pub struct PlaidRemovedTransaction {
     /// ID of the removed transaction.
     pub transaction_id: String,
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    fn raw(category: Option<PlaidPersonalFinanceCategory>) -> PlaidTransactionRaw {
+        PlaidTransactionRaw {
+            transaction_id: "t1".to_string(),
+            account_id: "a1".to_string(),
+            name: "Shop".to_string(),
+            amount: 12.5,
+            date: NaiveDate::from_ymd_opt(2024, 3, 9).unwrap(),
+            pending: false,
+            personal_finance_category: category,
+        }
+    }
+
+    #[test]
+    fn category_defaults_to_other_when_absent() {
+        assert_eq!(raw(None).category(), Category::Other);
+    }
+
+    #[test]
+    fn category_maps_plaid_primary_and_detailed() {
+        let dining = raw(Some(PlaidPersonalFinanceCategory {
+            primary: "FOOD_AND_DRINK".to_string(),
+            detailed: None,
+        }));
+        assert_eq!(dining.category(), Category::FoodDining);
+
+        let groceries = raw(Some(PlaidPersonalFinanceCategory {
+            primary: "FOOD_AND_DRINK".to_string(),
+            detailed: Some("FOOD_AND_DRINK_GROCERIES".to_string()),
+        }));
+        assert_eq!(groceries.category(), Category::Groceries);
+    }
+}
