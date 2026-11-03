@@ -79,3 +79,23 @@ button:disabled {
 .success-message {
   color: #15803d;
 }
+
+/* Container representing one connected financial institution. */
+.bank-connection {
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 16px;
+}
+
+/* Separate individual accounts belonging to the same connection. */
+.bank-account {
+  padding: 10px 0;
+  border-bottom: 1px solid #eee;
+  margin-bottom: 12px;
+}
+
+/* Make account details easier to read. */
+.bank-account p {
+  margin: 6px 0;
+}

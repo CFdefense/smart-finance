@@ -124,6 +124,18 @@ fn mock_plaid_router() -> Router {
             }),
         )
         .route(
+            "/item/remove",
+            post(|Json(body): Json<Value>| async move {
+                // Simulate Plaid's response when disconnecting a bank.
+                let token = field(&body, "access_token");
+
+                // Reuse the existing test convention:
+                // access-fail-500 simulates a Plaid API failure.
+                mock_failure(token)
+                    .unwrap_or_else(|| Json(json!({"removed": true})).into_response())
+            }),
+        )
+        .route(
             "/accounts/get",
             post(|Json(body): Json<Value>| async move {
                 let token = field(&body, "access_token");

@@ -150,6 +150,49 @@ impl PlaidClient {
             .map_err(|e| AppError::Internal(format!("Plaid response parse error: {e}")))
     }
 
+    /// Disconnect a bank connection from Plaid.
+    ///
+    /// Each access token represents one Plaid Item (bank connection).
+    /// Removing the Item invalidates its access token, preventing further
+    /// access to the associated bank accounts through that connection.
+    ///
+    /// This function only communicates with Plaid.
+    /// The controller is responsible for deleting local database records.
+    pub async fn remove_item(&self, access_token: &str) -> Result<(), AppError> {
+        // Build the JSON body required by Plaid's /item/remove endpoint.
+        // Credentials remain on the backend and are never sent to Angular.
+        let body = serde_json::json!({
+            "client_id": self.client_id,
+            "secret": self.secret,
+            "access_token": access_token
+        });
+
+        // Send the removal request to Plaid.
+        // Awaiting the response ensures we know whether Plaid accepted it.
+        let resp = self
+            .http
+            .post(format!("{}/item/remove", self.base_url))
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| AppError::Internal(format!("Plaid request failed: {e}")))?;
+
+        // Do not report success if Plaid rejects the request.
+        // The controller should preserve local records on failure.
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let error_text = resp.text().await.unwrap_or_default();
+
+            return Err(AppError::Internal(format!(
+                "Plaid /item/remove returned {status}: {error_text}"
+            )));
+        }
+
+        // A successful HTTP response is enough; we don't need to
+        // deserialize the response because no data must be returned.
+        Ok(())
+    }
+
     /// Fetch all financial accounts for a given access token.
     ///
     /// Calls `POST /accounts/get`.

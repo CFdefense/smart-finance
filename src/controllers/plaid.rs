@@ -2,7 +2,8 @@
 
 use axum::{
     extract::{Path, Query},
-    routing::{get, post, put},
+    http::StatusCode,
+    routing::{delete, get, post, put},
     Extension, Json,
 };
 use sqlx::PgPool;
@@ -606,6 +607,89 @@ pub async fn api_plaid_update_transaction_category(
     updated.map(Json).ok_or(AppError::NotFound)
 }
 
+/// Disconnect one of the authenticated user's Plaid bank connections.
+///
+/// A Plaid Item represents a connection to a financial institution and
+/// can contain multiple accounts. Removing it disconnects every account
+/// associated with that Item.
+///
+/// `DELETE /api/plaid/items/{item_id}`
+#[utoipa::path(
+    delete,
+    path = "/items/{item_id}",
+    summary = "Disconnects a linked financial institution",
+    params(
+        ("item_id" = String, Path, description = "Plaid Item ID to disconnect")
+    ),
+    responses(
+        (status = 204, description = "Bank connection removed successfully"),
+        (status = 401, description = "User is not authenticated"),
+        (status = 404, description = "Bank connection not found"),
+        (status = 500, description = "Failed to remove bank connection")
+    ),
+    security(("auth-token" = [])),
+    tag = "Plaid"
+)]
+pub async fn api_plaid_remove_item(
+    Extension(user): Extension<AuthUser>,
+    Extension(plaid): Extension<PlaidClient>,
+    Extension(pool): Extension<PgPool>,
+    Path(item_id): Path<String>,
+) -> ApiResult<StatusCode> {
+    debug!(
+        "HANDLER ->> DELETE /api/plaid/items/{} user_id={}",
+        item_id, user.id
+    );
+
+    // STEP 1: Look up the connection's access token.
+    //
+    // The WHERE clause verifies ownership by requiring BOTH:
+    // - The requested Plaid Item ID.
+    // - The currently authenticated user's ID.
+    //
+    // We never accept an access token directly from the frontend.
+    let access_token = sqlx::query_scalar!(
+        "SELECT access_token FROM plaid_links WHERE item_id = $1 AND user_id = $2",
+        item_id,
+        user.id
+    )
+    .fetch_optional(&pool)
+    .await
+    .map_err(AppError::from)?;
+
+    // STEP 2: Return 404 if the connection does not belong to this user
+    // or does not exist. This avoids exposing other users' connections.
+    let access_token = access_token.ok_or(AppError::NotFound)?;
+
+    // STEP 3: Ask Plaid to invalidate the connection.
+    //
+    // This calls the remove_item() function we added to PlaidClient.
+    // If Plaid rejects the request, the ? operator stops execution
+    // and returns the error without deleting local records.
+    plaid.remove_item(&access_token).await?;
+
+    // STEP 4: Remove the connection from our local database.
+    //
+    // PostgreSQL's ON DELETE CASCADE relationships also remove:
+    // - Financial accounts associated with this Item.
+    // - Transactions associated with those accounts.
+    // - The transaction synchronization cursor.
+    // - Account-specific rule associations.
+    //
+    // Require ownership again so the DELETE is scoped to the user.
+    sqlx::query!(
+        "DELETE FROM plaid_links WHERE item_id = $1 AND user_id = $2",
+        item_id,
+        user.id
+    )
+    .execute(&pool)
+    .await
+    .map_err(AppError::from)?;
+
+    // STEP 5: Return HTTP 204 (successful request, no response body).
+    Ok(StatusCode::NO_CONTENT)
+}
+
 /// `OpenAPI` doc for Plaid financial service routes.
 ///
 /// Constructed only by the `#[openapi]` macro and the root [`crate::swagger::ApiDoc`].
@@ -617,7 +701,8 @@ pub async fn api_plaid_update_transaction_category(
         api_plaid_get_accounts,
         api_plaid_sync_transactions,
         api_plaid_get_transactions,
-        api_plaid_update_transaction_category
+        api_plaid_update_transaction_category,
+        api_plaid_remove_item
     ),
     components(schemas(UpdateCategoryRequest)),
     info(title = "Plaid Routes", description = "Plaid financial service endpoints."),
@@ -635,6 +720,7 @@ pub fn plaid_routes() -> AxumRouter {
         .route("/link-token", post(api_plaid_link_token))
         .route("/exchange-token", post(api_plaid_exchange_token))
         .route("/accounts", get(api_plaid_get_accounts))
+        .route("/items/{item_id}", delete(api_plaid_remove_item))
         .route("/transactions/sync", post(api_plaid_sync_transactions))
         .route("/transactions", get(api_plaid_get_transactions))
         .route(

@@ -102,5 +102,60 @@
         }
       </form>
     </section>
+
+    <section class="profile-section">
+      <h2>Connected Bank Accounts</h2>
+
+      <button type="button" (click)="connectBank()" [disabled]="connectingBank()">
+        {{ connectingBank() ? 'Connecting...' : 'Connect Bank' }}
+      </button>
+
+      @if (accountsError()) {
+        <p class="error-message">{{ accountsError() }}</p>
+      }
+
+      @if (accountsMessage()) {
+        <p class="success-message">{{ accountsMessage() }}</p>
+      }
+
+      @if (accountsLoading()) {
+        <p>Loading connected accounts...</p>
+      } @else if (linkedBanks().length === 0) {
+        <p>You haven't connected any bank accounts yet.</p>
+      } @else {
+        @for (bank of linkedBanks(); track bank.itemId) {
+          <div class="bank-connection">
+            <h3>Bank Connection</h3>
+
+            @for (account of bank.accounts; track account.account_id) {
+              <div class="bank-account">
+                <p>
+                  <strong>{{ account.name }}</strong>
+                  @if (account.mask) {
+                    <span>•••• {{ account.mask }}</span>
+                  }
+                </p>
+
+                <p>Type: {{ account.account_subtype || account.account_type }}</p>
+
+                @if (account.current_balance !== null) {
+                  <p>
+                    Balance:
+                    {{ account.current_balance | currency: account.currency_code || 'USD' }}
+                  </p>
+                }
+              </div>
+            }
+
+            <button
+              type="button"
+              (click)="removeBank(bank.itemId)"
+              [disabled]="removingItem() !== null">
+              {{ removingItem() === bank.itemId ? 'Disconnecting...' : 'Disconnect Bank' }}
+            </button>
+          </div>
+        }
+      }
+    </section>
   }
 </main>

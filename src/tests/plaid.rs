@@ -591,3 +591,311 @@ async fn plaid_upstream_error_status_returns_500() {
 async fn plaid_unparseable_response_returns_500() {
     assert_plaid_failures_are_500(MOCK_FAIL_BODY, "plaid_badbody").await;
 }
+
+#[tokio::test]
+async fn remove_item_unauthenticated() {
+    // Create our test application.
+    let app = test_app().await;
+
+    // Attempt to remove a bank connection without an auth cookie.
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri("/api/plaid/items/test-item")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    // The backend must reject the unauthenticated request.
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn remove_item_not_found() {
+    let app = test_app().await;
+    let pool = test_pool().await;
+    let email = unique_email("plaid_remove_missing");
+
+    // Create a test user and obtain their authentication cookie.
+    let cookie = authenticated_cookie(app.clone(), &email).await;
+
+    // Request removal of a bank connection that does not exist.
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri("/api/plaid/items/nonexistent-item")
+                .header("cookie", &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    // Clean up the test user.
+    cleanup(&pool, &email).await;
+
+    // The backend should return 404 rather than contacting Plaid.
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn remove_item_cannot_delete_another_users_connection() {
+    let app = test_app().await;
+    let pool = test_pool().await;
+
+    let email_a = unique_email("remove_owner_a");
+    let email_b = unique_email("remove_owner_b");
+
+    // Create two different authenticated users.
+    let cookie_a = authenticated_cookie(app.clone(), &email_a).await;
+    let cookie_b = authenticated_cookie(app.clone(), &email_b).await;
+
+    // User B connects a bank through our mocked Plaid API.
+    let (exchange_status, _) = call(
+        &app,
+        "POST",
+        "/api/plaid/exchange-token",
+        &cookie_b,
+        Some(json!({"public_token": format!("public-{email_b}")})),
+    )
+    .await;
+
+    assert_eq!(exchange_status, StatusCode::OK);
+
+    // Our mock derives the Item ID from the public token.
+    let item_id = format!("item-{email_b}");
+
+    // User A attempts to remove User B's connection.
+    let (status, _) = call(
+        &app,
+        "DELETE",
+        &format!("/api/plaid/items/{item_id}"),
+        &cookie_a,
+        None,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    // Verify the connection still exists in PostgreSQL.
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM plaid_links WHERE item_id = $1")
+        .bind(&item_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    assert_eq!(count, 1);
+
+    cleanup(&pool, &email_a).await;
+    cleanup(&pool, &email_b).await;
+}
+
+#[tokio::test]
+async fn remove_item_deletes_owned_connection() {
+    let app = test_app().await;
+    let pool = test_pool().await;
+    let email = unique_email("remove_success");
+
+    let cookie = authenticated_cookie(app.clone(), &email).await;
+
+    // Connect a test bank using the existing exchange endpoint.
+    let (exchange_status, _) = call(
+        &app,
+        "POST",
+        "/api/plaid/exchange-token",
+        &cookie,
+        Some(json!({"public_token": format!("public-{email}")})),
+    )
+    .await;
+
+    assert_eq!(exchange_status, StatusCode::OK);
+
+    let item_id = format!("item-{email}");
+
+    // Remove the bank through our new endpoint.
+    let (status, _) = call(
+        &app,
+        "DELETE",
+        &format!("/api/plaid/items/{item_id}"),
+        &cookie,
+        None,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    // The connection should no longer exist locally.
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM plaid_links WHERE item_id = $1")
+        .bind(&item_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    assert_eq!(count, 0);
+
+    cleanup(&pool, &email).await;
+}
+
+#[tokio::test]
+async fn remove_item_plaid_failure_preserves_connection() {
+    let app = test_app().await;
+    let pool = test_pool().await;
+    let email = unique_email("remove_failure");
+
+    // Create an authenticated test user.
+    let cookie = authenticated_cookie(app.clone(), &email).await;
+
+    // The mock generates an access token ending in "fail-500".
+    // This causes our fake Plaid API to return HTTP 500.
+    let public_token = format!("public-{email}");
+    let item_id = format!("item-{email}");
+
+    // Connect the test bank through our existing exchange endpoint.
+    let (exchange_status, _) = call(
+        &app,
+        "POST",
+        "/api/plaid/exchange-token",
+        &cookie,
+        Some(json!({ "public_token": public_token })),
+    )
+    .await;
+
+    assert_eq!(exchange_status, StatusCode::OK);
+
+    // The connection was created successfully with a normal token.
+    // Now change its stored access token to trigger a Plaid failure
+    // specifically when we attempt to disconnect it.
+    sqlx::query("UPDATE plaid_links SET access_token = $1 WHERE item_id = $2")
+        .bind("access-fail-500")
+        .bind(&item_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    // Attempt removal. The mocked Plaid API will reject it.
+    let (status, _) = call(
+        &app,
+        "DELETE",
+        &format!("/api/plaid/items/{item_id}"),
+        &cookie,
+        None,
+    )
+    .await;
+
+    // Our backend must report an error instead of claiming success.
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+
+    // Most importantly, the connection must still exist in PostgreSQL.
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM plaid_links WHERE item_id = $1")
+        .bind(&item_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    assert_eq!(count, 1);
+
+    // Clean up the test user's data.
+    cleanup(&pool, &email).await;
+}
+
+#[tokio::test]
+async fn remove_item_cascades_to_accounts_and_transactions() {
+    let app = test_app().await;
+    let pool = test_pool().await;
+    let email = unique_email("remove_cascade");
+
+    // Create a user and obtain an authenticated session.
+    let cookie = authenticated_cookie(app.clone(), &email).await;
+
+    // Connect a simulated bank using our existing Plaid mock.
+    let (status, response) = call(
+        &app,
+        "POST",
+        "/api/plaid/exchange-token",
+        &cookie,
+        Some(json!({
+            "public_token": format!("public-{email}")
+        })),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+
+    let item_id = response["item_id"].as_str().unwrap().to_string();
+    let account_id = format!("acct-{email}");
+    let transaction_id = format!("tx1-{email}");
+
+    // Retrieve accounts so the backend saves them in PostgreSQL.
+    let (status, _) = call(&app, "GET", "/api/plaid/accounts", &cookie, None).await;
+
+    assert_eq!(status, StatusCode::OK);
+
+    // Synchronize transactions so the account has transaction history.
+    let (status, _) = call(&app, "POST", "/api/plaid/transactions/sync", &cookie, None).await;
+
+    assert_eq!(status, StatusCode::OK);
+
+    // Confirm the account and transaction exist before removal.
+    let account_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM plaid_accounts WHERE account_id = $1")
+            .bind(&account_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+    let transaction_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM plaid_transactions WHERE transaction_id = $1")
+            .bind(&transaction_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+    assert_eq!(account_count, 1);
+    assert_eq!(transaction_count, 1);
+
+    // Disconnect the bank through our actual DELETE endpoint.
+    let (status, _) = call(
+        &app,
+        "DELETE",
+        &format!("/api/plaid/items/{item_id}"),
+        &cookie,
+        None,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    // Verify that PostgreSQL's ON DELETE CASCADE removed the
+    // connected account and its associated transaction history.
+    let remaining_accounts: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM plaid_accounts WHERE account_id = $1")
+            .bind(&account_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+    let remaining_transactions: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM plaid_transactions WHERE transaction_id = $1")
+            .bind(&transaction_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+    let remaining_cursors: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM plaid_sync_cursors WHERE item_id = $1")
+            .bind(&item_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+    assert_eq!(remaining_accounts, 0);
+    assert_eq!(remaining_transactions, 0);
+    assert_eq!(remaining_cursors, 0);
+
+    // Remove the test user and any remaining test data.
+    cleanup(&pool, &email).await;
+}
