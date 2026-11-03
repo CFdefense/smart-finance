@@ -30,7 +30,7 @@ async def lifespan(app: FastAPI):
 
     if openai_key:
         app.state.analyzer_agent = AnalyzerAgent().create(openai_key, model)
-        app.state.chat_agent = ChatAgent().create(openai_key, model)
+        app.state.chat_agent = ChatAgent(openai_key, model)
     else:
         logging.warning("OPENAI_API_KEY not set; /chat and /analyze are disabled.")
         app.state.analyzer_agent = None

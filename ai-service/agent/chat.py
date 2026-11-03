@@ -1,27 +1,30 @@
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
-from langgraph.graph.state import CompiledStateGraph
-from pydantic import BaseModel, PrivateAttr, SecretStr
 
 from agent.data_models import AgentState, ChatRequest, ChatResponse
 
 
-class ChatAgent(BaseModel):
+class ChatAgent:
     """Agent responsible for handling user requests with financial context."""
-
-    _graph: CompiledStateGraph = PrivateAttr()
-
-    def create(self, openai_key: str, model: str):
+    
+    def __init__(self, openai_key: str, model: str):
         """Create and compile the conversational graph."""
-        llm = ChatOpenAI(
-            api_key=SecretStr(openai_key),
+        self._llm = ChatOpenAI(
+            api_key=openai_key,
             model=model,
         )
 
-        def respond(state: AgentState) -> dict:
+        graph = StateGraph(AgentState)
+        graph.add_node("respond", self.respond)
+        graph.add_edge(START, "respond")
+        graph.add_edge("respond", END)
+
+        self._graph = graph.compile()
+
+    def respond(self, state: AgentState) -> dict:
             """Generate a conversational response."""
-            result = llm.invoke(
+            result = self._llm.invoke(
                 [
                     SystemMessage(
                         content=(
@@ -33,15 +36,7 @@ class ChatAgent(BaseModel):
                 ]
             )
             return {"response": str(result.content)}
-
-        graph = StateGraph(AgentState)
-        graph.add_node("respond", respond)
-        graph.add_edge(START, "respond")
-        graph.add_edge("respond", END)
-
-        self._graph = graph.compile()
-        return self
-
+        
     def generate_answer(self, request: ChatRequest) -> ChatResponse:
         """Generate a conversational answer."""
         result = self._graph.invoke(
