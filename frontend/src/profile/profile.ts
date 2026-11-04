@@ -3,9 +3,10 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { ProfileService } from '../app/services/profile.service';
 import { HttpErrorResponse } from '@angular/common/http';
+import { CommonModule } from '@angular/common';
 
 @Component({
-  imports: [FormsModule],
+  imports: [FormsModule, CommonModule],
   selector: 'app-root',
   styleUrl: './profile.css',
   templateUrl: './profile.html',
@@ -33,6 +34,9 @@ export class UserProfile implements OnInit {
   profileMessage = signal('');
   passwordMessage = signal('');
   errorMessage = signal('');
+
+  // Track the current view. Set a default view on load.
+  currentView: 'accountInfo' | 'notifications' | 'password' = 'accountInfo';
 
   /**
    * Loads the user's profile when the component initializes.
@@ -123,6 +127,10 @@ export class UserProfile implements OnInit {
         next: () => {
           this.saving.set(false);
           this.profileMessage.set('Profile updated successfully!');
+          // Clear the message automatically after 3 seconds
+          setTimeout(() => {
+            this.profileMessage.set('');
+          }, 3000);
           this.loadProfile();
         },
 
@@ -138,6 +146,10 @@ export class UserProfile implements OnInit {
           } else {
             this.errorMessage.set('Unable to save profile changes. Please try again.');
           }
+          // Clear the message automatically after 3 seconds
+          setTimeout(() => {
+            this.errorMessage.set('');
+          }, 3000);
         },
       });
   }
@@ -174,6 +186,10 @@ export class UserProfile implements OnInit {
         error: () => {
           this.changingPassword.set(false);
           this.errorMessage.set('Unable to change password. Check your current and new passwords.');
+          // Clear the message automatically after 3 seconds
+          setTimeout(() => {
+            this.errorMessage.set('');
+          }, 3000);
         },
       });
   }
@@ -184,5 +200,10 @@ export class UserProfile implements OnInit {
 
   backToDashboard(): void {
     this.router.navigate(['/dashboard']);
+  }
+
+  setView(view: 'accountInfo' | 'notifications' | 'password') {
+    console.log(view);
+    this.currentView = view;
   }
 }
