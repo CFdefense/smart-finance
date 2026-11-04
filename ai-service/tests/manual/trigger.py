@@ -9,7 +9,7 @@ Then, from ai-service/:
 
     uv run python tests/manual/trigger.py list                # show the scenarios
     uv run python tests/manual/trigger.py coffee              # run one
-    uv run python tests/manual/trigger.py bestbuy --id again  # reuse an id to see DUPLICATE
+    uv run python tests/manual/trigger.py duplicate           # one transaction twice: 2nd is DUPLICATE
     uv run python tests/manual/trigger.py custom --name "Nike" --amount 120 --category SHOPPING
 
 Every run gets a short fresh transaction id (e.g. bestbuy-3f9a) unless you pass --id.
@@ -95,10 +95,25 @@ def analyze(
     return response.status_code, response.json()
 
 
+def send_twice(args: argparse.Namespace) -> None:
+    """Send the Best Buy purchase twice with one id; the second must come back DUPLICATE."""
+    merchant, amount, category, account, _ = SCENARIOS["bestbuy"]
+    user_id, account_id = lookup(account)
+    txn_id = args.id or f"dup-{uuid.uuid4().hex[:4]}"
+    for attempt in ("first", "second"):
+        print(f"-> {attempt} send of {merchant} ${amount:.2f} (id={txn_id})")
+        status, result = analyze(args.url, user_id, account_id, merchant, amount, category, txn_id)
+        verdict = (result.get("assessment") or {}).get("verdict")
+        print(
+            f"<- HTTP {status} status={result['status']} verdict={verdict} "
+            f"notified={result['notified']}"
+        )
+
+
 def main() -> None:
     """Parse arguments, post the transaction and print the analysis."""
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("scenario", choices=[*SCENARIOS, "custom", "list"])
+    parser.add_argument("scenario", choices=[*SCENARIOS, "custom", "duplicate", "list"])
     parser.add_argument("--url", default="http://127.0.0.1:8000")
     parser.add_argument("--id", help="transaction id (default: unique per run)")
     parser.add_argument("--name")
@@ -106,10 +121,15 @@ def main() -> None:
     parser.add_argument("--category", default="OTHER")
     parser.add_argument("--account", default=CHECKING, help="account name for custom")
     args = parser.parse_args()
+    load_dotenv(find_dotenv(usecwd=True))
 
     if args.scenario == "list":
         for key, (merchant, amount, _, account, note) in SCENARIOS.items():
             print(f"{key:8} {merchant} ${amount:.2f} on {account}: {note}")
+        return
+
+    if args.scenario == "duplicate":
+        send_twice(args)
         return
 
     if args.scenario == "custom":
@@ -119,7 +139,6 @@ def main() -> None:
     else:
         merchant, amount, category, account, _ = SCENARIOS[args.scenario]
 
-    load_dotenv(find_dotenv(usecwd=True))
     user_id, account_id = lookup(account)
     txn_id = args.id or f"{args.scenario}-{uuid.uuid4().hex[:4]}"
     print(f"-> {merchant} ${amount:.2f} [{category}] on {account} (id={txn_id})")

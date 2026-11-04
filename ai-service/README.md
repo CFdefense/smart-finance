@@ -102,5 +102,8 @@ uv run python tests/manual/trigger.py list            # terminal C: pick a scena
 uv run python tests/manual/trigger.py bestbuy
 ```
 
-`trigger.py` also takes `custom --name "Nike" --amount 120 --category SHOPPING`, and `--id` to
-send the same transaction twice and see `DUPLICATE`.
+`trigger.py` also takes `custom --name "Nike" --amount 120 --category SHOPPING`. Each analysis is
+recorded in the `transaction_analyses` table by transaction id, so sending the same id again is
+not analyzed or notified a second time: `trigger.py duplicate` sends one transaction twice and the
+second reply is `DUPLICATE`. Failed analyses and crashed runs (stuck `started` for over 10
+minutes) can be retried; finished ones cannot.
