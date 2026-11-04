@@ -4,6 +4,7 @@ import { UserDashboard } from '../dashboard/dashboard';
 import { UserProfile } from '../profile/profile';
 import { Signup } from './signup/signup';
 import { authGuard } from './auth-guard';
+import { GoalsPage } from '../goals/goals';
 
 export const routeConfig: Routes = [
   { path: '', redirectTo: 'login', pathMatch: 'full' },
@@ -11,4 +12,5 @@ export const routeConfig: Routes = [
   { path: 'signup', component: Signup },
   { path: 'dashboard', component: UserDashboard, canActivate: [authGuard] },
   { path: 'profile', component: UserProfile, canActivate: [authGuard] },
+  { path: 'goals', component: GoalsPage, canActivate: [authGuard] },
 ];

@@ -1,0 +1,109 @@
+<main class="goals-page">
+  <header class="page-header">
+    <div>
+      <button class="back-button" type="button" (click)="backToDashboard()">← Back to Dashboard</button>
+      <h1>Financial Goals</h1>
+      <p>Track the balances you're working toward.</p>
+    </div>
+    <button type="button" class="primary-button" (click)="startCreate()">+ Create Goal</button>
+  </header>
+
+  @if (errorMessage()) {
+    <p class="alert error" role="alert">{{ errorMessage() }}</p>
+  }
+  @if (successMessage()) {
+    <p class="alert success" role="status">{{ successMessage() }}</p>
+  }
+
+  @if (showForm()) {
+    <section class="panel form-panel" aria-label="Goal form">
+      <h2>{{ editingId() === null ? 'Create a goal' : 'Edit goal' }}</h2>
+      <p>Goals track how much a connected checking or savings account grows.</p>
+      <form (ngSubmit)="saveGoal()">
+        <label for="goalName">Goal name</label>
+        <input id="goalName" name="goalName" [(ngModel)]="name" maxlength="100" required placeholder="Emergency fund" />
+
+        <label for="goalAccount">Linked bank account</label>
+        <select id="goalAccount" name="goalAccount" [(ngModel)]="accountId" required>
+          <option value="">Choose a connected account</option>
+          @for (account of accounts(); track account.account_id) {
+            <option [value]="account.account_id">{{ account.name }} {{ account.mask ? '•••• ' + account.mask : '' }} ({{ money(account.current_balance ?? 0) }})</option>
+          }
+        </select>
+        @if (accountsLoading()) { <p class="hint">Loading accounts...</p> }
+        @if (accountError()) { <p class="hint error-text">{{ accountError() }}</p> }
+        @if (!accountsLoading() && !accountError() && accounts().length === 0) {
+          <p class="hint">No checking or savings accounts found. Connect a bank from Profile Settings first.</p>
+        }
+
+        <label for="goalTarget">Target account balance ($)</label>
+        <input id="goalTarget" name="goalTarget" type="number" [(ngModel)]="targetAmount" min="0.01" step="0.01" required placeholder="5000" />
+
+        <label for="goalDate">Target date (optional)</label>
+        <input id="goalDate" name="goalDate" type="date" [(ngModel)]="targetDate" />
+
+        <label for="goalDescription">Description (optional)</label>
+        <textarea id="goalDescription" name="goalDescription" [(ngModel)]="description" maxlength="500" rows="3" placeholder="What are you saving for?"></textarea>
+
+        <div class="form-actions">
+          <button type="submit" class="primary-button" [disabled]="saving() || accountsLoading() || !accounts().length">
+            {{ saving() ? 'Saving...' : editingId() === null ? 'Create Goal' : 'Save Changes' }}
+          </button>
+          <button type="button" class="secondary-button" (click)="cancelForm()">Cancel</button>
+        </div>
+      </form>
+    </section>
+  }
+
+  <section class="goals-section" aria-label="Your goals">
+    <div class="section-toolbar">
+      <h2>Your goals</h2>
+      <label for="statusFilter">Status
+        <select id="statusFilter" name="statusFilter" [(ngModel)]="statusFilter">
+          <option value="ALL">All goals</option>
+          <option value="ACTIVE">Active</option>
+          <option value="COMPLETED">Completed</option>
+          <option value="ARCHIVED">Archived</option>
+        </select>
+      </label>
+    </div>
+
+    @if (loading()) {
+      <p class="empty-state">Loading goals...</p>
+    } @else if (filteredGoals().length === 0) {
+      <div class="panel empty-state">No goals to show. Create one to start tracking your progress.</div>
+    } @else {
+      <div class="goal-grid">
+        @for (goal of filteredGoals(); track goal.id) {
+          <article class="panel goal-card">
+            <div class="goal-heading">
+              <div>
+                <h3>{{ goal.name }}</h3>
+                <p class="account-label">{{ accountLabel(goal.account_id) }}</p>
+              </div>
+              <span class="status" [class.complete]="goal.status === 'COMPLETED'" [class.archived]="goal.status === 'ARCHIVED'">{{ goal.status }}</span>
+            </div>
+            @if (goal.description) { <p>{{ goal.description }}</p> }
+            <div class="amounts">
+              <div><small>Current balance</small><strong>{{ money(goal.current_balance) }}</strong></div>
+              <div><small>Target balance</small><strong>{{ money(goal.target_amount) }}</strong></div>
+            </div>
+            <div class="progress-header"><span>Progress from starting balance</span><strong>{{ goal.progress_percent }}%</strong></div>
+            <progress [value]="goal.progress_percent" max="100" [attr.aria-label]="goal.name + ' progress'"></progress>
+            <p class="remaining">{{ money(goal.remaining) }} remaining</p>
+            @if (goal.target_date) {
+              <p class="hint">Target date: {{ goal.target_date }}
+                @if (goal.on_track !== null) { · {{ goal.on_track ? 'On track' : 'Behind schedule' }} }
+              </p>
+            }
+            <div class="card-actions">
+              <button type="button" class="secondary-button" (click)="startEdit(goal)" [disabled]="workingId() !== null">Edit</button>
+              <button type="button" class="secondary-button" (click)="toggleArchived(goal)" [disabled]="workingId() !== null">{{ goal.status === 'ARCHIVED' ? 'Restore' : 'Archive' }}</button>
+              <button type="button" class="danger-button" (click)="deleteGoal(goal)" [disabled]="workingId() !== null">Delete</button>
+            </div>
+          </article>
+        }
+      </div>
+    }
+  </section>
+</main>

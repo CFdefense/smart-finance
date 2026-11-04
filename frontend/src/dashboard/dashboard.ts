@@ -13,6 +13,11 @@ export class UserDashboard {
   private readonly authService = inject(AuthService);
   private readonly router = inject(Router);
 
+  /** Navigate to the Goals page. */
+  openGoals(): void {
+    this.router.navigate(['/goals']);
+  }
+
   openProfile(): void {
     this.router.navigate(['/profile']);
   }
