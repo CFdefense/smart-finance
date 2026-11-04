@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 
 from agent import AnalyzerAgent, ChatAgent, ChatRequest, ChatResponse
+from agent.logging import configure_agent_logging
 from anomaly import (
     AnomalyRequest,
     AnomalyResponse,
@@ -20,6 +21,7 @@ from db import get_connection
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
+configure_agent_logging(os.getenv("AGENT_LOG_LEVEL", "INFO"))
 
 
 @asynccontextmanager
