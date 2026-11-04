@@ -56,3 +56,7 @@ Set `AGENT_LOG_LEVEL` (default `INFO`). INFO shows each run's workflow: node ent
 timings, routing decisions, tool calls, LLM calls and the notify decision, every line tagged
 `[run=<id> txn=<transaction_id> user=<id>]` so `grep run=<id>` follows one analysis. DEBUG adds
 prompts, raw tool results, notification text and the graph as Mermaid.
+
+To draw the analyzer workflow as an image (needs internet; no API key or database):
+`uv run python -m agent [output.png]` writes `analyzer_graph.png` by default. From code, call
+`agent.analyze.save_graph_image(path)`.

@@ -1,5 +1,6 @@
 import logging
 import time
+from pathlib import Path
 
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
@@ -36,7 +37,7 @@ _log = logging.getLogger(GRAPH)
 
 _LLM_TIMEOUT_SECONDS = 60
 
-__all__ = ["MAX_TOOL_ROUNDS", "AnalyzerAgent", "build_analyzer_graph"]
+__all__ = ["MAX_TOOL_ROUNDS", "AnalyzerAgent", "build_analyzer_graph", "save_graph_image"]
 
 
 def build_analyzer_graph(investigate_llm, assess_llm) -> CompiledStateGraph:
@@ -146,3 +147,16 @@ class AnalyzerAgent:
             return result
         finally:
             clear_run()
+
+
+def save_graph_image(path: str | Path = "analyzer_graph.png") -> Path:
+    """
+    Render the analyzer workflow as a PNG and return where it was written.
+
+    No API key or database is needed: the graph is built without models. The image is drawn by
+    the mermaid.ink web service, so this needs internet access.
+    """
+    graph = build_analyzer_graph(None, None)
+    target = Path(path)
+    target.write_bytes(graph.get_graph().draw_mermaid_png())
+    return target

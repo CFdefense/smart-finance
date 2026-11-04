@@ -318,3 +318,22 @@ def test_non_assessment_result_is_a_failed_attempt(world):
 
     assert result.status == "FAILED" and result.error == "assess_failed"
     assert world["recorded"] == [("t1", "failed", None, False, "assess_failed")]
+
+
+def test_save_graph_image_writes_the_rendered_png(tmp_path, monkeypatch):
+    """The graph image is written to the requested path (rendering itself is stubbed)."""
+    calls = []
+
+    def fake_png(self, *args, **kwargs):
+        calls.append(self)
+        return b"\x89PNG fake"
+
+    monkeypatch.setattr("langgraph.graph.state.CompiledStateGraph.get_graph", lambda self: self)
+    monkeypatch.setattr(
+        "langgraph.graph.state.CompiledStateGraph.draw_mermaid_png", fake_png, raising=False
+    )
+
+    written = analyze_mod.save_graph_image(tmp_path / "graph.png")
+
+    assert written == tmp_path / "graph.png" and written.read_bytes() == b"\x89PNG fake"
+    assert len(calls) == 1
