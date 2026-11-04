@@ -1,8 +1,8 @@
 from statistics import mean, median
 from typing import Protocol
 
-from anomaly.data_models import AnomalyRequest, AnomalyResponse, FlaggedTransaction, Transaction
-from db import get_connection
+from anomaly.data_models import AnomalyRequest, AnomalyResponse, FlaggedTransaction
+from db import Transaction, load_transactions
 
 
 class AnomalyDetector(Protocol):
@@ -176,22 +176,6 @@ class CombinedDetector:
             for t in new
             if t.transaction_id in reasons
         ]
-
-
-def load_transactions(user_id: int) -> list[Transaction]:
-    """Load all of one user's transactions from the database."""
-    with get_connection() as conn:
-        rows = conn.execute(
-            """
-            SELECT t.transaction_id, t.name, t.amount, t.date
-            FROM plaid_transactions t
-            JOIN plaid_accounts a ON a.account_id = t.account_id
-            JOIN plaid_links l ON l.item_id = a.item_id
-            WHERE l.user_id = %s
-            """,
-            (user_id,),
-        ).fetchall()
-    return [Transaction(transaction_id=r[0], name=r[1], amount=r[2], date=r[3]) for r in rows]
 
 
 def check_transactions(request: AnomalyRequest, detector: AnomalyDetector) -> AnomalyResponse:

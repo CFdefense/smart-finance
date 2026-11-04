@@ -3,8 +3,8 @@
 import pytest
 
 import notifications.dispatcher as dispatcher_module
-from notifications.data_models import NotificationPreferences
-from notifications.dispatcher import send_notification
+from db import NotificationPreferences
+from notifications import send_notification
 
 
 class RecordingEmailSender:
@@ -27,7 +27,7 @@ def fake_email(monkeypatch):
 
 
 def _patch_prefs(monkeypatch, prefs: NotificationPreferences):
-    monkeypatch.setattr(dispatcher_module, "_load_preferences", lambda user_id: prefs)
+    monkeypatch.setattr(dispatcher_module, "load_preferences", lambda user_id: prefs)
 
 
 # ---------------------------------------------------------------------------
@@ -199,7 +199,7 @@ def test_raises_for_unknown_user(monkeypatch, fake_email):
     """A ValueError is raised when the user does not exist in the database."""
     monkeypatch.setattr(
         dispatcher_module,
-        "_load_preferences",
+        "load_preferences",
         lambda user_id: (_ for _ in ()).throw(ValueError(f"No user found with id={user_id}")),
     )
 

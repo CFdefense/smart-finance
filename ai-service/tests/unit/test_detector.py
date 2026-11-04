@@ -3,13 +3,15 @@
 from datetime import date
 
 import anomaly.detector as detector_module
-from anomaly.data_models import AnomalyRequest, FlaggedTransaction, Transaction
-from anomaly.detector import (
+from anomaly import (
+    AnomalyRequest,
     CombinedDetector,
     DuplicateDetector,
+    FlaggedTransaction,
     SubscriptionIncreaseDetector,
     ZScoreDetector,
 )
+from db import Transaction
 
 
 def txn(
