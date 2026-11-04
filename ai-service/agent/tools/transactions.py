@@ -7,8 +7,9 @@ from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 
 from agent.data_models import Category
+from agent.formatting import money
 from agent.safety import sanitize
-from agent.tools.formatting import cap, money
+from agent.tools.formatting import cap
 from db import load_transactions
 
 _FETCH_LIMIT = 200

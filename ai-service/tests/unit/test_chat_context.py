@@ -153,3 +153,12 @@ def test_chat_agent_runs_the_tool_loop(monkeypatch):
     assert searched_for == ["emergency fund"]
     assert response.response == "final answer"
     assert llm.calls == 2
+
+
+def test_money_and_section_helpers_are_shared():
+    """The money and section helpers format signs, unknowns and empty sections."""
+    from agent.formatting import money, section
+
+    assert money(1234.5) == "$1,234.50" and money(-20) == "-$20.00" and money(None) == "unknown"
+    assert section("Goals", []) == "Goals:\n- none"
+    assert section("Goals", ["- a"]) == "Goals:\n- a"
