@@ -57,5 +57,17 @@ timings, routing decisions, tool calls, LLM calls and the notify decision, every
 `[run=<id> txn=<transaction_id> user=<id>]` so `grep run=<id>` follows one analysis. DEBUG adds
 prompts, raw tool results, notification text and the graph as Mermaid.
 
-To draw an agent's workflow as an image (needs internet; no API key or database):
-`uv run python -m agent analyzer|chat [output.png]` writes `<agent>_graph.png` by default.
+## Drawing the agent graphs
+
+Render an agent's workflow as a PNG, from `ai-service/`:
+
+```
+uv run python -m agent analyzer            # writes analyzer_graph.png
+uv run python -m agent chat chat.png       # writes chat.png
+```
+
+The first argument picks the agent (`analyzer` or `chat`; any unique prefix works, so `analyze`
+is fine). The optional second argument is the output file, which defaults to `<agent>_graph.png`
+in the current directory. No API key or database is needed, but it needs internet access because
+the image is drawn by the mermaid.ink service. From code, use
+`agent.graph_image.save_graph_image(graph, path)`.
