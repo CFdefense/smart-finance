@@ -3,6 +3,7 @@
 from datetime import date
 
 from langchain_core.messages import AIMessage
+from langchain_core.tools import tool
 
 import agent.chat as chat_module
 import agent.nodes.context.load as load_context_module
@@ -77,6 +78,10 @@ class FakeLLM:
         self.messages = messages
         return AIMessage(content="fake answer")
 
+    def bind_tools(self, tools):
+        """Pretend to bind tools; this fake never calls them."""
+        return self
+
 
 def test_chat_agent_puts_the_requesting_users_data_in_the_prompt(monkeypatch):
     """The agent loads context for the request's user and sends it in the system message."""
@@ -99,3 +104,52 @@ def test_chat_agent_puts_the_requesting_users_data_in_the_prompt(monkeypatch):
     system, human = llm.messages
     assert system.content.endswith("USER DATA")
     assert human.content == "How am I doing?"
+
+
+class ToolCallingFakeLLM:
+    """Asks for one web search on its first call, then answers on its second."""
+
+    def __init__(self):
+        self.calls = 0
+
+    def invoke(self, messages):
+        """Return a tool call the first time and a final answer after that."""
+        self.calls += 1
+        if self.calls == 1:
+            return AIMessage(
+                content="",
+                tool_calls=[
+                    {"name": "web_search", "args": {"query": "emergency fund"}, "id": "call_1"}
+                ],
+            )
+        return AIMessage(content="final answer")
+
+    def bind_tools(self, tools):
+        """Pretend to bind tools; the graph runs them, not this fake."""
+        return self
+
+
+def test_chat_agent_runs_the_tool_loop(monkeypatch):
+    """A tool call from the model runs the search tool, then the model answers."""
+    searched_for = []
+
+    @tool
+    def web_search(query: str) -> str:
+        """Fake web search that records the query instead of using the network."""
+        searched_for.append(query)
+        return "Experts suggest saving three to six months of expenses."
+
+    monkeypatch.setattr(load_context_module, "load_financial_context", lambda user_id: "DATA")
+    llm = ToolCallingFakeLLM()
+    monkeypatch.setattr(chat_module, "ChatOpenAI", lambda **kwargs: llm)
+    # ChatAgent builds its ToolNode from this name, so patch it before constructing the agent.
+    monkeypatch.setattr(chat_module, "web_search", web_search)
+    agent = ChatAgent("sk-test", "gpt-test")
+
+    response = agent.generate_answer(
+        ChatRequest(user_id=7, message="How big should my emergency fund be?")
+    )
+
+    assert searched_for == ["emergency fund"]
+    assert response.response == "final answer"
+    assert llm.calls == 2
