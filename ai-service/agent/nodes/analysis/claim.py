@@ -5,14 +5,14 @@ import logging
 from langgraph.graph import END
 
 from agent.logging import NODE, log_route, traced_node
-from agent.state import AnalyzerState
+from agent.state import AnalyzerState, StateUpdate
 from db import claim_analysis, user_owns_account
 
 _log = logging.getLogger(NODE)
 
 
 @traced_node("claim")
-def claim_transaction(state: AnalyzerState) -> dict:
+def claim_transaction(state: AnalyzerState) -> StateUpdate:
     """Check the account belongs to the user, then claim the transaction so it runs once."""
     transaction, user_id = state["transaction"], state["user_id"]
     if not user_owns_account(user_id, transaction.account_id):

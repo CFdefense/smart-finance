@@ -15,20 +15,21 @@ from agent.nodes.context import (
     format_financial_context,
     load_financial_context,
 )
-from agent.state import AgentState
+from agent.state import AnalyzerState, ChatState
 
 __all__ = [
     "MAX_TRANSACTIONS",
     "RECENT_DAYS",
-    "AgentState",
     "AnalysisResult",
     "AnalyzeRequest",
     "AnalyzedTransaction",
     "AnalyzerAgent",
+    "AnalyzerState",
     "Assessment",
     "ChatAgent",
     "ChatRequest",
     "ChatResponse",
+    "ChatState",
     "Conversation",
     "format_financial_context",
     "load_financial_context",

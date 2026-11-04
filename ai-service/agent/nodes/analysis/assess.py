@@ -1,7 +1,6 @@
 """Assess node and routing for structured transaction assessment."""
 
 import logging
-from collections.abc import Callable
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -9,16 +8,16 @@ from agent.data_models import Assessment
 from agent.logging import NODE, log_route, traced_node
 from agent.nodes.analysis.investigate import build_findings
 from agent.prompts import ASSESS_SYSTEM_PROMPT, transaction_block
-from agent.state import AnalyzerState
+from agent.state import AnalyzerState, StateUpdate
 
 _log = logging.getLogger(NODE)
 
 
-def make_assess(structured_llm) -> Callable[[AnalyzerState], dict]:
+def make_assess(structured_llm):
     """Build the node that turns everything gathered into a structured Assessment."""
 
     @traced_node("assess")
-    def assess(state: AnalyzerState) -> dict:
+    def assess(state: AnalyzerState) -> StateUpdate:
         """Ask the model for an Assessment; retry once, then fail safe."""
         messages = [
             SystemMessage(content=ASSESS_SYSTEM_PROMPT),

@@ -1,18 +1,19 @@
 """Tool: the user's monthly budgets."""
 
 from datetime import date
-from typing import Annotated
+from typing import Annotated, Any
 
 from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 
+from agent.formatting import money
 from agent.safety import sanitize
-from agent.tools.formatting import cap, money
+from agent.tools.formatting import cap
 from db import load_budgets
 
 
 @tool
-def get_budgets(state: Annotated[dict, InjectedState]) -> str:
+def get_budgets(state: Annotated[dict[str, Any], InjectedState]) -> str:
     """List the user's active monthly budgets and how much is spent so far this month."""
     today = date.today()
     lines = [

@@ -57,7 +57,7 @@ def test_decide_node_logs_the_rule_it_applied(caplog):
     """The decision log names the verdict, the model's opinion, the outcome and the rule."""
     state = _state(assessment=_assessment("REVIEW", True))
 
-    with caplog.at_level(logging.INFO, logger="agent.analyze.decision"):
+    with caplog.at_level(logging.INFO, logger="agent.run.decision"):
         result = decide(state)
 
     assert result == {"notify": True}
@@ -90,7 +90,7 @@ def test_notify_failure_is_reported_not_raised(monkeypatch, caplog):
 
     monkeypatch.setattr(notify_mod, "send_notification", boom)
 
-    with caplog.at_level(logging.ERROR, logger="agent.analyze"):
+    with caplog.at_level(logging.ERROR, logger="agent.run"):
         result = notify(_state(assessment=_assessment(), notify=True))
 
     assert result == {"notified": False, "status": "FAILED", "error": "notify_failed"}
@@ -127,8 +127,22 @@ def test_finalize_never_raises_when_the_database_write_fails(monkeypatch, caplog
 
     monkeypatch.setattr(finalize_mod, "finish_analysis", boom)
 
-    with caplog.at_level(logging.ERROR, logger="agent.analyze"):
+    with caplog.at_level(logging.ERROR, logger="agent.run"):
         result = finalize(_state(assessment=_assessment()))
 
     assert result == {"status": "ANALYZED"}
     assert "finalize.record_failed" in caplog.text
+
+
+def test_decide_and_notify_refuse_to_run_without_an_assessment():
+    """The graph never routes here without an assessment; running anyway fails loudly."""
+    import pytest
+
+    from agent.nodes.analysis import decide, notify
+
+    state = {"user_id": 1, "transaction": TXN, "assessment": None}
+
+    with pytest.raises(ValueError):
+        decide(state)
+    with pytest.raises(ValueError):
+        notify(state)
