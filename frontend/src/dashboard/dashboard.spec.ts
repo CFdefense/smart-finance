@@ -41,12 +41,20 @@ describe('UserDashboard', () => {
     fixture.detectChanges();
   });
 
+  /**
+   * Checks that the profile action opens the profile route.
+   * Calls openProfile and verifies the router navigates to /profile.
+   */
   it('should navigate to the profile page', () => {
     component.openProfile();
 
     expect(router.navigate).toHaveBeenCalledWith(['/profile']);
   });
 
+  /**
+   * Checks that successful logout returns the user to login.
+   * Calls onLogout and verifies the service request and /login navigation.
+   */
   it('should log out and navigate to the login page', () => {
     component.onLogout();
 
@@ -54,6 +62,10 @@ describe('UserDashboard', () => {
     expect(router.navigate).toHaveBeenCalledWith(['/login']);
   });
 
+  /**
+   * Checks that a failed logout does not redirect the user.
+   * Mocks a logout error and verifies logging occurs without navigation.
+   */
   it('should handle a failed logout without navigating', () => {
     const error = new Error('Logout failed');
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);

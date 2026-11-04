@@ -68,6 +68,10 @@ describe('UserProfile', () => {
     fixture.detectChanges();
   });
 
+  /**
+   * Checks that profile data loads into the component's editable fields.
+   * Uses the mocked profile response and verifies fields and loading state.
+   */
   it('should load profile information', () => {
     expect(profileService.getProfile).toHaveBeenCalled();
     expect(component.firstName).toBe('John');
@@ -77,6 +81,10 @@ describe('UserProfile', () => {
     expect(component.loading()).toBe(false);
   });
 
+  /**
+   * Checks that a profile cannot be saved without a first name.
+   * Clears the first name and verifies validation prevents an update request.
+   */
   it('should reject an empty first name', () => {
     component.firstName = '';
     component.saveProfile();
@@ -84,6 +92,10 @@ describe('UserProfile', () => {
     expect(profileService.updateProfile).not.toHaveBeenCalled();
   });
 
+  /**
+   * Checks that malformed email addresses are rejected before saving.
+   * Enters an invalid email and verifies the error and absent update request.
+   */
   it('should reject an invalid email', () => {
     component.email = 'not-an-email';
 
@@ -94,6 +106,10 @@ describe('UserProfile', () => {
     expect(profileService.updateProfile).not.toHaveBeenCalled();
   });
 
+  /**
+   * Checks that the profile enforces the required phone number format.
+   * Supplies a short number and verifies validation blocks the update.
+   */
   it('should reject an invalid phone number', () => {
     component.phoneNumber = '12345';
 
@@ -104,6 +120,10 @@ describe('UserProfile', () => {
     expect(profileService.updateProfile).not.toHaveBeenCalled();
   });
 
+  /**
+   * Checks that valid profile edits are saved and refreshed.
+   * Updates the first name and verifies the payload, success message, and reload.
+   */
   it('should save valid profile information', () => {
     component.firstName = 'Jane';
 
@@ -122,6 +142,10 @@ describe('UserProfile', () => {
     expect(profileService.getProfile).toHaveBeenCalledTimes(2);
   });
 
+  /**
+   * Checks that conflicting email changes show a specific error.
+   * Mocks a 409 update response and verifies the message and saving state.
+   */
   it('should display an error for a duplicate email', () => {
     profileService.updateProfile.mockReturnValue(
       throwError(() => new HttpErrorResponse({ status: 409 })),
@@ -134,6 +158,10 @@ describe('UserProfile', () => {
     expect(component.saving()).toBe(false);
   });
 
+  /**
+   * Checks that password confirmation must match the new password.
+   * Supplies different values and verifies the password service is not called.
+   */
   it('should reject mismatched passwords', () => {
     component.newPassword = 'Password123!';
 
@@ -146,6 +174,10 @@ describe('UserProfile', () => {
     expect(profileService.changePassword).not.toHaveBeenCalled();
   });
 
+  /**
+   * Checks that successful password updates clear sensitive form values.
+   * Submits matching passwords and verifies the payload, cleared fields, and message.
+   */
   it('should clear password fields after a successful change', () => {
     component.currentPassword = 'OldPassword123!';
 
@@ -170,6 +202,10 @@ describe('UserProfile', () => {
     expect(component.passwordMessage()).toBe('Password updated successfully!');
   });
 
+  /**
+   * Checks that failed profile retrieval shows an error and stops loading.
+   * Mocks a 500 fetch response and verifies the error and loading state.
+   */
   it('should display an error when loading the profile fails', () => {
     profileService.getProfile.mockReturnValue(
       throwError(() => new HttpErrorResponse({ status: 500 })),
@@ -182,6 +218,10 @@ describe('UserProfile', () => {
     expect(component.loading()).toBe(false);
   });
 
+  /**
+   * Checks that whitespace-only last names cannot be saved.
+   * Enters spaces and verifies validation prevents an update request.
+   */
   it('should reject an empty last name', () => {
     component.lastName = '   ';
 
@@ -192,6 +232,10 @@ describe('UserProfile', () => {
     expect(profileService.updateProfile).not.toHaveBeenCalled();
   });
 
+  /**
+   * Checks that SMS notifications require a phone number.
+   * Enables SMS without a number and verifies validation blocks saving.
+   */
   it('should reject SMS notifications without a phone number', () => {
     component.smsNotifications = true;
 
@@ -206,6 +250,10 @@ describe('UserProfile', () => {
     expect(profileService.updateProfile).not.toHaveBeenCalled();
   });
 
+  /**
+   * Checks that SMS notifications require a selected carrier.
+   * Enables SMS with a phone but no carrier and verifies the validation error.
+   */
   it('should reject SMS notifications without a carrier', () => {
     component.smsNotifications = true;
 
@@ -222,6 +270,10 @@ describe('UserProfile', () => {
     expect(profileService.updateProfile).not.toHaveBeenCalled();
   });
 
+  /**
+   * Checks that removing a phone number can save with SMS disabled.
+   * Turns off SMS after removing the phone and verifies the update payload.
+   */
   it('should disable SMS notifications when the phone number is removed', () => {
     component.smsNotifications = true;
 
@@ -242,6 +294,10 @@ describe('UserProfile', () => {
     );
   });
 
+  /**
+   * Checks that valid SMS preferences are included in profile updates.
+   * Supplies a phone and carrier and verifies the submitted SMS fields.
+   */
   it('should save SMS notification settings with a valid phone and carrier', () => {
     component.phoneNumber = '+15551234567';
 
@@ -262,6 +318,10 @@ describe('UserProfile', () => {
     );
   });
 
+  /**
+   * Checks that invalid profile updates show a validation-specific message.
+   * Mocks a 400 update response and verifies the error and saving state.
+   */
   it('should display a validation error for a 400 response', () => {
     profileService.updateProfile.mockReturnValue(
       throwError(() => new HttpErrorResponse({ status: 400 })),
@@ -274,6 +334,10 @@ describe('UserProfile', () => {
     expect(component.saving()).toBe(false);
   });
 
+  /**
+   * Checks that expired sessions show the appropriate profile-save error.
+   * Mocks a 401 update response and verifies the session-expired message.
+   */
   it('should display a session error for a 401 response', () => {
     profileService.updateProfile.mockReturnValue(
       throwError(() => new HttpErrorResponse({ status: 401 })),
@@ -284,6 +348,10 @@ describe('UserProfile', () => {
     expect(component.errorMessage()).toBe('Your session has expired. Please log in again.');
   });
 
+  /**
+   * Checks that profile-save server failures show a fallback message.
+   * Mocks a 500 update response and verifies the general error.
+   */
   it('should display a generic error for a 500 response', () => {
     profileService.updateProfile.mockReturnValue(
       throwError(() => new HttpErrorResponse({ status: 500 })),
@@ -294,6 +362,10 @@ describe('UserProfile', () => {
     expect(component.errorMessage()).toBe('Unable to save profile changes. Please try again.');
   });
 
+  /**
+   * Checks that failed password changes show an error and reset progress.
+   * Mocks a 400 password response and verifies the message and changing state.
+   */
   it('should display an error when changing the password fails', () => {
     profileService.changePassword.mockReturnValue(
       throwError(() => new HttpErrorResponse({ status: 400 })),
@@ -314,12 +386,20 @@ describe('UserProfile', () => {
     expect(component.changingPassword()).toBe(false);
   });
 
+  /**
+   * Checks that the back action returns the user to the dashboard.
+   * Calls backToDashboard and verifies navigation to /dashboard.
+   */
   it('should navigate back to the dashboard', () => {
     component.backToDashboard();
 
     expect(router.navigate).toHaveBeenCalledWith(['/dashboard']);
   });
 
+  /**
+   * Checks that optional SMS-related profile fields are restored on load.
+   * Mocks a populated profile and verifies phone, SMS toggle, and carrier.
+   */
   it('should populate optional phone and carrier fields when loading', () => {
     profileService.getProfile.mockReturnValue(
       of({

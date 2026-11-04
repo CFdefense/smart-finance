@@ -48,6 +48,10 @@ describe('Signup', () => {
     component.password = 'Password123!';
   }
 
+  /**
+   * Checks that an entirely empty signup form is rejected.
+   * Submits blank fields and verifies an error appears without calling signup.
+   */
   it('should reject incomplete signup information', () => {
     component.onSignup();
 
@@ -55,6 +59,10 @@ describe('Signup', () => {
     expect(authService.signup).not.toHaveBeenCalled();
   });
 
+  /**
+   * Checks successful signup, whitespace trimming, and dashboard navigation.
+   * Submits valid data with padded fields and inspects the service call and route.
+   */
   it('should register successfully and navigate to dashboard', () => {
     fillForm();
     component.firstName = '  John  ';
@@ -73,6 +81,10 @@ describe('Signup', () => {
     expect(component.isSubmitting()).toBe(false);
   });
 
+  /**
+   * Checks that signup displays a useful message for an existing email.
+   * Mocks a 409 response and verifies the message and submission state.
+   */
   it('should reject duplicate email addresses', () => {
     authService.signup.mockReturnValue(throwError(() => ({ status: 409 })));
 
@@ -83,6 +95,10 @@ describe('Signup', () => {
     expect(component.isSubmitting()).toBe(false);
   });
 
+  /**
+   * Checks the signup message for a bad-request validation failure.
+   * Mocks a 400 response and verifies the expected validation text.
+   */
   it('should display validation errors for status 400', () => {
     authService.signup.mockReturnValue(throwError(() => ({ status: 400 })));
 
@@ -94,6 +110,10 @@ describe('Signup', () => {
     );
   });
 
+  /**
+   * Checks the signup message for an unprocessable-input failure.
+   * Mocks a 422 response and verifies the expected validation text.
+   */
   it('should display validation errors for status 422', () => {
     authService.signup.mockReturnValue(throwError(() => ({ status: 422 })));
 
@@ -105,6 +125,10 @@ describe('Signup', () => {
     );
   });
 
+  /**
+   * Checks that unexpected server errors get a general signup message.
+   * Mocks a 500 response and verifies the failure text.
+   */
   it('should display a generic error for server failures', () => {
     authService.signup.mockReturnValue(throwError(() => ({ status: 500 })));
 
@@ -114,6 +138,10 @@ describe('Signup', () => {
     expect(component.errorMessage()).toBe('Registration failed. Please try again later.');
   });
 
+  /**
+   * Checks that an in-progress signup cannot be submitted again.
+   * Sets the submitting state and verifies the signup service is not called.
+   */
   it('should prevent duplicate submissions', () => {
     fillForm();
     component.isSubmitting.set(true);
@@ -123,6 +151,10 @@ describe('Signup', () => {
     expect(authService.signup).not.toHaveBeenCalled();
   });
 
+  /**
+   * Checks that a last name is required for signup.
+   * Clears the last name and verifies validation blocks the service call.
+   */
   it('should reject a missing last name', () => {
     fillForm();
     component.lastName = '';
@@ -133,6 +165,10 @@ describe('Signup', () => {
     expect(authService.signup).not.toHaveBeenCalled();
   });
 
+  /**
+   * Checks that whitespace-only email input is rejected.
+   * Supplies a blank email and verifies validation blocks the service call.
+   */
   it('should reject a missing email', () => {
     fillForm();
     component.email = '   ';
@@ -143,6 +179,10 @@ describe('Signup', () => {
     expect(authService.signup).not.toHaveBeenCalled();
   });
 
+  /**
+   * Checks that signup requires a password.
+   * Clears the password and verifies validation blocks the service call.
+   */
   it('should reject a missing password', () => {
     fillForm();
     component.password = '';
