@@ -59,3 +59,11 @@ class NotificationPreferences(BaseModel):
     phone_number: str | None
     sms_notifications: bool
     sms_carrier_gateway: str | None
+
+
+class Rule(BaseModel):
+    """An enabled, user-written rule in the user's own words."""
+
+    id: int
+    description: str
+    account_ids: list[str]  # empty means the rule applies to all of the user's accounts

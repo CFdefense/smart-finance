@@ -3,7 +3,7 @@
 from datetime import date
 
 from db.connection import get_connection
-from db.models import Account, Budget, Goal, NotificationPreferences, Transaction
+from db.models import Account, Budget, Goal, NotificationPreferences, Rule, Transaction
 
 # Joins from a user to everything linked through their Plaid items.
 _USER_ACCOUNTS = """
@@ -144,3 +144,39 @@ def load_preferences(user_id: int) -> NotificationPreferences:
         sms_notifications=row[3],
         sms_carrier_gateway=row[4],
     )
+
+
+def load_rules(user_id: int, account_id: str) -> list[Rule]:
+    """Load the user's enabled rules that apply to `account_id` (no linked accounts = all)."""
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT r.id, r.description,
+                   COALESCE(ARRAY(
+                       SELECT ra.account_id FROM rule_accounts ra
+                       WHERE ra.rule_id = r.id ORDER BY ra.account_id
+                   ), ARRAY[]::text[])
+            FROM rules r
+            WHERE r.user_id = %s AND r.enabled
+              AND (
+                  NOT EXISTS (SELECT 1 FROM rule_accounts ra WHERE ra.rule_id = r.id)
+                  OR EXISTS (
+                      SELECT 1 FROM rule_accounts ra
+                      WHERE ra.rule_id = r.id AND ra.account_id = %s
+                  )
+              )
+            ORDER BY r.id
+            """,
+            (user_id, account_id),
+        ).fetchall()
+    return [Rule(id=r[0], description=r[1], account_ids=list(r[2])) for r in rows]
+
+
+def user_owns_account(user_id: int, account_id: str) -> bool:
+    """Return whether `account_id` is linked to `user_id`."""
+    with get_connection() as conn:
+        row = conn.execute(
+            f"SELECT 1 FROM {_USER_ACCOUNTS} WHERE l.user_id = %s AND a.account_id = %s",
+            (user_id, account_id),
+        ).fetchone()
+    return row is not None
