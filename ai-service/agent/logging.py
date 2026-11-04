@@ -7,6 +7,7 @@ import logging
 import time
 import uuid
 from collections.abc import Callable
+from typing import Any
 
 from langchain_core.callbacks import BaseCallbackHandler
 
@@ -16,6 +17,8 @@ NODE = f"{BASE}.node"
 TOOL = f"{BASE}.tool"
 LLM = f"{BASE}.llm"
 DECISION = f"{BASE}.decision"
+
+_HANDLER_MARKER = "_agent_run"
 
 _run_id = contextvars.ContextVar("run_id", default="-")
 _txn_id = contextvars.ContextVar("txn_id", default="-")
@@ -56,10 +59,10 @@ def configure_agent_logging(level: str = "INFO") -> None:
     """Set the agents' log level and make their lines include the run context (idempotent)."""
     base = logging.getLogger(BASE)
     base.setLevel(level.upper())
-    if any(getattr(h, "_agent_run", False) for h in base.handlers):
+    if any(getattr(h, _HANDLER_MARKER, False) for h in base.handlers):
         return
     handler = logging.StreamHandler()
-    handler._agent_run = True  # marker so repeated calls do not add handlers
+    setattr(handler, _HANDLER_MARKER, True)  # so repeated calls do not add handlers
     handler.addFilter(RunContextFilter())
     handler.setFormatter(
         logging.Formatter("%(asctime)s %(levelname)s %(name)s %(run_ctx)s %(message)s")
@@ -68,10 +71,10 @@ def configure_agent_logging(level: str = "INFO") -> None:
     base.propagate = False
 
 
-def traced_node(name: str) -> Callable:
+def traced_node(name: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Wrap a graph node to log entry, exit (with timing and written keys) and failures."""
 
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             _node_log.info("node.enter %s", name)

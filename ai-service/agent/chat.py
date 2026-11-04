@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 
 from langchain_core.messages import AIMessage
 from langchain_openai import ChatOpenAI
@@ -26,7 +27,7 @@ def route_after_respond(state: ChatState) -> str:
     return END
 
 
-def build_chat_graph(llm_with_tools, tools) -> CompiledStateGraph:
+def build_chat_graph(llm_with_tools, tools) -> CompiledStateGraph[Any, Any, Any, Any]:
     """Wire the chat workflow: load_context -> respond <-> tools."""
     graph = StateGraph(ChatState)
     graph.add_node("load_context", load_context)

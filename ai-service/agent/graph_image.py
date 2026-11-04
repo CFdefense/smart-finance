@@ -1,6 +1,7 @@
 """Draw an agent's workflow graph as a PNG."""
 
 from pathlib import Path
+from typing import Any
 
 from langgraph.graph.state import CompiledStateGraph
 
@@ -15,7 +16,7 @@ GRAPHS = {
 }
 
 
-def save_graph_image(graph: CompiledStateGraph, path: str | Path) -> Path:
+def save_graph_image(graph: CompiledStateGraph[Any, Any, Any, Any], path: str | Path) -> Path:
     """
     Render `graph` as a PNG at `path` and return the path.
 

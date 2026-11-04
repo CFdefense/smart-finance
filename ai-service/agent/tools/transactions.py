@@ -1,7 +1,7 @@
 """Tool: recent transactions for the user under analysis."""
 
 from datetime import date, timedelta
-from typing import Annotated
+from typing import Annotated, Any
 
 from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
@@ -17,7 +17,7 @@ _FETCH_LIMIT = 200
 
 @tool
 def get_transactions(
-    state: Annotated[dict, InjectedState],
+    state: Annotated[dict[str, Any], InjectedState],
     days: int = 30,
     category: Category | None = None,
     limit: int = 20,

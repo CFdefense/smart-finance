@@ -1,6 +1,6 @@
 """Tool: the user's own spending rules."""
 
-from typing import Annotated
+from typing import Annotated, Any
 
 from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
@@ -11,7 +11,7 @@ from db import load_rules
 
 
 @tool
-def get_rules(state: Annotated[dict, InjectedState]) -> str:
+def get_rules(state: Annotated[dict[str, Any], InjectedState]) -> str:
     """
     List the user's own spending rules that apply to this transaction's account.
 

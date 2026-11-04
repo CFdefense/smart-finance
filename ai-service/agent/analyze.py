@@ -1,5 +1,6 @@
 import logging
 import time
+from typing import Any
 
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
@@ -39,7 +40,7 @@ _LLM_TIMEOUT_SECONDS = 60
 __all__ = ["MAX_TOOL_ROUNDS", "AnalyzerAgent", "build_analyzer_graph"]
 
 
-def build_analyzer_graph(investigate_llm, assess_llm) -> CompiledStateGraph:
+def build_analyzer_graph(investigate_llm, assess_llm) -> CompiledStateGraph[Any, Any, Any, Any]:
     """
     Wire the analyzer workflow.
 

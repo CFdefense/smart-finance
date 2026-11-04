@@ -3,14 +3,14 @@
 import logging
 
 from agent.logging import NODE, traced_node
-from agent.state import AnalyzerState
+from agent.state import AnalyzerState, StateUpdate
 from db import finish_analysis
 
 _log = logging.getLogger(NODE)
 
 
 @traced_node("finalize")
-def finalize(state: AnalyzerState) -> dict:
+def finalize(state: AnalyzerState) -> StateUpdate:
     """Record the outcome so the claim reflects it; failed runs may be claimed again."""
     failed = state.get("status") == "FAILED"
     assessment = state.get("assessment")

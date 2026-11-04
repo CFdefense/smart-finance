@@ -132,3 +132,17 @@ def test_finalize_never_raises_when_the_database_write_fails(monkeypatch, caplog
 
     assert result == {"status": "ANALYZED"}
     assert "finalize.record_failed" in caplog.text
+
+
+def test_decide_and_notify_refuse_to_run_without_an_assessment():
+    """The graph never routes here without an assessment; running anyway fails loudly."""
+    import pytest
+
+    from agent.nodes.analysis import decide, notify
+
+    state = {"user_id": 1, "transaction": TXN, "assessment": None}
+
+    with pytest.raises(ValueError):
+        decide(state)
+    with pytest.raises(ValueError):
+        notify(state)

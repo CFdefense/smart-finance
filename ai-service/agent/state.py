@@ -1,9 +1,12 @@
-from typing import Annotated
+from typing import Annotated, Any
 
 from langgraph.graph.message import add_messages
 from typing_extensions import TypedDict
 
 from agent.data_models import AnalyzedTransaction, Assessment
+
+StateUpdate = dict[str, Any]
+"""What a graph node returns: the state keys it writes."""
 
 
 class ChatState(TypedDict):
@@ -11,7 +14,7 @@ class ChatState(TypedDict):
 
     user_id: int
     context: str
-    messages: Annotated[list, add_messages]
+    messages: Annotated[list[Any], add_messages]
 
 
 class AnalyzerState(TypedDict):
@@ -21,7 +24,7 @@ class AnalyzerState(TypedDict):
     user_id: int  # set once from the request
     transaction: AnalyzedTransaction  # frozen; no node ever returns this key
     context: str  # accounts summary
-    messages: Annotated[list, add_messages]  # investigate <-> tools loop
+    messages: Annotated[list[Any], add_messages]  # investigate <-> tools loop
     assessment: Assessment | None
     notify: bool  # decide's output
     notified: bool
