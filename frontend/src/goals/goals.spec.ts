@@ -1,6 +1,6 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import { provideRouter, Router } from '@angular/router';
+import { provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
@@ -11,7 +11,6 @@ describe('GoalsPage', () => {
   let component: GoalsPage;
   let fixture: ComponentFixture<GoalsPage>;
   let httpMock: HttpTestingController;
-  let router: Router;
 
   // Each test gets fresh mock functions, preventing one test
   // from affecting another.
@@ -59,7 +58,6 @@ describe('GoalsPage', () => {
     }).compileComponents();
 
     httpMock = TestBed.inject(HttpTestingController);
-    router = TestBed.inject(Router);
 
     fixture = TestBed.createComponent(GoalsPage);
     component = fixture.componentInstance;

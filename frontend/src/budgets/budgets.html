@@ -1,0 +1,198 @@
+<section class="budget-manager">
+  <header>
+    <h2>Manage Budgets</h2>
+    <p>
+      Set recurring monthly spending limits and track your spending. Your limits carry over
+      automatically each month.
+    </p>
+  </header>
+
+  <!-- Select which month's spending to display. -->
+
+  <div class="month-selection">
+    <label for="budget-month">Budget month</label>
+
+    <select
+      id="budget-month"
+      name="budgetMonth"
+      [ngModel]="selectedMonth"
+      (ngModelChange)="changeMonth($event)">
+      @for (month of monthOptions; track month.value) {
+        <option [value]="month.value">
+          {{ month.label }}
+        </option>
+      }
+    </select>
+  </div>
+
+  <!-- Messages for successful and unsuccessful operations. -->
+  @if (errorMessage()) {
+    <p role="alert" class="error-message">
+      {{ errorMessage() }}
+    </p>
+  }
+
+  @if (successMessage()) {
+    <p role="status" class="success-message">
+      {{ successMessage() }}
+    </p>
+  }
+
+  <!-- Show total spending across active budget categories. -->
+  <div class="budget-summary">
+    <div>
+      <h3>Total Budget</h3>
+      <p>{{ totalBudget | currency }}</p>
+    </div>
+
+    <div>
+      <h3>Spent in Budget Categories</h3>
+      <p>{{ totalSpent | currency }}</p>
+    </div>
+
+    <div>
+      <h3>Remaining</h3>
+      <p>{{ totalBudget - totalSpent | currency }}</p>
+    </div>
+  </div>
+
+  <!-- Show the create button whenever the form is closed. -->
+  @if (!showForm()) {
+    <button type="button" (click)="startCreate()">+ Create Budget</button>
+  }
+
+  <!-- Create and edit share the same form. -->
+  @if (showForm()) {
+    <form (ngSubmit)="saveBudget()" class="budget-form">
+      <h3>
+        {{ editingId() === null ? 'Create Budget' : 'Edit Budget' }}
+      </h3>
+
+      @if (errorMessage()) {
+        <p role="alert" class="error-message">
+          {{ errorMessage() }}
+        </p>
+      }
+
+      <div>
+        <label for="budget-name">Budget name</label>
+        <input
+          id="budget-name"
+          name="budgetName"
+          type="text"
+          maxlength="100"
+          [(ngModel)]="formName"
+          required />
+      </div>
+
+      <div>
+        <label for="budget-category">Spending category</label>
+        <select
+          id="budget-category"
+          name="budgetCategory"
+          [(ngModel)]="formCategory"
+          [disabled]="editingId() !== null">
+          @for (category of categories; track category.value) {
+            <option [value]="category.value">
+              {{ category.label }}
+            </option>
+          }
+        </select>
+      </div>
+
+      <div>
+        <label for="budget-limit">Monthly spending limit ($)</label>
+        <input
+          id="budget-limit"
+          name="monthlyLimit"
+          type="number"
+          min="0.01"
+          step="0.01"
+          [(ngModel)]="formMonthlyLimit"
+          required />
+      </div>
+
+      <div>
+        <label>
+          <input name="budgetActive" type="checkbox" [(ngModel)]="formActive" />
+          Active budget
+        </label>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" [disabled]="saving()">
+          @if (saving()) {
+            Saving...
+          } @else {
+            {{ editingId() === null ? 'Create Budget' : 'Save Changes' }}
+          }
+        </button>
+
+        <button type="button" (click)="cancelForm()" [disabled]="saving()">Cancel</button>
+      </div>
+    </form>
+  }
+
+  <!-- Existing monthly budgets. -->
+  <div class="budget-list">
+    <h3>
+      Budgets for
+      {{ selectedMonthLabel }}
+    </h3>
+
+    @if (loading()) {
+      <p>Loading budgets...</p>
+    } @else if (budgets().length === 0) {
+      <p>You haven't created any budgets yet.</p>
+    } @else {
+      @for (budget of budgets(); track budget.id) {
+        <article class="budget-card">
+          <div>
+            <h4>{{ budget.name }}</h4>
+            <p>{{ categoryLabel(budget.category) }}</p>
+
+            @if (!budget.active) {
+              <span>Inactive</span>
+            }
+          </div>
+
+          <p>
+            {{ budget.spent | currency }} of
+            {{ budget.monthly_limit | currency }}
+          </p>
+
+          <progress
+            [value]="progressValue(budget.percent_used)"
+            [class.progress-warning]="budget.percent_used >= 75 && !budget.over_budget"
+            [class.progress-danger]="budget.over_budget"
+            max="100"
+            [attr.aria-label]="budget.name + ' spending progress'"></progress>
+
+          <p>{{ budget.percent_used.toFixed(1) }}% used</p>
+
+          @if (budget.over_budget) {
+            <p class="error-message">Over budget!</p>
+          } @else {
+            <p>{{ budget.remaining | currency }} remaining</p>
+          }
+
+          <div class="budget-actions">
+            <button
+              type="button"
+              (click)="startEdit(budget)"
+              [disabled]="saving() || deletingId() !== null">
+              Edit
+            </button>
+
+            <button
+              type="button"
+              (click)="deleteBudget(budget)"
+              [disabled]="saving() || deletingId() !== null">
+              {{ deletingId() === budget.id ? 'Deleting...' : 'Delete' }}
+            </button>
+          </div>
+        </article>
+      }
+    }
+  </div>
+</section>

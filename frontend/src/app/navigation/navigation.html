@@ -24,11 +24,15 @@
       <span>Dashboard</span>
     </a>
 
-    <!-- Budgets: route not implemented yet -->
-    <span class="navigation-link disabled" aria-disabled="true" title="Budgets coming soon">
+    <!-- Budgets: navigate to the dedicated budget management page. -->
+    <a
+      class="navigation-link"
+      routerLink="/budgets"
+      routerLinkActive="active"
+      ariaCurrentWhenActive="page">
       <span class="material-symbols-outlined" aria-hidden="true">pie_chart</span>
       <span>Budgets</span>
-    </span>
+    </a>
 
     <!-- Goals -->
     <a

@@ -1,0 +1,344 @@
+/* Budget panel */
+:host {
+  display: block;
+  font-family: Arial, Helvetica, sans-serif;
+  color: #1e293b;
+}
+
+.budget-manager {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 32px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+}
+
+.budget-manager header {
+  margin-bottom: 28px;
+}
+
+.budget-manager header h2 {
+  margin: 0 0 8px;
+  font-size: 28px;
+  letter-spacing: -0.7px;
+}
+
+.budget-manager header p,
+.budget-summary h3,
+.budget-card > div:first-child p {
+  color: #64748b;
+}
+
+.budget-manager header p {
+  margin: 0;
+  font-size: 15px;
+}
+
+/* Month selector and form controls */
+.month-selection {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 26px;
+}
+
+.month-selection label,
+.budget-form label {
+  color: #475569;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.month-selection select,
+.budget-form input:not([type='checkbox']),
+.budget-form select {
+  box-sizing: border-box;
+  padding: 11px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  background: white;
+  color: #0f172a;
+  font-family: inherit;
+  font-size: 14px;
+}
+
+.month-selection select {
+  min-width: 200px;
+  cursor: pointer;
+}
+
+.budget-form input:not([type='checkbox']),
+.budget-form select {
+  width: 100%;
+}
+
+.month-selection select:focus,
+.budget-form input:focus,
+.budget-form select:focus {
+  outline: 2px solid #93b4ff;
+  outline-offset: 2px;
+}
+
+/* Summary cards */
+.budget-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin: 24px 0;
+}
+
+.budget-summary > div,
+.budget-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: white;
+  box-shadow: 0 2px 6px rgb(15 23 42 / 3%);
+}
+
+.budget-summary > div {
+  padding: 22px;
+}
+
+.budget-summary h3 {
+  margin: 0 0 14px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.budget-summary p {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.8px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Buttons */
+.budget-manager button {
+  padding: 10px 18px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: #2563eb;
+  color: white;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.budget-manager button:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.budget-manager button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Create and edit form */
+.budget-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  margin: 24px 0;
+  padding: 28px;
+  border: 1px solid #dbe4f0;
+  border-radius: 16px;
+  background: white;
+}
+
+.budget-form h3,
+.budget-form > .error-message,
+.budget-form > div:has(input[type='checkbox']),
+.form-actions {
+  grid-column: 1 / -1;
+}
+
+.budget-form h3 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.budget-form > div:not(.form-actions) {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.budget-form input[type='checkbox'] {
+  accent-color: #2563eb;
+}
+
+.budget-form label:has(input[type='checkbox']) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.budget-form > div:has(input[type='checkbox']) {
+  flex-direction: row;
+  align-items: center;
+}
+
+.form-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.form-actions button[type='button'] {
+  background: #e2e8f0;
+  color: #334155;
+}
+
+.form-actions button[type='button']:hover:not(:disabled) {
+  background: #cbd5e1;
+}
+
+/* Success and error feedback */
+.error-message,
+.success-message {
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.error-message {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.success-message {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.budget-form > .error-message {
+  margin: 0;
+}
+
+/* Existing budget cards */
+.budget-list {
+  margin-top: 32px;
+}
+
+.budget-list > h3 {
+  margin: 0 0 20px;
+  font-size: 21px;
+}
+
+.budget-card {
+  margin-bottom: 16px;
+  padding: 24px;
+}
+
+.budget-card h4 {
+  margin: 0 0 4px;
+  font-size: 18px;
+}
+
+.budget-card > div:first-child p {
+  margin: 0 0 16px;
+  font-size: 13px;
+}
+
+.budget-card > p {
+  margin: 10px 0;
+  color: #475569;
+  font-size: 14px;
+}
+
+.budget-card > p:nth-of-type(1) {
+  margin-top: 18px;
+  color: #0f172a;
+  font-size: 19px;
+  font-weight: 600;
+}
+
+/* Spending progress */
+.budget-card progress {
+  --progress-color: #2563eb;
+
+  display: block;
+  width: 100%;
+  height: 10px;
+  margin: 18px 0 12px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 20px;
+  background: #e2e8f0;
+  accent-color: var(--progress-color);
+}
+
+.budget-card progress::-webkit-progress-bar {
+  background: #e2e8f0;
+  border-radius: 20px;
+}
+
+.budget-card progress::-webkit-progress-value,
+.budget-card progress::-moz-progress-bar {
+  background: var(--progress-color);
+}
+
+.budget-card progress.progress-warning {
+  --progress-color: #d97706;
+}
+
+.budget-card progress.progress-danger {
+  --progress-color: #dc2626;
+}
+
+/* Budget card actions */
+.budget-actions {
+  display: flex;
+  gap: 10px;
+  padding-top: 16px;
+  margin-top: 16px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.budget-actions button:first-child {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.budget-actions button:first-child:hover:not(:disabled) {
+  background: #dbeafe;
+}
+
+.budget-actions button:last-child {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.budget-actions button:last-child:hover:not(:disabled) {
+  background: #fee2e2;
+}
+
+/* Responsive layout */
+@media (max-width: 700px) {
+  .budget-manager {
+    padding: 18px;
+  }
+
+  .budget-summary,
+  .budget-form {
+    grid-template-columns: 1fr;
+  }
+
+  .month-selection {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .budget-summary p {
+    font-size: 25px;
+  }
+
+  .budget-form {
+    padding: 18px;
+  }
+}

@@ -1,0 +1,14 @@
+<!--
+  Shared layout for authenticated pages.
+
+  The navigation bar stays visible while Angular
+  switches between Dashboard, Goals, Budgets, and Rules.
+-->
+
+<!-- Display our reusable navigation component. -->
+<app-navigation />
+
+<!-- Display the currently selected child page. -->
+<main class="app-content">
+  <router-outlet />
+</main>
