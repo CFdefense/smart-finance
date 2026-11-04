@@ -38,6 +38,8 @@ uv sync
               "notified": true, "error": null}
              status is ANALYZED, DUPLICATE (already analyzed) or FAILED (see error).
              422 if the account is not the user's; 503 without OPENAI_API_KEY.
+             A FAILED result is still HTTP 200 (retry later); only an unowned account is 422.
+             Notifications: OK never notifies, ALERT always does, REVIEW follows the model.
 
    POST /anomaly
    Request:  {"user_id": 1, "transaction_ids": ["txn_abc", "txn_def"]}
