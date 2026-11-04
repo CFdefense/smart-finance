@@ -6,7 +6,14 @@ import psycopg
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 
-from agent import AnalyzerAgent, ChatAgent, ChatRequest, ChatResponse
+from agent import (
+    AnalysisResult,
+    AnalyzerAgent,
+    AnalyzeRequest,
+    ChatAgent,
+    ChatRequest,
+    ChatResponse,
+)
 from agent.logging import configure_agent_logging
 from anomaly import (
     AnomalyRequest,
@@ -62,11 +69,14 @@ def chat(request: ChatRequest) -> ChatResponse:
 
 
 @app.post("/analyze")
-def analyze(request: ChatRequest) -> ChatResponse:
-    """Generate a response to a standard chat request."""
+def analyze(request: AnalyzeRequest) -> AnalysisResult:
+    """Analyze one transaction and notify the user if it needs their attention."""
     if app.state.analyzer_agent is None:
         raise HTTPException(status_code=503, detail="AI assistant is not available.")
-    return app.state.analyzer_agent.generate_answer(request)
+    result = app.state.analyzer_agent.analyze(request)
+    if result.error == "account_not_owned":
+        raise HTTPException(status_code=422, detail="Account does not belong to this user.")
+    return result
 
 
 @app.post("/anomaly")
