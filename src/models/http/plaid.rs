@@ -56,6 +56,9 @@ pub struct AccountsResponse {
 pub struct AccountResponse {
     /// Your application's or Plaid's account identifier.
     pub account_id: String,
+    /// Financial institution name, such as Chase or Bank of America.
+    /// Optional because some connections may not provide a name.
+    pub institution_name: Option<String>,
     /// Plaid Item associated with this account.
     pub item_id: String,
     /// Account display name, such as Checking.
