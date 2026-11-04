@@ -50,12 +50,28 @@ uv sync
    GET /health
    Response: {"status": "ok", "database": "ok"}   ("unreachable" if Postgres is down)
 
+## How the analyzer gets its data
+
+Every run loads the user's accounts, the rules that apply to the transaction's account, the
+monthly budgets and the savings goals up front (the `load_context` node), so the model always
+sees all of them. The prompts ask it to check the transaction against every rule, budget and goal
+before concluding. Its one tool is `get_transactions`, for comparing with other spending.
+
 ## Analyzer logging
 
-Set `AGENT_LOG_LEVEL` (default `INFO`). INFO shows each run's workflow: node enter/exit with
-timings, routing decisions, tool calls, LLM calls and the notify decision, every line tagged
-`[run=<id> txn=<transaction_id> user=<id>]` so `grep run=<id>` follows one analysis. DEBUG adds
-prompts, raw tool results, notification text and the graph as Mermaid.
+The analyzer's workflow logs go to `ai-service/logs/analyzer.log` (rotating, 5 MB x 3), not to the
+terminal, which keeps only uvicorn's request lines. Follow it with `tail -f logs/analyzer.log`.
+Each line reads `[time] [PID] [LEVEL] [node|graph|tool|llm|decision] [run=<id> txn=<last 4 of id> user=<id>] message`,
+so `grep run=<id> logs/analyzer.log` follows one analysis.
+
+- `AGENT_LOG_LEVEL` (default `INFO`): INFO shows node enter/exit with timings, routing decisions,
+  tool calls, LLM calls and the notify decision. DEBUG adds prompts, raw tool results,
+  notification text and the graph as Mermaid.
+- `AGENT_LOG_CONTENT=true`: also draw boxes under the log lines showing what each node wrote
+  (`node.wrote`: the loaded context, the model's tool calls, the assessment) and what each tool
+  was given and returned (`tool.content`). This puts user-written text (rule descriptions, budget
+  names, merchants) in the log, so leave it off outside local demos.
+- `AGENT_LOG_DIR`: write the file somewhere else.
 
 ## Drawing the agent graphs
 
@@ -71,3 +87,20 @@ is fine). The optional second argument is the output file, which defaults to `<a
 in the current directory. No API key or database is needed, but it needs internet access because
 the image is drawn by the mermaid.ink service. From code, use
 `agent.graph_image.save_graph_image(graph, path)`.
+
+## Trying the analyzer by hand
+
+Scripts in `tests/manual/` (not collected by pytest) set up and drive a local demo. They need the
+Postgres from `docker-compose.yml`, the migrations applied, and a real `OPENAI_API_KEY`.
+
+```
+cargo run --bin seed-sandbox                          # from the repo root: users and accounts
+uv run python tests/manual/seed_christian.py          # budgets, rules, goals, recent spending
+uv run uvicorn main:app                               # terminal A
+tail -f logs/analyzer.log                             # terminal B: the agent's workflow
+uv run python tests/manual/trigger.py list            # terminal C: pick a scenario
+uv run python tests/manual/trigger.py bestbuy
+```
+
+`trigger.py` also takes `custom --name "Nike" --amount 120 --category SHOPPING`, and `--id` to
+send the same transaction twice and see `DUPLICATE`.
