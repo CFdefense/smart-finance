@@ -210,4 +210,15 @@ describe('UserDashboard', () => {
     expect(authService.logout).toHaveBeenCalledOnce();
     expect(router.navigate).toHaveBeenCalledWith(['/login']);
   });
+
+  /**
+   * Verifies that the profile dropdown opens the Profile page.
+   *
+   * This preserves the navigation test from PR #72.
+   */
+  it('should navigate to Profile', () => {
+    component.openProfile();
+
+    expect(router.navigate).toHaveBeenCalledWith(['/profile']);
+  });
 });

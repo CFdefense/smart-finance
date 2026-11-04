@@ -184,7 +184,7 @@ run_angular_build() {
 }
 
 run_test_coverage() {
-    step "Frontend test coverage (≥90% coverage)"
+    step "Frontend test coverage (≥85% coverage)"
     (cd ./frontend && npx ng test --coverage --watch=false)
 }
 
