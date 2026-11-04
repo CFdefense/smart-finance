@@ -25,6 +25,7 @@ uv sync
    POST /chat
    Request:  {"user_id": 1, "message": "How much did I spend on food?"}
    Response: {"response": "..."}   (answered by the LLM; needs OPENAI_API_KEY)
+   May search the web with Tavily, which needs TAVILY_API_KEY (without it, chat still works but search fails gracefully).
 
    POST /analyze
    Request:  {"user_id": 1, "message": "Is a $900 charge at Best Buy suspicious?"}
