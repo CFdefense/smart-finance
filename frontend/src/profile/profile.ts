@@ -203,7 +203,6 @@ export class UserProfile implements OnInit {
   }
 
   setView(view: 'accountInfo' | 'notifications' | 'password') {
-    console.log(view);
     this.currentView = view;
   }
 }
