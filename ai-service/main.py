@@ -6,10 +6,10 @@ import psycopg
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 
-from agent import AnalyzerAgent, ChatAgent
-from agent.data_models import ChatRequest, ChatResponse
-from anomaly.data_models import AnomalyRequest, AnomalyResponse
-from anomaly.detector import (
+from agent import AnalyzerAgent, ChatAgent, ChatRequest, ChatResponse
+from anomaly import (
+    AnomalyRequest,
+    AnomalyResponse,
     CombinedDetector,
     DuplicateDetector,
     SubscriptionIncreaseDetector,
