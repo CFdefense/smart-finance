@@ -1,7 +1,14 @@
 <main class="main">
   <div class="header">
     <div>
-      <p class="title">Hello, User</p>
+      <!-- Show a personalized greeting using the user's profile. -->
+      @if (profileLoading()) {
+        <h1 class="title">Welcome back</h1>
+      } @else if (firstName()) {
+        <h1 class="title">Welcome back, {{ firstName() }}</h1>
+      } @else {
+        <h1 class="title">Welcome back</h1>
+      }
     </div>
     <div class="profile-dropdown">
       <div class="icons">
@@ -50,17 +57,41 @@
       <div class="total-budget">
         <span class="material-symbols-outlined attach-money">attach_money</span>
         <p class="total-budget-title">Total Budget</p>
-        <p class="total-budget-amount">$2,000</p>
+        <p class="total-budget-amount">
+          @if (budgetsLoading()) {
+            Loading...
+          } @else if (budgetsError()) {
+            Unavailable
+          } @else {
+            {{ totalBudget() | currency }}
+          }
+        </p>
       </div>
       <div class="actual-spent">
         <span class="material-symbols-outlined payments">payments</span>
         <p class="actual-spent-title">Actual Spent</p>
-        <p class="actual-spent-amount">$1,568</p>
+        <p class="actual-spent-amount">
+          @if (budgetsLoading()) {
+            Loading...
+          } @else if (budgetsError()) {
+            Unavailable
+          } @else {
+            {{ totalSpent() | currency }}
+          }
+        </p>
       </div>
       <div class="remaining-budget">
         <span class="material-symbols-outlined account-balance-wallet">account_balance_wallet</span>
         <p class="remaining-budget-title">Remaining Budget</p>
-        <p class="remaining-budget-amount">$432</p>
+        <p class="remaining-budget-amount">
+          @if (budgetsLoading()) {
+            Loading...
+          } @else if (budgetsError()) {
+            Unavailable
+          } @else {
+            {{ totalRemaining() | currency }}
+          }
+        </p>
       </div>
     </div>
   </div>
