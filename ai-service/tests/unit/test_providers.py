@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from notifications.providers import SmtpEmailSender
+from notifications import SmtpEmailSender
 
 SMTP_ENV = {
     "SMTP_HOST": "smtp.example.com",

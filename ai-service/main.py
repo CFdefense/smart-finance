@@ -6,10 +6,18 @@ import psycopg
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 
-from agent import AnalyzerAgent, ChatAgent
-from agent.data_models import ChatRequest, ChatResponse
-from anomaly.data_models import AnomalyRequest, AnomalyResponse
-from anomaly.detector import (
+from agent import (
+    AnalysisResult,
+    AnalyzerAgent,
+    AnalyzeRequest,
+    ChatAgent,
+    ChatRequest,
+    ChatResponse,
+)
+from agent.logging import configure_agent_logging
+from anomaly import (
+    AnomalyRequest,
+    AnomalyResponse,
     CombinedDetector,
     DuplicateDetector,
     SubscriptionIncreaseDetector,
@@ -20,6 +28,7 @@ from db import get_connection
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
+configure_agent_logging(os.getenv("AGENT_LOG_LEVEL", "INFO"))
 
 
 @asynccontextmanager
@@ -29,8 +38,8 @@ async def lifespan(app: FastAPI):
     model = os.getenv("AGENT_MODEL", "gpt-4.1")
 
     if openai_key:
-        app.state.analyzer_agent = AnalyzerAgent().create(openai_key, model)
-        app.state.chat_agent = ChatAgent().create(openai_key, model)
+        app.state.analyzer_agent = AnalyzerAgent(openai_key, model)
+        app.state.chat_agent = ChatAgent(openai_key, model)
     else:
         logging.warning("OPENAI_API_KEY not set; /chat and /analyze are disabled.")
         app.state.analyzer_agent = None
@@ -60,11 +69,14 @@ def chat(request: ChatRequest) -> ChatResponse:
 
 
 @app.post("/analyze")
-def analyze(request: ChatRequest) -> ChatResponse:
-    """Generate a response to a standard chat request."""
+def analyze(request: AnalyzeRequest) -> AnalysisResult:
+    """Analyze one transaction and notify the user if it needs their attention."""
     if app.state.analyzer_agent is None:
         raise HTTPException(status_code=503, detail="AI assistant is not available.")
-    return app.state.analyzer_agent.generate_answer(request)
+    result = app.state.analyzer_agent.analyze(request)
+    if result.error == "account_not_owned":
+        raise HTTPException(status_code=422, detail="Account does not belong to this user.")
+    return result
 
 
 @app.post("/anomaly")

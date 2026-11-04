@@ -3,8 +3,7 @@
 import logging
 from typing import Protocol
 
-from db import get_connection
-from notifications.data_models import NotificationPreferences
+from db import load_preferences
 from notifications.providers import SmtpEmailSender
 
 
@@ -23,31 +22,6 @@ logger = logging.getLogger(__name__)
 email_sender: EmailSender = SmtpEmailSender()
 
 
-def _load_preferences(user_id: int) -> NotificationPreferences:
-    """Fetch the notification preferences for `user_id` from the database."""
-    with get_connection() as conn:
-        row = conn.execute(
-            """
-            SELECT email, email_notifications, phone_number, sms_notifications,
-                   sms_carrier_gateway
-            FROM users
-            WHERE id = %s
-            """,
-            (user_id,),
-        ).fetchone()
-
-    if row is None:
-        raise ValueError(f"No user found with id={user_id}")
-
-    return NotificationPreferences(
-        email=row[0],
-        email_notifications=row[1],
-        phone_number=row[2],
-        sms_notifications=row[3],
-        sms_carrier_gateway=row[4],
-    )
-
-
 def send_notification(user_id: int, message: str) -> None:
     """
     Send `message` to `user_id` via every channel they have enabled.
@@ -56,7 +30,7 @@ def send_notification(user_id: int, message: str) -> None:
     dispatches an email and/or an email-to-SMS message according to those
     preferences. Channels that are disabled are silently skipped.
     """
-    prefs = _load_preferences(user_id)
+    prefs = load_preferences(user_id)
     dispatched = False
 
     if prefs.email_notifications:

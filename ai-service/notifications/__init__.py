@@ -1,3 +1,4 @@
-from notifications.dispatcher import send_notification
+from notifications.dispatcher import EmailSender, send_notification
+from notifications.providers import SmtpEmailSender
 
-__all__ = ["send_notification"]
+__all__ = ["EmailSender", "SmtpEmailSender", "send_notification"]
