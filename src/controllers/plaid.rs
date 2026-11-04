@@ -648,6 +648,7 @@ pub async fn api_plaid_remove_item(
     // - The currently authenticated user's ID.
     //
     // We never accept an access token directly from the frontend.
+    // A missing or unowned Item returns 404 without revealing its existence.
     let access_token = sqlx::query_scalar!(
         "SELECT access_token FROM plaid_links WHERE item_id = $1 AND user_id = $2",
         item_id,
@@ -655,20 +656,17 @@ pub async fn api_plaid_remove_item(
     )
     .fetch_optional(&pool)
     .await
-    .map_err(AppError::from)?;
+    .map_err(AppError::from)?
+    .ok_or(AppError::NotFound)?;
 
-    // STEP 2: Return 404 if the connection does not belong to this user
-    // or does not exist. This avoids exposing other users' connections.
-    let access_token = access_token.ok_or(AppError::NotFound)?;
-
-    // STEP 3: Ask Plaid to invalidate the connection.
+    // STEP 2: Ask Plaid to invalidate the connection.
     //
-    // This calls the remove_item() function we added to PlaidClient.
+    // This calls disconnect_item_from_plaid() on PlaidClient.
     // If Plaid rejects the request, the ? operator stops execution
     // and returns the error without deleting local records.
-    plaid.remove_item(&access_token).await?;
+    plaid.disconnect_item_from_plaid(&access_token).await?;
 
-    // STEP 4: Remove the connection from our local database.
+    // STEP 3: Remove the connection from our local database.
     //
     // PostgreSQL's ON DELETE CASCADE relationships also remove:
     // - Financial accounts associated with this Item.
@@ -686,7 +684,7 @@ pub async fn api_plaid_remove_item(
     .await
     .map_err(AppError::from)?;
 
-    // STEP 5: Return HTTP 204 (successful request, no response body).
+    // STEP 4: Return HTTP 204 (successful request, no response body).
     Ok(StatusCode::NO_CONTENT)
 }
 

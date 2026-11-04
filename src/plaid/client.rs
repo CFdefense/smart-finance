@@ -158,7 +158,7 @@ impl PlaidClient {
     ///
     /// This function only communicates with Plaid.
     /// The controller is responsible for deleting local database records.
-    pub async fn remove_item(&self, access_token: &str) -> Result<(), AppError> {
+    pub async fn disconnect_item_from_plaid(&self, access_token: &str) -> Result<(), AppError> {
         // Build the JSON body required by Plaid's /item/remove endpoint.
         // Credentials remain on the backend and are never sent to Angular.
         let body = serde_json::json!({
