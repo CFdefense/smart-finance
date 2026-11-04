@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from agent.data_models import ChatResponse
+from agent import ChatResponse
 from main import app
 
 client = TestClient(app)
