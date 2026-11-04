@@ -1,5 +1,6 @@
 """Run-scoped logging for the analyzer graph: run ids, node tracing, tool and LLM callbacks."""
 
+import ast
 import contextvars
 import functools
 import logging
@@ -102,6 +103,15 @@ def _one_line(value: object, limit: int = _ARGS_MAX) -> str:
     return text if len(text) <= limit else text[:limit] + "..."
 
 
+def _arg_names(input_str: object) -> list[str]:
+    """Return the names of the arguments the model supplied, never their (untrusted) values."""
+    try:
+        parsed = ast.literal_eval(str(input_str))
+    except (ValueError, SyntaxError):
+        return []
+    return sorted(str(key) for key in parsed) if isinstance(parsed, dict) else []
+
+
 class AnalyzerCallbackHandler(BaseCallbackHandler):
     """Log tool calls and LLM calls. Content appears only at DEBUG."""
 
@@ -122,7 +132,9 @@ class AnalyzerCallbackHandler(BaseCallbackHandler):
         can include injected graph state (the user's transaction).
         """
         self._started[run_id] = time.perf_counter()
-        _tool_log.info("tool.call %s args=%s", (serialized or {}).get("name"), _one_line(input_str))
+        name = (serialized or {}).get("name")
+        _tool_log.info("tool.call %s args=%s", name, _arg_names(input_str))
+        _tool_log.debug("tool.call.args %s %s", name, _one_line(input_str))
 
     def on_tool_end(self, output, *, run_id=None, **kwargs):
         """Log how big the result was; the content itself only at DEBUG."""

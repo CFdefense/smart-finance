@@ -80,7 +80,8 @@ def test_callback_handler_logs_tool_call_and_result(caplog):
         handler.on_tool_start({"name": "get_rules"}, "{'days': 3}", run_id=None)
         handler.on_tool_end("a very private rule description", run_id=None)
 
-    assert "tool.call get_rules args={'days': 3}" in caplog.text
+    assert "tool.call get_rules args=['days']" in caplog.text
+    assert "'days': 3" not in caplog.text
     assert "tool.result chars=" in caplog.text
     assert "private rule" not in caplog.text
 
@@ -104,11 +105,12 @@ def test_callback_handler_error_messages_only_at_debug_and_single_line(caplog):
     handler = AnalyzerCallbackHandler()
 
     with caplog.at_level(logging.INFO, logger="agent.analyze"):
-        handler.on_tool_start({"name": "t"}, "line1\nFAKE log line", run_id="r1")
+        handler.on_tool_start({"name": "t"}, "{'category': 'x\\nFAKE log line'}", run_id="r1")
         handler.on_tool_error(ValueError("input_value='secret merchant'"), run_id="r1")
         handler.on_llm_error(RuntimeError("echoed user text"), run_id="r2")
 
-    assert "tool.call t args=line1 FAKE log line" in caplog.text
+    assert "tool.call t args=['category']" in caplog.text
+    assert "FAKE log line" not in caplog.text
     assert "tool.error type=ValueError" in caplog.text
     assert "llm.error type=RuntimeError" in caplog.text
     assert "secret merchant" not in caplog.text

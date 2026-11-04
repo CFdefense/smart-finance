@@ -1,6 +1,7 @@
 """Helpers for handling untrusted text (transaction names, rule descriptions, model output)."""
 
 import re
+import unicodedata
 
 NOTIFY_REASON_MAX = 200
 _NAME_MAX = 60
@@ -13,10 +14,12 @@ def sanitize(text: str, max_len: int) -> tuple[str, int]:
     """
     Make `text` safe to put in a prompt or message.
 
-    Removes control characters and angle brackets, collapses whitespace and cuts to `max_len`.
+    Normalizes Unicode (NFKC), removes invisible/format and control characters and angle brackets, collapses whitespace and cuts to `max_len`.
     Returns the clean text and how many characters were removed or cut.
     """
-    cleaned = _CONTROL.sub("", text)
+    cleaned = unicodedata.normalize("NFKC", text)  # folds full-width < > to ASCII
+    cleaned = "".join(c for c in cleaned if unicodedata.category(c) != "Cf")  # bidi, zero-width
+    cleaned = _CONTROL.sub("", cleaned)
     cleaned = _ANGLES.sub("", cleaned)
     cleaned = _SPACE.sub(" ", cleaned).strip()
     cleaned = cleaned[:max_len]

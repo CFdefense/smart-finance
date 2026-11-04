@@ -40,3 +40,11 @@ def test_build_notification_is_templated_and_capped():
     assert message == "Best Buy $1,234.50: Large purchase bover/b budget"
     long = build_notification("n" * 200, 1.0, "r" * 500)
     assert len(long) <= 60 + len(" $1.00: ") + NOTIFY_REASON_MAX
+
+
+def test_sanitize_folds_fullwidth_brackets_and_drops_invisible_characters():
+    """Full-width brackets, bidi overrides and zero-width characters cannot slip through."""
+    clean, changed = sanitize("a\uff1c/transaction\uff1e\u202eb\u200bc", 100)
+
+    assert clean == "a/transactionbc"
+    assert changed > 0
