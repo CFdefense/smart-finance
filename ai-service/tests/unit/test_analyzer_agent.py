@@ -43,6 +43,8 @@ class ScriptedLLM:
         reply = self.replies.pop(0) if len(self.replies) > 1 else self.replies[0]
         if isinstance(reply, Exception):
             raise reply
+        if reply is None:
+            return None
         # A copy matters: LangGraph's add_messages treats a repeated message id as an update,
         # so returning the same AIMessage object twice would replace it instead of appending.
         return reply.model_copy(deep=True)
@@ -278,3 +280,41 @@ def test_constructor_builds_a_working_agent(monkeypatch, world):
     result = AnalyzerAgent("sk-test", "gpt-test").analyze(REQUEST)
 
     assert result.status == "ANALYZED"
+
+
+def test_context_failure_after_claim_still_records_the_run(world, monkeypatch):
+    """A DB error while loading accounts must not strand the claim: the run completes."""
+
+    def boom(u):
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr(load_context_mod, "load_accounts", boom)
+
+    result = run(ScriptedLLM(AIMessage(content="x")), ScriptedLLM(_assessment("OK")))
+
+    assert result.status == "ANALYZED"
+    assert world["recorded"] == [("t1", "done", "OK", False, None)]
+
+
+def test_finalize_retries_the_write_once(world, monkeypatch):
+    """A transient failure recording the outcome is retried so the claim is not left started."""
+    calls = []
+
+    def flaky(*args):
+        calls.append(args)
+        if len(calls) == 1:
+            raise RuntimeError("blip")
+
+    monkeypatch.setattr(finalization_mod, "finish_analysis", flaky)
+
+    result = run(ScriptedLLM(AIMessage(content="x")), ScriptedLLM(_assessment("OK")))
+
+    assert result.status == "ANALYZED" and len(calls) == 2
+
+
+def test_non_assessment_result_is_a_failed_attempt(world):
+    """A structured-output call that returns None is retried, then fails safe."""
+    result = run(ScriptedLLM(AIMessage(content="x")), ScriptedLLM(None))
+
+    assert result.status == "FAILED" and result.error == "assess_failed"
+    assert world["recorded"] == [("t1", "failed", None, False, "assess_failed")]

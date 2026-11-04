@@ -75,12 +75,13 @@ def test_claim_duplicate_ends_the_run(monkeypatch, caplog):
     monkeypatch.setattr(claim_mod, "user_owns_account", lambda u, a: True)
     monkeypatch.setattr(claim_mod, "claim_analysis", lambda t, u: (False, "done"))
 
-    result = claim_transaction(STATE)
-    with caplog.at_level(logging.INFO, logger="agent.analyze.graph"):
+    with caplog.at_level(logging.INFO, logger="agent.analyze"):
+        result = claim_transaction(STATE)
         target = route_after_claim(result)
 
     assert result == {"status": "DUPLICATE", "error": None}
     assert target == "__end__"
+    assert "claim.duplicate existing_status=done" in caplog.text
     assert "route claim -> END reason=duplicate" in caplog.text
 
 

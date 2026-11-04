@@ -5,6 +5,7 @@ from collections.abc import Callable
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from agent.data_models import Assessment
 from agent.logging import NODE, log_route, traced_node
 from agent.nodes.analysis.investigate import build_findings
 from agent.prompts import ASSESS_SYSTEM_PROMPT, transaction_block
@@ -30,7 +31,10 @@ def make_assess(structured_llm) -> Callable[[AnalyzerState], dict]:
         ]
         for attempt in (1, 2):
             try:
-                return {"assessment": structured_llm.invoke(messages)}
+                result = structured_llm.invoke(messages)
+                if not isinstance(result, Assessment):
+                    raise TypeError("model did not return an Assessment")
+                return {"assessment": result}
             except Exception as exc:
                 if attempt == 1:
                     _log.warning("assess.retry first attempt failed type=%s", type(exc).__name__)

@@ -34,6 +34,8 @@ from agent.tools import ALL_TOOLS
 
 _log = logging.getLogger(GRAPH)
 
+_LLM_TIMEOUT_SECONDS = 60
+
 __all__ = ["MAX_TOOL_ROUNDS", "AnalyzerAgent", "build_analyzer_graph"]
 
 
@@ -78,7 +80,13 @@ class AnalyzerAgent:
 
     def __init__(self, openai_key: str, model: str):
         """Create the models and compile the analysis graph."""
-        llm = ChatOpenAI(api_key=SecretStr(openai_key), model=model, temperature=0)
+        llm = ChatOpenAI(
+            api_key=SecretStr(openai_key),
+            model=model,
+            temperature=0,
+            timeout=_LLM_TIMEOUT_SECONDS,
+            max_retries=1,
+        )
         self._graph = build_analyzer_graph(
             llm.bind_tools(ALL_TOOLS), llm.with_structured_output(Assessment)
         )
