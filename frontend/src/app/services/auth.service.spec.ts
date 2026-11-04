@@ -21,6 +21,10 @@ describe('AuthService', () => {
     httpMock.verify();
   });
 
+  /**
+   * Checks that login sends the expected credentials and includes cookies.
+   * Intercepts the POST request and verifies its URL, body, and credentials flag.
+   */
   it('should send login credentials to the backend', () => {
     service.login('john@example.com', 'Password123!').subscribe();
 
@@ -36,6 +40,10 @@ describe('AuthService', () => {
     req.flush(null);
   });
 
+  /**
+   * Checks that signup sends all required registration fields.
+   * Intercepts the POST request and verifies its payload and credentials flag.
+   */
   it('should send signup information to the backend', () => {
     service.signup('John', 'Smith', 'john@example.com', 'Password123!').subscribe();
 
@@ -53,6 +61,10 @@ describe('AuthService', () => {
     req.flush(null);
   });
 
+  /**
+   * Checks that the service requests the current user's auth status.
+   * Intercepts the GET /api/user/me request and verifies credentials are included.
+   */
   it('should check authentication status', () => {
     service.checkAuth().subscribe();
 
@@ -64,6 +76,10 @@ describe('AuthService', () => {
     req.flush(null);
   });
 
+  /**
+   * Checks that logout sends the expected authenticated request.
+   * Intercepts the POST request and verifies its empty body and credentials flag.
+   */
   it('should send a logout request', () => {
     service.logout().subscribe();
 

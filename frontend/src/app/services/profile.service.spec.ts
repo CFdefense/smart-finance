@@ -21,6 +21,10 @@ describe('ProfileService', () => {
     httpMock.verify();
   });
 
+  /**
+   * Checks that profile loading requests and returns the user's data.
+   * Mocks the GET response and verifies the URL, cookie flag, and returned profile.
+   */
   it('should retrieve the authenticated user profile', () => {
     const mockProfile: UserProfile = {
       first_name: 'John',
@@ -44,6 +48,10 @@ describe('ProfileService', () => {
     req.flush(mockProfile);
   });
 
+  /**
+   * Checks that profile edits are submitted with the supplied fields.
+   * Intercepts the PUT request and verifies its URL, body, and credentials flag.
+   */
   it('should send profile updates to the backend', () => {
     const changes = {
       first_name: 'Jane',
@@ -62,6 +70,10 @@ describe('ProfileService', () => {
     req.flush(null);
   });
 
+  /**
+   * Checks that password changes send both current and new passwords.
+   * Intercepts the PUT request and verifies the password payload and credentials.
+   */
   it('should send password changes to the backend', () => {
     const passwords = {
       current_password: 'OldPassword123!',

@@ -33,6 +33,10 @@ describe('authGuard', () => {
     return isObservable(result) ? result : from(Promise.resolve(result));
   }
 
+  /**
+   * Checks that the route guard permits authenticated users.
+   * Runs the guard with a successful mocked auth check and expects true.
+   */
   it('should allow authenticated users', async () => {
     const result = await firstValueFrom(runGuard());
 
@@ -40,6 +44,10 @@ describe('authGuard', () => {
     expect(result).toBe(true);
   });
 
+  /**
+   * Checks that unauthenticated users cannot access a protected route.
+   * Mocks a 401 auth failure and verifies the guard returns a /login UrlTree.
+   */
   it('should redirect unauthenticated users to login', async () => {
     authService.checkAuth.mockReturnValue(throwError(() => ({ status: 401 })));
 
