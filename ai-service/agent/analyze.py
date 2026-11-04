@@ -51,6 +51,7 @@ class AnalyzerAgent(BaseModel):
             {
                 "user_id": request.user_id,
                 "message": request.message,
+                "context": "",
                 "response": "",
             }
         )

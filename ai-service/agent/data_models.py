@@ -27,4 +27,5 @@ class AgentState(TypedDict):
 
     user_id: int
     message: str
+    context: str
     response: str
