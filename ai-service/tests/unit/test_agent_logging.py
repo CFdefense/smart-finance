@@ -6,7 +6,7 @@ import pytest
 
 from agent.logging import (
     NODE,
-    AnalyzerCallbackHandler,
+    AgentCallbackHandler,
     RunContextFilter,
     bind_run,
     log_route,
@@ -66,7 +66,7 @@ def test_traced_node_logs_traceback_and_reraises(caplog):
 
 def test_log_route_records_target_and_reason(caplog):
     """Routing decisions are logged with the reason."""
-    with caplog.at_level(logging.INFO, logger="agent.analyze.graph"):
+    with caplog.at_level(logging.INFO, logger="agent.run.graph"):
         log_route("claim", "END", "duplicate")
 
     assert "route claim -> END reason=duplicate" in caplog.text
@@ -74,9 +74,9 @@ def test_log_route_records_target_and_reason(caplog):
 
 def test_callback_handler_logs_tool_call_and_result(caplog):
     """Tool start logs the name and args; end logs size, not content, at INFO."""
-    handler = AnalyzerCallbackHandler()
+    handler = AgentCallbackHandler()
 
-    with caplog.at_level(logging.INFO, logger="agent.analyze.tool"):
+    with caplog.at_level(logging.INFO, logger="agent.run.tool"):
         handler.on_tool_start({"name": "get_rules"}, "{'days': 3}", run_id=None)
         handler.on_tool_end("a very private rule description", run_id=None)
 
@@ -88,7 +88,7 @@ def test_callback_handler_logs_tool_call_and_result(caplog):
 
 def test_callback_handler_times_concurrent_tool_calls_independently(monkeypatch):
     """Two overlapping tool calls each get their own timer, keyed by run id."""
-    handler = AnalyzerCallbackHandler()
+    handler = AgentCallbackHandler()
     clock = iter([0.0, 1.0, 3.0, 6.0])
     monkeypatch.setattr("agent.logging.time.perf_counter", lambda: next(clock))
 
@@ -102,9 +102,9 @@ def test_callback_handler_times_concurrent_tool_calls_independently(monkeypatch)
 
 def test_callback_handler_error_messages_only_at_debug_and_single_line(caplog):
     """Error messages (which can echo user text) are not logged at INFO; args stay one line."""
-    handler = AnalyzerCallbackHandler()
+    handler = AgentCallbackHandler()
 
-    with caplog.at_level(logging.INFO, logger="agent.analyze"):
+    with caplog.at_level(logging.INFO, logger="agent.run"):
         handler.on_tool_start({"name": "t"}, "{'category': 'x\\nFAKE log line'}", run_id="r1")
         handler.on_tool_error(ValueError("input_value='secret merchant'"), run_id="r1")
         handler.on_llm_error(RuntimeError("echoed user text"), run_id="r2")

@@ -51,12 +51,14 @@ uv sync
    GET /health
    Response: {"status": "ok", "database": "ok"}   ("unreachable" if Postgres is down)
 
-## Analyzer logging
+## Agent logging
 
-Set `AGENT_LOG_LEVEL` (default `INFO`). INFO shows each run's workflow: node enter/exit with
-timings, routing decisions, tool calls, LLM calls and the notify decision, every line tagged
-`[run=<id> txn=<transaction_id> user=<id>]` so `grep run=<id>` follows one analysis. DEBUG adds
-prompts, raw tool results, notification text and the graph as Mermaid.
+Both agents (chat and analyzer) log under `agent.run.*`. Set `AGENT_LOG_LEVEL` (default `INFO`).
+INFO shows each run's workflow: node enter/exit with timings, routing decisions, tool calls and
+LLM calls (plus the notify decision for the analyzer). Every line is tagged
+`[run=<id> txn=<transaction_id> user=<id>]` (chat has no `txn`) so `grep run=<id>` follows one
+run. INFO never contains user text, search text or exception messages. DEBUG adds prompts, raw
+tool results, tool arguments, notification text and the graph as Mermaid.
 
 ## Drawing the agent graphs
 

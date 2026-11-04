@@ -1,4 +1,4 @@
-"""Run-scoped logging for the analyzer graph: run ids, node tracing, tool and LLM callbacks."""
+"""Run-scoped logging for the agent graphs: run ids, node tracing, tool and LLM callbacks."""
 
 import ast
 import contextvars
@@ -10,11 +10,12 @@ from collections.abc import Callable
 
 from langchain_core.callbacks import BaseCallbackHandler
 
-GRAPH = "agent.analyze.graph"
-NODE = "agent.analyze.node"
-TOOL = "agent.analyze.tool"
-LLM = "agent.analyze.llm"
-DECISION = "agent.analyze.decision"
+BASE = "agent.run"
+GRAPH = f"{BASE}.graph"
+NODE = f"{BASE}.node"
+TOOL = f"{BASE}.tool"
+LLM = f"{BASE}.llm"
+DECISION = f"{BASE}.decision"
 
 _run_id = contextvars.ContextVar("run_id", default="-")
 _txn_id = contextvars.ContextVar("txn_id", default="-")
@@ -27,14 +28,14 @@ _llm_log = logging.getLogger(LLM)
 
 
 def new_run_id() -> str:
-    """Return a short id that ties together every log line of one analysis run."""
+    """Return a short id that ties together every log line of one agent run."""
     return uuid.uuid4().hex[:8]
 
 
-def bind_run(run_id: str, transaction_id: str, user_id: int) -> None:
-    """Attach the run, transaction and user ids to every log line made in this context."""
+def bind_run(run_id: str, transaction_id: str | None, user_id: int) -> None:
+    """Attach the run, transaction (if any) and user ids to every log line in this context."""
     _run_id.set(run_id)
-    _txn_id.set(transaction_id)
+    _txn_id.set(transaction_id or "-")
     _user_id.set(str(user_id))
 
 
@@ -46,18 +47,19 @@ class RunContextFilter(logging.Filter):
         if _run_id.get() == "-":
             record.run_ctx = "[-]"
         else:
-            record.run_ctx = f"[run={_run_id.get()} txn={_txn_id.get()} user={_user_id.get()}]"
+            txn = f" txn={_txn_id.get()}" if _txn_id.get() != "-" else ""
+            record.run_ctx = f"[run={_run_id.get()}{txn} user={_user_id.get()}]"
         return True
 
 
 def configure_agent_logging(level: str = "INFO") -> None:
-    """Set the analyzer log level and make its lines include the run context (idempotent)."""
-    base = logging.getLogger("agent.analyze")
+    """Set the agents' log level and make their lines include the run context (idempotent)."""
+    base = logging.getLogger(BASE)
     base.setLevel(level.upper())
-    if any(getattr(h, "_agent_analyze", False) for h in base.handlers):
+    if any(getattr(h, "_agent_run", False) for h in base.handlers):
         return
     handler = logging.StreamHandler()
-    handler._agent_analyze = True  # marker so repeated calls do not add handlers
+    handler._agent_run = True  # marker so repeated calls do not add handlers
     handler.addFilter(RunContextFilter())
     handler.setFormatter(
         logging.Formatter("%(asctime)s %(levelname)s %(name)s %(run_ctx)s %(message)s")
@@ -112,7 +114,7 @@ def _arg_names(input_str: object) -> list[str]:
     return sorted(str(key) for key in parsed) if isinstance(parsed, dict) else []
 
 
-class AnalyzerCallbackHandler(BaseCallbackHandler):
+class AgentCallbackHandler(BaseCallbackHandler):
     """Log tool calls and LLM calls. Content appears only at DEBUG."""
 
     def __init__(self) -> None:

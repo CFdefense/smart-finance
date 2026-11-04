@@ -40,7 +40,7 @@ def test_missing_api_key_degrades_instead_of_raising(monkeypatch, caplog):
     """No TAVILY_API_KEY gives a short message the model can relay, plus a warning."""
     monkeypatch.delenv("TAVILY_API_KEY", raising=False)
 
-    with caplog.at_level("WARNING", logger="agent.analyze"):
+    with caplog.at_level("WARNING", logger="agent.run"):
         text = web_search.invoke({"query": "roth ira"})
 
     assert "unavailable" in text
@@ -56,7 +56,7 @@ def test_network_error_degrades_and_logs_only_the_type(monkeypatch, caplog):
 
     monkeypatch.setattr(web_search_mod.httpx, "post", boom)
 
-    with caplog.at_level("INFO", logger="agent.analyze"):
+    with caplog.at_level("INFO", logger="agent.run"):
         text = web_search.invoke({"query": "roth ira"})
 
     assert "unavailable" in text

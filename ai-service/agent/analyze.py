@@ -10,7 +10,7 @@ from pydantic import SecretStr
 from agent.data_models import AnalysisResult, AnalyzeRequest, Assessment
 from agent.logging import (
     GRAPH,
-    AnalyzerCallbackHandler,
+    AgentCallbackHandler,
     bind_run,
     clear_run,
     new_run_id,
@@ -121,7 +121,7 @@ class AnalyzerAgent:
                         "status": "",
                         "error": None,
                     },
-                    config={"callbacks": [AnalyzerCallbackHandler()], "run_name": "analyze"},
+                    config={"callbacks": [AgentCallbackHandler()], "run_name": "analyze"},
                 )
                 result = AnalysisResult(
                     transaction_id=txn.transaction_id,

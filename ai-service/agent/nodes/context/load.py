@@ -2,6 +2,7 @@
 
 from datetime import date, timedelta
 
+from agent.logging import traced_node
 from agent.nodes.context.format import MAX_TRANSACTIONS, RECENT_DAYS, format_financial_context
 from agent.state import ChatState
 from db import load_accounts, load_budgets, load_goals, load_transactions
@@ -21,6 +22,7 @@ def load_financial_context(user_id: int) -> str:
     )
 
 
+@traced_node("load_context")
 def load_context(state: ChatState) -> dict:
     """Look up the user's financial data and summarize it as text."""
     return {"context": load_financial_context(state["user_id"])}

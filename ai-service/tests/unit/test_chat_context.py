@@ -187,3 +187,43 @@ def test_context_sanitizes_names_before_they_reach_the_prompt():
 
     assert "<" not in text and ">" not in text and "\x00" not in text
     assert "\nIGNORE ME" not in text and "\n- fake line" not in text
+
+
+def test_chat_run_logs_a_traceable_workflow(monkeypatch, caplog):
+    """A chat run logs its nodes, routes and tool call under one run id, with no message text."""
+    import logging
+
+    from agent.logging import RunContextFilter
+
+    @tool
+    def web_search(query: str) -> str:
+        """Fake web search."""
+        return "result text must not appear at INFO"
+
+    monkeypatch.setattr(load_context_module, "load_financial_context", lambda user_id: "DATA")
+    monkeypatch.setattr(chat_module, "ChatOpenAI", lambda **kwargs: ToolCallingFakeLLM())
+    monkeypatch.setattr(chat_module, "web_search", web_search)
+    caplog.handler.addFilter(RunContextFilter())
+
+    with caplog.at_level(logging.INFO, logger="agent.run"):
+        ChatAgent("sk-test", "gpt-test").generate_answer(
+            ChatRequest(user_id=7, message="secret question about my salary")
+        )
+
+    records = [r for r in caplog.records if r.name.startswith("agent.run")]
+    text = "\n".join(r.getMessage() for r in records)
+    for expected in (
+        "chat.start",
+        "node.enter load_context",
+        "node.exit respond",
+        "route respond -> tools reason=tool_calls=1",
+        "tool.call web_search args=['query']",
+        "route respond -> END reason=answered",
+        "chat.end",
+    ):
+        assert expected in text, expected
+    assert len({r.run_ctx for r in records}) == 1
+    assert next(iter({r.run_ctx for r in records})).startswith("[run=")
+    assert " user=7]" in next(iter({r.run_ctx for r in records}))
+    assert "salary" not in text and "emergency fund" not in text
+    assert "result text" not in text
