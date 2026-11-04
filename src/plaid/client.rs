@@ -150,6 +150,91 @@ impl PlaidClient {
             .map_err(|e| AppError::Internal(format!("Plaid response parse error: {e}")))
     }
 
+    /// Disconnect a bank connection from Plaid.
+    ///
+    /// Each access token represents one Plaid Item (bank connection).
+    /// Removing the Item invalidates its access token, preventing further
+    /// access to the associated bank accounts through that connection.
+    ///
+    /// This function only communicates with Plaid.
+    /// The controller is responsible for deleting local database records.
+    pub async fn disconnect_item_from_plaid(&self, access_token: &str) -> Result<(), AppError> {
+        // Build the JSON body required by Plaid's /item/remove endpoint.
+        // Credentials remain on the backend and are never sent to Angular.
+        let body = serde_json::json!({
+            "client_id": self.client_id,
+            "secret": self.secret,
+            "access_token": access_token
+        });
+
+        // Send the removal request to Plaid.
+        // Awaiting the response ensures we know whether Plaid accepted it.
+        let resp = self
+            .http
+            .post(format!("{}/item/remove", self.base_url))
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| AppError::Internal(format!("Plaid request failed: {e}")))?;
+
+        // Do not report success if Plaid rejects the request.
+        // The controller should preserve local records on failure.
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let error_text = resp.text().await.unwrap_or_default();
+
+            return Err(AppError::Internal(format!(
+                "Plaid /item/remove returned {status}: {error_text}"
+            )));
+        }
+
+        // A successful HTTP response is enough; we don't need to
+        // deserialize the response because no data must be returned.
+        Ok(())
+    }
+
+    /// Retrieve the financial institution's name for a linked Plaid Item.
+    ///
+    /// For example, this may return "Chase" or "Bank of America".
+    /// Some connection types have no institution name, so we return Option.
+    pub async fn get_institution_name(
+        &self,
+        access_token: &str,
+    ) -> Result<Option<String>, AppError> {
+        // Only the backend sends Plaid credentials and access tokens.
+        let body = serde_json::json!({
+            "client_id": self.client_id,
+            "secret": self.secret,
+            "access_token": access_token
+        });
+
+        // Ask Plaid for metadata about this bank connection.
+        let resp = self
+            .http
+            .post(format!("{}/item/get", self.base_url))
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| AppError::Internal(format!("Plaid request failed: {e}")))?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            return Err(AppError::Internal(format!(
+                "Plaid /item/get returned {status}"
+            )));
+        }
+
+        // Read the institution name without exposing the access token.
+        let response: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| AppError::Internal(format!("Plaid response parse error: {e}")))?;
+
+        Ok(response["item"]["institution_name"]
+            .as_str()
+            .map(str::to_owned))
+    }
+
     /// Fetch all financial accounts for a given access token.
     ///
     /// Calls `POST /accounts/get`.
@@ -188,6 +273,8 @@ impl PlaidClient {
             .map(|a| AccountResponse {
                 account_id: a.account_id,
                 item_id: item_id.clone(),
+                // The controller will populate this using Plaid's /item/get.
+                institution_name: None,
                 name: a.name,
                 official_name: a.official_name,
                 account_type: a.account_type,
