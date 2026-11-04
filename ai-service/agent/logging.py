@@ -154,3 +154,10 @@ class AnalyzerCallbackHandler(BaseCallbackHandler):
         ms = self._elapsed_ms(run_id)
         _llm_log.warning("llm.error type=%s ms=%d", type(error).__name__, ms)
         _llm_log.debug("llm.error.message %s", _one_line(error, 2000))
+
+
+def clear_run() -> None:
+    """Remove the run context so later log lines are not tagged with a finished run."""
+    _run_id.set("-")
+    _txn_id.set("-")
+    _user_id.set("-")

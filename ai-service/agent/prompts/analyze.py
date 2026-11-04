@@ -26,9 +26,6 @@ ASSESS_SYSTEM_PROMPT = (
     "short sentence. Do not claim certainty without evidence. " + _DATA_RULES
 )
 
-# Temporary alias: the legacy agent/nodes/analyze.py still imports this name.
-ANALYZE_SYSTEM_PROMPT = INVESTIGATE_SYSTEM_PROMPT
-
 
 def transaction_block(txn: AnalyzedTransaction) -> str:
     """Describe the transaction for the model, with the untrusted name fenced."""
