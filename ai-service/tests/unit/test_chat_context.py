@@ -216,7 +216,7 @@ def test_chat_run_logs_a_traceable_workflow(monkeypatch, caplog):
         "chat.start",
         "node.enter load_context",
         "node.exit respond",
-        "route respond -> tools reason=tool_calls=1",
+        "route respond -> tools reason=tool_calls=1 round=1",
         "tool.call web_search args=['query']",
         "route respond -> END reason=answered",
         "chat.end",
@@ -227,3 +227,41 @@ def test_chat_run_logs_a_traceable_workflow(monkeypatch, caplog):
     assert " user=7]" in next(iter({r.run_ctx for r in records}))
     assert "salary" not in text and "emergency fund" not in text
     assert "result text" not in text
+
+
+def test_chat_stops_a_model_that_keeps_asking_for_tools(monkeypatch):
+    """The tool loop is capped, so a stuck model cannot make unbounded LLM calls."""
+
+    @tool
+    def web_search(query: str) -> str:
+        """Fake web search."""
+        return "result"
+
+    class StuckLLM:
+        """Always asks for another search."""
+
+        def __init__(self):
+            self.calls = 0
+
+        def bind_tools(self, tools):
+            """Pretend to bind tools."""
+            return self
+
+        def invoke(self, messages):
+            """Ask for a search every time, with a fresh message id."""
+            self.calls += 1
+            return AIMessage(
+                content="",
+                id=f"m{self.calls}",
+                tool_calls=[{"name": "web_search", "args": {"query": "q"}, "id": f"c{self.calls}"}],
+            )
+
+    llm = StuckLLM()
+    monkeypatch.setattr(load_context_module, "load_financial_context", lambda user_id: "DATA")
+    monkeypatch.setattr(chat_module, "ChatOpenAI", lambda **kwargs: llm)
+    monkeypatch.setattr(chat_module, "web_search", web_search)
+
+    response = ChatAgent("sk-test", "gpt-test").generate_answer(ChatRequest(user_id=7, message="x"))
+
+    assert llm.calls == chat_module.MAX_TOOL_ROUNDS + 1
+    assert "couldn't finish" in response.response

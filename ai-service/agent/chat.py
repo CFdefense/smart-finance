@@ -16,12 +16,20 @@ from agent.tools import web_search
 
 _log = logging.getLogger(f"{BASE}.chat")
 
+MAX_TOOL_ROUNDS = 4
+_GAVE_UP = "I couldn't finish looking that up. Please try asking again."
+
 
 def route_after_respond(state: ChatState) -> str:
-    """Run the tools while the model asks for them; otherwise end with its answer."""
-    last = state["messages"][-1]
+    """Run the tools while the model asks for them and the round cap allows; else end."""
+    messages = state["messages"]
+    last = messages[-1]
     if isinstance(last, AIMessage) and last.tool_calls:
-        log_route("respond", "tools", f"tool_calls={len(last.tool_calls)}")
+        rounds = sum(1 for m in messages if isinstance(m, AIMessage) and m.tool_calls)
+        if rounds > MAX_TOOL_ROUNDS:
+            log_route("respond", "END", "round_cap")
+            return END
+        log_route("respond", "tools", f"tool_calls={len(last.tool_calls)} round={rounds}")
         return "tools"
     log_route("respond", "END", "answered")
     return END
@@ -63,7 +71,9 @@ class ChatAgent:
                 },
                 config={"callbacks": [AgentCallbackHandler()], "run_name": "chat"},
             )
-            _log.info("chat.end")
-            return ChatResponse(response=result["messages"][-1].text)
+            last = result["messages"][-1]
+            answered = isinstance(last, AIMessage) and not last.tool_calls and bool(last.text)
+            _log.info("chat.end answered=%s", answered)
+            return ChatResponse(response=last.text if answered else _GAVE_UP)
         finally:
             clear_run()
