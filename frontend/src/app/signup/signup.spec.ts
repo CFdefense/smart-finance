@@ -46,6 +46,7 @@ describe('Signup', () => {
     component.lastName = 'Smith';
     component.email = 'john@example.com';
     component.password = 'Password123!';
+    component.confirmPassword = 'Password123!';
   }
 
   /**

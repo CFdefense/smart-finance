@@ -17,6 +17,7 @@ export class Signup {
   lastName = '';
   email = '';
   password = '';
+  confirmPassword = '';
 
   errorMessage = signal('');
   isSubmitting = signal(false);
@@ -30,6 +31,11 @@ export class Signup {
 
     if (!this.firstName.trim() || !this.lastName.trim() || !this.email.trim() || !this.password) {
       this.errorMessage.set('Please complete all fields.');
+      return;
+    }
+
+    if (this.password.trim() !== this.confirmPassword.trim()) {
+      this.errorMessage.set('Password must match.');
       return;
     }
 
