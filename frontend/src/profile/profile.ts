@@ -68,6 +68,15 @@ export class UserProfile implements OnInit {
     }));
   });
 
+  // Controls which section of the redesigned Profile page is visible.
+  currentView: 'accountInfo' | 'notifications' | 'password' | 'banks' = 'accountInfo';
+
+  // Switch between sections without navigating away from the Profile page.
+  setView(view: 'accountInfo' | 'notifications' | 'password' | 'banks'): void {
+    this.currentView = view;
+    this.errorMessage.set('');
+  }
+
   firstName = '';
   lastName = '';
   email = '';

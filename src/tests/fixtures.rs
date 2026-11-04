@@ -124,6 +124,24 @@ fn mock_plaid_router() -> Router {
             }),
         )
         .route(
+            "/item/get",
+            post(|Json(body): Json<Value>| async move {
+                // Mock the Plaid endpoint used to retrieve a bank's name.
+                // All existing tests can use the same institution name.
+                let token = field(&body, "access_token");
+
+                mock_failure(token).unwrap_or_else(|| {
+                    Json(json!({
+                        "item": {
+                            "item_id": format!("item-{}", suffix(token)),
+                            "institution_name": "Test Bank"
+                        }
+                    }))
+                    .into_response()
+                })
+            }),
+        )
+        .route(
             "/item/remove",
             post(|Json(body): Json<Value>| async move {
                 // Simulate Plaid's response when disconnecting a bank.

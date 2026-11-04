@@ -11,6 +11,8 @@ import { Observable } from 'rxjs';
 export interface PlaidAccount {
   account_id: string;
   item_id: string;
+  // Actual financial institution name, such as Chase.
+  institution_name: string | null;
   name: string;
   official_name: string | null;
   account_type: string;

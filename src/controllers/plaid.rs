@@ -180,7 +180,17 @@ pub async fn api_plaid_get_accounts(
 
     // Fetch the live accounts from Plaid for each linked connection.
     for item in items {
-        let plaid_accounts = plaid.get_accounts(&item.access_token).await?;
+        let mut plaid_accounts = plaid.get_accounts(&item.access_token).await?;
+
+        // Retrieve the institution name for this bank connection.
+        // For example, both checking and savings may belong to "Chase".
+        let institution_name = plaid.get_institution_name(&item.access_token).await?;
+
+        // Attach the institution name to every account in this connection.
+        // The frontend can then display the actual bank name.
+        for account in &mut plaid_accounts {
+            account.institution_name.clone_from(&institution_name);
+        }
 
         // Upsert each account locally so transactions can reference it (FK) and
         // balances stay current.

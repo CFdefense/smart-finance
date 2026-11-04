@@ -439,6 +439,7 @@ describe('UserProfile - Plaid account management', () => {
   };
 
   const checking: PlaidAccount = {
+    institution_name: 'Test Bank',
     account_id: 'account-checking',
     item_id: 'item-123',
     name: 'Checking',
