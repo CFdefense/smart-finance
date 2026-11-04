@@ -103,11 +103,8 @@ def send_twice(args: argparse.Namespace) -> None:
     for attempt in ("first", "second"):
         print(f"-> {attempt} send of {merchant} ${amount:.2f} (id={txn_id})")
         status, result = analyze(args.url, user_id, account_id, merchant, amount, category, txn_id)
-        verdict = (result.get("assessment") or {}).get("verdict")
-        print(
-            f"<- HTTP {status} status={result['status']} verdict={verdict} "
-            f"notified={result['notified']}"
-        )
+        print(f"<- HTTP {status}")
+        print(json.dumps(result, indent=2))
 
 
 def main() -> None:
