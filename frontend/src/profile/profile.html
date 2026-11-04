@@ -1,106 +1,232 @@
-<main class="profile-page">
+<main>
   <header class="header">
-    <button type="button" (click)="backToDashboard()">← Back to Dashboard</button>
-    <h1>Profile Settings</h1>
+    <button type="button" (click)="backToDashboard()" class="back">←</button>
+    <h1>{{ firstName }} {{ lastName }}</h1>
   </header>
-
-  @if (errorMessage()) {
-    <p class="error-message">{{ errorMessage() }}</p>
-  }
 
   @if (loading()) {
     <p>Loading profile...</p>
   } @else {
-    <section class="profile-section">
-      <h2>Account Information</h2>
+    <div class="profile">
+      <div class="navigation">
+        <nav class="sidebar">
+          <div class="sidebar-header">
+            <h3>Profile Settings</h3>
+          </div>
+          <ul class="sidebar-menu">
+            <li>
+              <a
+                [class.active]="currentView === 'accountInfo'"
+                (click)="setView('accountInfo')"
+                tabindex="0"
+                role="button">
+                Account Information
+              </a>
+            </li>
+            <li>
+              <a
+                [class.active]="currentView === 'notifications'"
+                (click)="setView('notifications')"
+                tabindex="0"
+                role="button">
+                Notifications
+              </a>
+            </li>
+            <li>
+              <a
+                [class.active]="currentView === 'password'"
+                (click)="setView('password')"
+                tabindex="0"
+                role="button">
+                Password
+              </a>
+            </li>
+          </ul>
+        </nav>
+      </div>
 
-      <form (ngSubmit)="saveProfile()">
-        <label for="firstName">First Name</label>
-        <input id="firstName" name="firstName" [(ngModel)]="firstName" required />
+      @if (currentView === 'accountInfo') {
+        <!-- <div *ngIf="currentView === 'accountInfo'" class="account"> -->
+        <div class="account">
+          <section class="accountInfo-section">
+            <h2>Account Information</h2>
 
-        <label for="lastName">Last Name</label>
-        <input id="lastName" name="lastName" [(ngModel)]="lastName" required />
+            <form (ngSubmit)="saveProfile()">
+              <label for="firstName">First Name</label>
+              <input
+                class="accountInfoInput"
+                id="firstName"
+                name="firstName"
+                [(ngModel)]="firstName"
+                required />
 
-        <label for="email">Email Address</label>
-        <input id="email" name="email" type="email" [(ngModel)]="email" required />
+              <label for="lastName">Last Name</label>
+              <input
+                class="accountInfoInput"
+                id="lastName"
+                name="lastName"
+                [(ngModel)]="lastName"
+                required />
 
-        <h2>Notification Preferences</h2>
+              <label for="email">Email Address</label>
+              <input
+                class="accountInfoInput"
+                id="email"
+                name="email"
+                type="email"
+                [(ngModel)]="email"
+                required />
 
-        <label class="checkbox-label">
-          <input type="checkbox" name="emailNotifications" [(ngModel)]="emailNotifications" />
-          Enable Email Notifications
-        </label>
+              <label for="phoneNumber">Phone Number</label>
+              <input
+                id="phoneNumber"
+                name="phoneNumber"
+                type="tel"
+                placeholder="+15551234567"
+                [(ngModel)]="phoneNumber"
+                required />
 
-        <label for="phoneNumber">Phone Number</label>
-        <input
-          id="phoneNumber"
-          name="phoneNumber"
-          type="tel"
-          placeholder="+15551234567"
-          [(ngModel)]="phoneNumber" />
+              <button type="submit" [disabled]="saving()" class="save">
+                {{ saving() ? 'Saving...' : 'Save Changes' }}
+              </button>
 
-        <label for="smsCarrierGateway">Mobile Carrier</label>
-        <select id="smsCarrierGateway" name="smsCarrierGateway" [(ngModel)]="smsCarrierGateway">
-          <option value="">Select your carrier</option>
-          <option value="tmomail.net">T-Mobile</option>
-          <option value="vtext.com">Verizon</option>
-        </select>
+              <div class="message-container">
+                @if (profileMessage()) {
+                  <p class="success-message">{{ profileMessage() }}</p>
+                }
+                @if (errorMessage()) {
+                  <p class="error-message">{{ errorMessage() }}</p>
+                }
+              </div>
+            </form>
+          </section>
+        </div>
+      }
 
-        <label class="checkbox-label">
-          <input
-            type="checkbox"
-            name="smsNotifications"
-            [(ngModel)]="smsNotifications"
-            [disabled]="!phoneNumber.trim()" />
-          Enable SMS Notifications
-        </label>
+      @if (currentView === 'notifications') {
+        <div class="notifications">
+          <section class="notifications-section">
+            <h2>Notification Preferences</h2>
 
-        <button type="submit" [disabled]="saving()">
-          {{ saving() ? 'Saving...' : 'Save Changes' }}
-        </button>
+            <label for="email" class="profile">Email Address</label>
+            <input
+              class="notificationsPhone"
+              id="email"
+              name="email"
+              type="email"
+              [(ngModel)]="email"
+              disabled />
 
-        @if (profileMessage()) {
-          <p class="success-message">{{ profileMessage() }}</p>
-        }
-      </form>
-    </section>
+            <label class="checkbox-label">
+              <input
+                class="notificationsCheckbox"
+                type="checkbox"
+                name="emailNotifications"
+                [(ngModel)]="emailNotifications" />
+              Enable Email Notifications
+            </label>
+            <br />
+            <form (ngSubmit)="saveProfile()">
+              <label for="phoneNumber" class="profile">Phone Number</label>
+              <input
+                id="phoneNumber"
+                name="phoneNumber"
+                type="tel"
+                placeholder="+15551234567"
+                [(ngModel)]="phoneNumber"
+                class="notificationsPhone"
+                disabled />
 
-    <section class="profile-section">
-      <h2>Change Password</h2>
+              <label for="smsCarrierGateway" class="profile">Mobile Carrier</label>
+              <select
+                class="notificationsInput"
+                id="smsCarrierGateway"
+                name="smsCarrierGateway"
+                [(ngModel)]="smsCarrierGateway">
+                <option value="">Select your carrier</option>
+                <option value="tmomail.net">T-Mobile</option>
+                <option value="vtext.com">Verizon</option>
+              </select>
 
-      <form (ngSubmit)="updatePassword()">
-        <label for="currentPassword">Current Password</label>
-        <input
-          id="currentPassword"
-          name="currentPassword"
-          type="password"
-          [(ngModel)]="currentPassword"
-          required />
+              <label class="checkbox-label">
+                <input
+                  type="checkbox"
+                  name="smsNotifications"
+                  [(ngModel)]="smsNotifications"
+                  [disabled]="!phoneNumber.trim()"
+                  class="notificationsCheckbox" />
+                Enable SMS Notifications
+              </label>
 
-        <label for="newPassword">New Password</label>
-        <input
-          id="newPassword"
-          name="newPassword"
-          type="password"
-          [(ngModel)]="newPassword"
-          required />
+              <button type="submit" [disabled]="saving()" class="save">
+                {{ saving() ? 'Saving...' : 'Save Changes' }}
+              </button>
 
-        <label for="confirmPassword">Confirm New Password</label>
-        <input
-          id="confirmPassword"
-          name="confirmPassword"
-          type="password"
-          [(ngModel)]="confirmPassword"
-          required />
+              <div class="message-container">
+                @if (profileMessage()) {
+                  <p class="success-message">{{ profileMessage() }}</p>
+                }
+                @if (errorMessage()) {
+                  <p class="error-message">{{ errorMessage() }}</p>
+                }
+              </div>
+            </form>
+          </section>
+        </div>
+      }
 
-        <button type="submit" [disabled]="changingPassword()">
-          {{ changingPassword() ? 'Updating...' : 'Change Password' }}
-        </button>
+      @if (currentView === 'password') {
+        <div class="password">
+          <section class="password-section">
+            <h2>Change Password</h2>
 
-        @if (passwordMessage()) {
-          <p class="success-message">{{ passwordMessage() }}</p>
-        }
-      </form>
-    </section>
+            <form (ngSubmit)="updatePassword()">
+              <label for="currentPassword" class="profile">Current Password</label>
+              <input
+                id="currentPassword"
+                name="currentPassword"
+                type="password"
+                class="passwordInput"
+                [(ngModel)]="currentPassword"
+                placeholder="Current password"
+                required />
+
+              <label for="newPassword" class="profile">New Password</label>
+              <input
+                id="newPassword"
+                name="newPassword"
+                type="password"
+                class="passwordInput"
+                [(ngModel)]="newPassword"
+                placeholder="Create a new password"
+                required />
+
+              <label for="confirmPassword" class="profile">Confirm New Password</label>
+              <input
+                id="confirmPassword"
+                name="confirmPassword"
+                type="password"
+                class="passwordInput"
+                [(ngModel)]="confirmPassword"
+                placeholder="Confirm password"
+                required />
+
+              <button type="submit" [disabled]="changingPassword()" class="save">
+                {{ changingPassword() ? 'Updating...' : 'Change Password' }}
+              </button>
+
+              <div class="message-container">
+                @if (profileMessage()) {
+                  <p class="success-message">{{ profileMessage() }}</p>
+                }
+                @if (errorMessage()) {
+                  <p class="error-message">{{ errorMessage() }}</p>
+                }
+              </div>
+            </form>
+          </section>
+        </div>
+      }
+    </div>
   }
 </main>
