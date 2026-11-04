@@ -24,7 +24,9 @@ TXN = AnalyzedTransaction(
     category="ENTERTAINMENT",
 )
 BASE = {"user_id": 7, "transaction": TXN, "context": "Accounts:\n- Checking", "messages": []}
-ASK_RULES = AIMessage(content="", tool_calls=[{"name": "get_rules", "args": {}, "id": "c1"}])
+ASK_HISTORY = AIMessage(
+    content="", tool_calls=[{"name": "get_transactions", "args": {}, "id": "c1"}]
+)
 
 
 class ScriptedLLM:
@@ -50,14 +52,14 @@ def _assessment(**kw):
 
 def test_investigate_seeds_the_conversation_on_first_call():
     """First call adds a fenced-transaction + context message, then the model's reply."""
-    llm = ScriptedLLM(ASK_RULES)
+    llm = ScriptedLLM(ASK_HISTORY)
 
     result = make_investigate(llm)(BASE)
 
     seed, reply = result["messages"]
     assert isinstance(seed, HumanMessage)
     assert seed.content.count("</transaction>") == 1 and "Checking" in seed.content
-    assert reply is ASK_RULES
+    assert reply is ASK_HISTORY
     assert isinstance(llm.calls[0][0], SystemMessage)
 
 
@@ -65,7 +67,7 @@ def test_investigate_does_not_reseed_later_calls():
     """Once history exists, the node only appends the model's next reply."""
     done = AIMessage(content="looks fine")
     llm = ScriptedLLM(done)
-    state = {**BASE, "messages": [HumanMessage(content="seed"), ASK_RULES]}
+    state = {**BASE, "messages": [HumanMessage(content="seed"), ASK_HISTORY]}
 
     result = make_investigate(llm)(state)
 
@@ -88,15 +90,15 @@ def test_investigate_degrades_when_the_llm_fails(caplog):
 
 def test_route_after_investigate(caplog):
     """Tool requests go to tools until the round cap; otherwise on to assess."""
-    wants_tools = {**BASE, "messages": [HumanMessage(content="x"), ASK_RULES]}
+    wants_tools = {**BASE, "messages": [HumanMessage(content="x"), ASK_HISTORY]}
     no_tools = {**BASE, "messages": [HumanMessage(content="x"), AIMessage(content="done")]}
-    capped = {**BASE, "messages": [ASK_RULES] * (MAX_TOOL_ROUNDS + 1)}
+    capped = {**BASE, "messages": [ASK_HISTORY] * (MAX_TOOL_ROUNDS + 1)}
 
     with caplog.at_level(logging.INFO, logger="agent.analyze.graph"):
         assert route_after_investigate(wants_tools) == "tools"
         assert route_after_investigate(no_tools) == "assess"
         assert route_after_investigate(capped) == "assess"
-        at_cap = {**BASE, "messages": [ASK_RULES] * MAX_TOOL_ROUNDS}
+        at_cap = {**BASE, "messages": [ASK_HISTORY] * MAX_TOOL_ROUNDS}
         assert route_after_investigate(at_cap) == "tools"
 
     assert "route investigate -> tools tool_calls=1" in caplog.text
@@ -107,14 +109,14 @@ def test_build_findings_uses_tool_results_and_final_note():
     """Tool outputs and the analyst's last note are included; tool-call requests are not."""
     messages = [
         HumanMessage(content="seed"),
-        ASK_RULES,
-        ToolMessage(content="- no gambling", name="get_rules", tool_call_id="c1"),
+        ASK_HISTORY,
+        ToolMessage(content="- no gambling", name="get_transactions", tool_call_id="c1"),
         AIMessage(content="Violates the gambling rule."),
     ]
 
     findings = build_findings(messages)
 
-    assert "[get_rules]\n- no gambling" in findings
+    assert "[get_transactions]\n- no gambling" in findings
     assert "Analyst note: Violates the gambling rule." in findings
     assert "seed" not in findings
 
@@ -124,7 +126,7 @@ def test_assess_returns_the_models_assessment():
     llm = ScriptedLLM(_assessment(verdict="ALERT"))
     state = {
         **BASE,
-        "messages": [ToolMessage(content="rule text", name="get_rules", tool_call_id="c")],
+        "messages": [ToolMessage(content="rule text", name="get_transactions", tool_call_id="c")],
     }
 
     result = make_assess(llm)(state)
