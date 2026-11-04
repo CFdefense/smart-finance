@@ -5,6 +5,7 @@ from datetime import date
 from langchain_core.messages import AIMessage
 
 import agent.chat as chat_module
+import agent.nodes.context.load as load_context_module
 from agent import MAX_TRANSACTIONS, ChatAgent, ChatRequest, format_financial_context
 from db import Account, Budget, Goal, Transaction
 
@@ -85,15 +86,16 @@ def test_chat_agent_puts_the_requesting_users_data_in_the_prompt(monkeypatch):
         loaded_for.append(user_id)
         return "USER DATA"
 
-    # Patch the name where chat.py looks it up, so no database is needed.
-    monkeypatch.setattr(chat_module, "load_financial_context", loader)
+    # Patch the names where they are looked up, so no database or OpenAI is needed.
+    monkeypatch.setattr(load_context_module, "load_financial_context", loader)
+    llm = FakeLLM()
+    monkeypatch.setattr(chat_module, "ChatOpenAI", lambda **kwargs: llm)
     agent = ChatAgent("sk-test", "gpt-test")
-    agent._llm = FakeLLM()
 
     response = agent.generate_answer(ChatRequest(user_id=7, message="How am I doing?"))
 
     assert response.response == "fake answer"
     assert loaded_for == [7]
-    system, human = agent._llm.messages
+    system, human = llm.messages
     assert system.content.endswith("USER DATA")
     assert human.content == "How am I doing?"

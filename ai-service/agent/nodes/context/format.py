@@ -1,34 +1,11 @@
-"""Build a plain-text summary of a user's finances for the chat agent's prompt."""
+"""Format a user's finances as plain text for the chat agent's prompt."""
 
-from datetime import date, timedelta
+from datetime import date
 
-from db import (
-    Account,
-    Budget,
-    Goal,
-    Transaction,
-    load_accounts,
-    load_budgets,
-    load_goals,
-    load_transactions,
-)
+from db import Account, Budget, Goal, Transaction
 
 RECENT_DAYS = 30
 MAX_TRANSACTIONS = 100
-
-
-def load_financial_context(user_id: int) -> str:
-    """Load one user's accounts, budgets, goals and recent transactions as prompt text."""
-    today = date.today()
-    return format_financial_context(
-        today,
-        accounts=load_accounts(user_id),
-        budgets=load_budgets(user_id, today),
-        goals=load_goals(user_id),
-        transactions=load_transactions(
-            user_id, since=today - timedelta(days=RECENT_DAYS), limit=MAX_TRANSACTIONS
-        ),
-    )
 
 
 def format_financial_context(

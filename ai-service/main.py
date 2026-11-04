@@ -29,7 +29,7 @@ async def lifespan(app: FastAPI):
     model = os.getenv("AGENT_MODEL", "gpt-4.1")
 
     if openai_key:
-        app.state.analyzer_agent = AnalyzerAgent().create(openai_key, model)
+        app.state.analyzer_agent = AnalyzerAgent(openai_key, model)
         app.state.chat_agent = ChatAgent(openai_key, model)
     else:
         logging.warning("OPENAI_API_KEY not set; /chat and /analyze are disabled.")
