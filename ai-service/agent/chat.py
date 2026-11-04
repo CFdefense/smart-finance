@@ -4,7 +4,7 @@ from pydantic import SecretStr
 
 from agent.data_models import ChatRequest, ChatResponse
 from agent.nodes import load_context, make_respond
-from agent.state import AgentState
+from agent.state import ChatState
 
 
 class ChatAgent:
@@ -14,7 +14,7 @@ class ChatAgent:
         """Create and compile the conversational graph."""
         llm = ChatOpenAI(api_key=SecretStr(openai_key), model=model)
 
-        graph = StateGraph(AgentState)
+        graph = StateGraph(ChatState)
         graph.add_node("load_context", load_context)
         graph.add_node("respond", make_respond(llm))
         graph.add_edge(START, "load_context")
@@ -28,9 +28,9 @@ class ChatAgent:
         result = self._graph.invoke(
             {
                 "user_id": request.user_id,
-                "message": request.message,
                 "context": "",
-                "response": "",
+                "messages": [request.message],
+
             }
         )
-        return ChatResponse(response=result["response"])
+        return ChatResponse(response=result["messages"][-1].text)
