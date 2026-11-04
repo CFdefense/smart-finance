@@ -1,5 +1,6 @@
 """Tests for the chat agent's financial context."""
 
+import logging
 from datetime import date
 
 from langchain_core.messages import AIMessage
@@ -265,3 +266,53 @@ def test_chat_stops_a_model_that_keeps_asking_for_tools(monkeypatch):
 
     assert llm.calls == chat_module.MAX_TOOL_ROUNDS + 1
     assert "couldn't finish" in response.response
+
+
+def test_chat_continues_without_data_when_the_database_fails(monkeypatch, caplog):
+    """A database error loading context does not stop the chat; the model is told data is missing."""
+
+    def boom(user_id):
+        raise RuntimeError("db password=hunter2")
+
+    llm = FakeLLM()
+    monkeypatch.setattr(load_context_module, "load_financial_context", boom)
+    monkeypatch.setattr(chat_module, "ChatOpenAI", lambda **kwargs: llm)
+
+    with caplog.at_level("INFO", logger="agent.run"):
+        response = ChatAgent("sk-test", "gpt-test").generate_answer(
+            ChatRequest(user_id=7, message="hi")
+        )
+
+    assert response.response == "fake answer"
+    assert "temporarily unavailable" in llm.messages[0].content
+    assert "type=RuntimeError" in caplog.text and "hunter2" not in caplog.text
+
+
+def test_chat_never_raises_when_the_model_fails(monkeypatch, caplog):
+    """An LLM error becomes a polite answer, is logged by type only, and clears the run context."""
+
+    class DownLLM:
+        """Always fails."""
+
+        def bind_tools(self, tools):
+            """Pretend to bind tools."""
+            return self
+
+        def invoke(self, messages):
+            """Fail like an unreachable provider."""
+            raise RuntimeError("sk-secret-key rejected")
+
+    monkeypatch.setattr(load_context_module, "load_financial_context", lambda user_id: "DATA")
+    monkeypatch.setattr(chat_module, "ChatOpenAI", lambda **kwargs: DownLLM())
+
+    with caplog.at_level("INFO", logger="agent.run"):
+        response = ChatAgent("sk-test", "gpt-test").generate_answer(
+            ChatRequest(user_id=7, message="hi")
+        )
+
+    assert "having trouble" in response.response
+    assert "chat.crashed type=RuntimeError" in caplog.text
+    # INFO and WARNING lines never carry exception text (ERROR tracebacks may, by design).
+    quiet = "\n".join(r.getMessage() for r in caplog.records if r.levelno < logging.ERROR)
+    assert "sk-secret-key" not in quiet
+    assert all("sk-secret-key" not in r.getMessage() for r in caplog.records)

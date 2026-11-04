@@ -17,6 +17,7 @@ from agent.tools import web_search
 _log = logging.getLogger(f"{BASE}.chat")
 
 MAX_TOOL_ROUNDS = 4
+_UNAVAILABLE = "Sorry, the assistant is having trouble right now. Please try again shortly."
 _GAVE_UP = "I couldn't finish looking that up. Please try asking again."
 
 
@@ -58,19 +59,24 @@ class ChatAgent:
         self._graph = build_chat_graph(llm.bind_tools(tools), tools)
 
     def generate_answer(self, request: ChatRequest) -> ChatResponse:
-        """Generate a conversational answer; every log line of the run shares one run id."""
+        """Answer the user. Never raises; every log line of the run shares one run id."""
         run_id = new_run_id()
         bind_run(run_id, None, request.user_id)
         try:
             _log.info("chat.start message_chars=%d", len(request.message))
-            result = self._graph.invoke(
-                {
-                    "user_id": request.user_id,
-                    "context": "",
-                    "messages": [request.message],
-                },
-                config={"callbacks": [AgentCallbackHandler()], "run_name": "chat"},
-            )
+            try:
+                result = self._graph.invoke(
+                    {
+                        "user_id": request.user_id,
+                        "context": "",
+                        "messages": [request.message],
+                    },
+                    config={"callbacks": [AgentCallbackHandler()], "run_name": "chat"},
+                )
+            except Exception as exc:
+                _log.error("chat.crashed type=%s", type(exc).__name__)
+                _log.debug("chat.crashed detail", exc_info=True)
+                return ChatResponse(response=_UNAVAILABLE)
             last = result["messages"][-1]
             answered = isinstance(last, AIMessage) and not last.tool_calls and bool(last.text)
             _log.info("chat.end answered=%s", answered)
