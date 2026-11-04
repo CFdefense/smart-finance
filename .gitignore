@@ -35,3 +35,7 @@ __pycache__/
 
 # Python test coverage
 .coverage
+
+# Ruff
+*.ruff_cache
+*.pytest_cache

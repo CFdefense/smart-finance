@@ -1,6 +1,6 @@
-from datetime import date
-
 from pydantic import BaseModel
+
+from db import Transaction
 
 
 class AnomalyRequest(BaseModel):
@@ -8,18 +8,6 @@ class AnomalyRequest(BaseModel):
 
     user_id: int
     transaction_ids: list[str]
-
-
-class Transaction(BaseModel):
-    """One transaction loaded from the database."""
-
-    transaction_id: str
-    name: str
-    amount: float
-    date: date
-    # Not loaded from the database yet, so always None for now. Detectors that use it
-    # must fall back to the whole history when it's missing.
-    category: str | None = None
 
 
 class FlaggedTransaction(BaseModel):
