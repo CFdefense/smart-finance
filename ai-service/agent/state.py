@@ -12,9 +12,10 @@ class AgentState(TypedDict):
     context: str
     response: str
 
+
 class ChatState(TypedDict):
     """Represent the state of a chat conversation with message history to handle tool calls."""
-    
+
     user_id: int
     context: str
     messages: Annotated[list, add_messages]
