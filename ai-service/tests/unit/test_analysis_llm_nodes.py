@@ -77,7 +77,7 @@ def test_investigate_degrades_when_the_llm_fails(caplog):
     """An LLM error becomes a no-tool reply so the graph can continue to assess."""
     llm = ScriptedLLM(RuntimeError("openai down"))
 
-    with caplog.at_level(logging.WARNING, logger="agent.analyze"):
+    with caplog.at_level(logging.WARNING, logger="agent.run"):
         result = make_investigate(llm)(BASE)
 
     reply = result["messages"][-1]
@@ -92,7 +92,7 @@ def test_route_after_investigate(caplog):
     no_tools = {**BASE, "messages": [HumanMessage(content="x"), AIMessage(content="done")]}
     capped = {**BASE, "messages": [ASK_RULES] * (MAX_TOOL_ROUNDS + 1)}
 
-    with caplog.at_level(logging.INFO, logger="agent.analyze.graph"):
+    with caplog.at_level(logging.INFO, logger="agent.run.graph"):
         assert route_after_investigate(wants_tools) == "tools"
         assert route_after_investigate(no_tools) == "assess"
         assert route_after_investigate(capped) == "assess"
@@ -140,7 +140,7 @@ def test_assess_retries_once_then_succeeds(caplog):
     """One failure is retried; the retry is logged."""
     llm = ScriptedLLM(ValueError("bad json"), _assessment())
 
-    with caplog.at_level(logging.WARNING, logger="agent.analyze"):
+    with caplog.at_level(logging.WARNING, logger="agent.run"):
         result = make_assess(llm)(BASE)
 
     assert result["assessment"] is not None

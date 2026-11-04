@@ -75,7 +75,7 @@ def test_claim_duplicate_ends_the_run(monkeypatch, caplog):
     monkeypatch.setattr(claim_mod, "user_owns_account", lambda u, a: True)
     monkeypatch.setattr(claim_mod, "claim_analysis", lambda t, u: (False, "done"))
 
-    with caplog.at_level(logging.INFO, logger="agent.analyze"):
+    with caplog.at_level(logging.INFO, logger="agent.run"):
         result = claim_transaction(STATE)
         target = route_after_claim(result)
 

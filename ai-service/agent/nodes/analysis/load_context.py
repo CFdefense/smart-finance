@@ -5,14 +5,14 @@ from datetime import date
 
 from agent.logging import NODE, traced_node
 from agent.nodes.context import format_accounts_context
-from agent.state import AnalyzerState
+from agent.state import AnalyzerState, StateUpdate
 from db import load_accounts
 
 _log = logging.getLogger(NODE)
 
 
 @traced_node("load_context")
-def load_account_context(state: AnalyzerState) -> dict:
+def load_account_context(state: AnalyzerState) -> StateUpdate:
     """
     Summarize the user's accounts and balances as text. No LLM involved.
 

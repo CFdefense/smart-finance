@@ -1,17 +1,18 @@
 """Tool: the user's savings goals."""
 
-from typing import Annotated
+from typing import Annotated, Any
 
 from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 
+from agent.formatting import money
 from agent.safety import sanitize
-from agent.tools.formatting import cap, money
+from agent.tools.formatting import cap
 from db import load_goals
 
 
 @tool
-def get_goals(state: Annotated[dict, InjectedState]) -> str:
+def get_goals(state: Annotated[dict[str, Any], InjectedState]) -> str:
     """List the user's savings goals with current balance, starting balance and target."""
     lines = [
         f"- {sanitize(g.name, 60)[0]} on {sanitize(g.account_name, 60)[0]}: "
