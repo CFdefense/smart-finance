@@ -39,3 +39,5 @@ __pycache__/
 # Ruff
 *.ruff_cache
 *.pytest_cache
+# AI service run logs
+ai-service/logs/

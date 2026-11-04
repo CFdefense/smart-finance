@@ -101,7 +101,8 @@ class AnalyzerAgent:
         try:
             started = time.perf_counter()
             _log.info(
-                "analyze.start amount=%.2f category=%s pending=%s account=%s",
+                "analyze.start transaction=%s amount=%.2f category=%s pending=%s account=%s",
+                txn.transaction_id,
                 txn.amount,
                 txn.category,
                 txn.pending,

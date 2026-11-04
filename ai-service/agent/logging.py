@@ -4,11 +4,18 @@ import ast
 import contextvars
 import functools
 import logging
+import logging.handlers
+import os
+import textwrap
 import time
 import uuid
 from collections.abc import Callable
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
 
 from langchain_core.callbacks import BaseCallbackHandler
+from pydantic import BaseModel
 
 GRAPH = "agent.analyze.graph"
 NODE = "agent.analyze.node"
@@ -38,30 +45,62 @@ def bind_run(run_id: str, transaction_id: str, user_id: int) -> None:
     _user_id.set(str(user_id))
 
 
+_TXN_TAIL = 4
+
+
 class RunContextFilter(logging.Filter):
-    """Add `run_ctx` (e.g. `[run=ab12 txn=t1 user=7]`) to every record."""
+    """Add `run_ctx` (e.g. `[run=ab12 txn=9f3a user=7]`) and `component` (e.g. `node`)."""
 
     def filter(self, record: logging.LogRecord) -> bool:
-        """Set the run context on the record and keep it."""
+        """Set the run context and component on the record and keep it."""
         if _run_id.get() == "-":
             record.run_ctx = "[-]"
         else:
-            record.run_ctx = f"[run={_run_id.get()} txn={_txn_id.get()} user={_user_id.get()}]"
+            txn = _txn_id.get()[-_TXN_TAIL:]  # last chars only; analyze.start has the full id
+            record.run_ctx = f"[run={_run_id.get()} txn={txn} user={_user_id.get()}]"
+        record.component = record.name.rsplit(".", 1)[-1]
         return True
 
 
-def configure_agent_logging(level: str = "INFO") -> None:
-    """Set the analyzer log level and make its lines include the run context (idempotent)."""
+class _UtcIsoFormatter(logging.Formatter):
+    """Format times like `2026-11-04T21:18:39.788Z` (UTC, milliseconds)."""
+
+    def formatTime(  # noqa: N802 - overrides logging.Formatter
+        self, record: logging.LogRecord, datefmt: str | None = None
+    ) -> str:
+        """Return the record's creation time as an ISO-8601 UTC timestamp."""
+        stamp = datetime.fromtimestamp(record.created, tz=timezone.utc)
+        return stamp.strftime("%Y-%m-%dT%H:%M:%S.") + f"{stamp.microsecond // 1000:03d}Z"
+
+
+LOG_FILE = "analyzer.log"
+_FORMAT = "[%(asctime)s] [PID:%(process)d] [%(levelname)s] [%(component)s] %(run_ctx)s %(message)s"
+
+
+def default_log_dir() -> Path:
+    """Return `$AGENT_LOG_DIR`, or `ai-service/logs` when it is not set."""
+    return Path(os.getenv("AGENT_LOG_DIR") or Path(__file__).resolve().parent.parent / "logs")
+
+
+def configure_agent_logging(level: str = "INFO", log_dir: Path | None = None) -> None:
+    """
+    Send the analyzer's workflow logs to `<log_dir>/analyzer.log` (idempotent).
+
+    Each line looks like `[2026-11-04T21:18:39.788Z] [PID:178] [INFO] [node] [run=... ] msg`.
+    Nothing from the agent goes to stdout, so the terminal keeps only the request lines.
+    """
     base = logging.getLogger("agent.analyze")
     base.setLevel(level.upper())
     if any(getattr(h, "_agent_analyze", False) for h in base.handlers):
         return
-    handler = logging.StreamHandler()
+    directory = log_dir or default_log_dir()
+    directory.mkdir(parents=True, exist_ok=True)
+    handler = logging.handlers.RotatingFileHandler(
+        directory / LOG_FILE, maxBytes=5_000_000, backupCount=3, encoding="utf-8", delay=True
+    )
     handler._agent_analyze = True  # marker so repeated calls do not add handlers
     handler.addFilter(RunContextFilter())
-    handler.setFormatter(
-        logging.Formatter("%(asctime)s %(levelname)s %(name)s %(run_ctx)s %(message)s")
-    )
+    handler.setFormatter(_UtcIsoFormatter(_FORMAT))
     base.addHandler(handler)
     base.propagate = False
 
@@ -82,6 +121,14 @@ def traced_node(name: str) -> Callable:
             ms = int((time.perf_counter() - started) * 1000)
             keys = sorted(result) if isinstance(result, dict) else []
             _node_log.info("node.exit %s ms=%d wrote=%s", name, ms, keys)
+            if content_logging_enabled() and isinstance(result, dict):
+                for key in keys:
+                    _node_log.info(
+                        "node.wrote %s.%s\n%s",
+                        name,
+                        key,
+                        _box(f"{name}.{key}", _describe(result[key])),
+                    )
             return result
 
         return wrapper
@@ -103,6 +150,73 @@ def _one_line(value: object, limit: int = _ARGS_MAX) -> str:
     return text if len(text) <= limit else text[:limit] + "..."
 
 
+def content_logging_enabled() -> bool:
+    """Return True when `AGENT_LOG_CONTENT` asks for tool and node content in the INFO log."""
+    return os.getenv("AGENT_LOG_CONTENT", "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+_BOX_WIDTH = 96
+_BOX_MAX_LINES = 40
+
+
+def _box(title: str, body: str) -> str:
+    """
+    Draw `body` in a box with `title` in the top edge, wrapped and capped.
+
+    Every line starts with a box character, so content can never pass for a log line, and
+    non-printable characters are replaced.
+    """
+    lines: list[str] = []
+    for raw in body.splitlines() or [""]:
+        clean = "".join(ch if ch.isprintable() else " " for ch in raw).rstrip()
+        indent = " " * (len(clean) - len(clean.lstrip()))
+        lines.extend(
+            textwrap.wrap(
+                clean,
+                _BOX_WIDTH,
+                subsequent_indent=indent + "  ",
+                break_long_words=True,
+                replace_whitespace=False,
+            )
+            or [""]
+        )
+    if len(lines) > _BOX_MAX_LINES:
+        extra = len(lines) - _BOX_MAX_LINES
+        lines = [*lines[:_BOX_MAX_LINES], f"... {extra} more line(s) not shown"]
+    top = f"\u250c\u2500 {title} ".ljust(_BOX_WIDTH + 3, "\u2500") + "\u2510"
+    bottom = "\u2514" + "\u2500" * (_BOX_WIDTH + 2) + "\u2518"
+    middle = [f"\u2502 {line.ljust(_BOX_WIDTH)} \u2502" for line in lines]
+    return "\n".join([top, *middle, bottom])
+
+
+def _fields(data: dict[str, Any]) -> str:
+    """Render a dict one field per line, with lists as bullet points."""
+    out: list[str] = []
+    for key, value in data.items():
+        if isinstance(value, list):
+            out.append(f"{key}:" if value else f"{key}: (none)")
+            out.extend(f"  - {item}" for item in value)
+        else:
+            out.append(f"{key}: {value}")
+    return "\n".join(out)
+
+
+def _describe(value: object) -> str:
+    """Render a value a node wrote for a box: models by field, messages by their last one."""
+    if isinstance(value, BaseModel):
+        return _fields(value.model_dump())
+    if isinstance(value, list) and value and hasattr(value[-1], "type"):
+        last = value[-1]
+        calls = getattr(last, "tool_calls", None)
+        head = f"{len(value)} message(s); last is from the {last.type}"
+        if calls:
+            return (
+                head + "\ntool calls:\n" + "\n".join(f"  - {c['name']}({c['args']})" for c in calls)
+            )
+        return f"{head}\n{getattr(last, 'content', last)}"
+    return str(value)
+
+
 def _arg_names(input_str: object) -> list[str]:
     """Return the names of the arguments the model supplied, never their (untrusted) values."""
     try:
@@ -118,6 +232,8 @@ class AnalyzerCallbackHandler(BaseCallbackHandler):
     def __init__(self) -> None:
         """Start with no in-flight timers."""
         self._started: dict[object, float] = {}
+        self._names: dict[object, str] = {}
+        self._inputs: dict[object, str] = {}
 
     def _elapsed_ms(self, run_id) -> int:
         """Return milliseconds since the call with this run id started, and forget the timer."""
@@ -133,7 +249,9 @@ class AnalyzerCallbackHandler(BaseCallbackHandler):
         """
         self._started[run_id] = time.perf_counter()
         name = (serialized or {}).get("name")
+        self._names[run_id] = str(name)
         _tool_log.info("tool.call %s args=%s", name, _arg_names(input_str))
+        self._inputs[run_id] = str(input_str)
         _tool_log.debug("tool.call.args %s %s", name, _one_line(input_str))
 
     def on_tool_end(self, output, *, run_id=None, **kwargs):
@@ -141,11 +259,17 @@ class AnalyzerCallbackHandler(BaseCallbackHandler):
         ms = self._elapsed_ms(run_id)
         text = str(getattr(output, "content", output))
         _tool_log.info("tool.result chars=%d ms=%d", len(text), ms)
+        name = self._names.pop(run_id, "?")
+        given = self._inputs.pop(run_id, "")
+        if content_logging_enabled():
+            _tool_log.info("tool.content %s\n%s", name, _box(name, f"input: {given}\n{text}"))
         _tool_log.debug("tool.result.content %s", text)
 
     def on_tool_error(self, error, *, run_id=None, **kwargs):
         """Log a failing tool call; the message (which may echo user text) only at DEBUG."""
         ms = self._elapsed_ms(run_id)
+        self._names.pop(run_id, None)
+        self._inputs.pop(run_id, None)
         _tool_log.warning("tool.error type=%s ms=%d", type(error).__name__, ms)
         _tool_log.debug("tool.error.message %s", _one_line(error, 2000))
 
