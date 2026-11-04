@@ -3,10 +3,18 @@
 from datetime import date
 
 from agent.formatting import money, section
+from agent.safety import sanitize
 from db import Account, Budget, Goal, Transaction
 
 RECENT_DAYS = 30
 MAX_TRANSACTIONS = 100
+_NAME_MAX = 60
+_DESCRIPTION_MAX = 200
+
+
+def _clean(text: str | None) -> str:
+    """Sanitize a name or description from the user or the bank before it goes in a prompt."""
+    return sanitize(text or "", _NAME_MAX)[0]
 
 
 def format_financial_context(
@@ -22,7 +30,7 @@ def format_financial_context(
         section(
             "Accounts",
             [
-                f"- {a.name} ({a.account_subtype or a.account_type}): "
+                f"- {_clean(a.name)} ({a.account_subtype or a.account_type}): "
                 f"current {money(a.current_balance)}, available {money(a.available_balance)}"
                 for a in accounts
             ],
@@ -32,7 +40,7 @@ def format_financial_context(
         section(
             f"Budgets for {today:%B %Y}",
             [
-                f"- {b.name} [{b.category}]: spent {money(b.spent_this_month)} "
+                f"- {_clean(b.name)} [{b.category}]: spent {money(b.spent_this_month)} "
                 f"of {money(b.monthly_limit)}"
                 for b in budgets
             ],
@@ -42,10 +50,10 @@ def format_financial_context(
         section(
             "Goals",
             [
-                f"- {g.name} on {g.account_name}: balance {money(g.current_balance)}, "
+                f"- {_clean(g.name)} on {_clean(g.account_name)}: balance {money(g.current_balance)}, "
                 f"started at {money(g.baseline_balance)}, target {money(g.target_amount)}"
                 + (f" by {g.target_date.isoformat()}" if g.target_date else "")
-                + (f" ({g.description})" if g.description else "")
+                + (f" ({sanitize(g.description, _DESCRIPTION_MAX)[0]})" if g.description else "")
                 for g in goals
             ],
         )
@@ -57,7 +65,7 @@ def format_financial_context(
         section(
             title,
             [
-                f"- {t.date.isoformat()} {t.name}: {money(t.amount)} [{t.category or 'OTHER'}]"
+                f"- {t.date.isoformat()} {_clean(t.name)}: {money(t.amount)} [{t.category or 'OTHER'}]"
                 for t in transactions
             ],
         )
