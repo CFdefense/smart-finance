@@ -21,7 +21,7 @@ TXN = AnalyzedTransaction(
     amount=250.0,
     date=date(2026, 11, 4),
     pending=False,
-    category="GAMBLING",
+    category="ENTERTAINMENT",
 )
 BASE = {"user_id": 7, "transaction": TXN, "context": "Accounts:\n- Checking", "messages": []}
 ASK_RULES = AIMessage(content="", tool_calls=[{"name": "get_rules", "args": {}, "id": "c1"}])

@@ -1,7 +1,7 @@
 from datetime import date
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 
 class ChatRequest(BaseModel):
@@ -25,6 +25,19 @@ class Conversation(BaseModel):
 
 
 Verdict = Literal["OK", "REVIEW", "ALERT"]
+# The categories the database allows (see migrations/009_add_transaction_category.sql).
+Category = Literal[
+    "SHOPPING",
+    "ENTERTAINMENT",
+    "UTILITIES",
+    "HEALTHCARE",
+    "FOOD_DINING",
+    "GROCERIES",
+    "TRANSPORTATION",
+    "OTHER",
+]
+# Identifiers are echoed into every log line, so keep them to a safe alphabet and length.
+Identifier = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_\-]{1,100}$")]
 AnalysisStatus = Literal["ANALYZED", "DUPLICATE", "FAILED"]
 
 
@@ -33,13 +46,13 @@ class AnalyzedTransaction(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    transaction_id: str
-    account_id: str
+    transaction_id: Identifier
+    account_id: Identifier
     name: str
     amount: float  # positive = money out (Plaid's convention)
     date: date
     pending: bool
-    category: str
+    category: Category
 
 
 class AnalyzeRequest(BaseModel):

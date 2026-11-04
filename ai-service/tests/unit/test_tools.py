@@ -54,14 +54,14 @@ def test_get_transactions_filters_category_and_skips_current(monkeypatch):
                 name="Lunch",
                 amount=15,
                 date=date(2026, 11, 3),
-                category="FOOD",
+                category="FOOD_DINING",
             ),
             Transaction(
                 transaction_id="t2",
                 name="Bet",
                 amount=40,
                 date=date(2026, 11, 2),
-                category="GAMBLING",
+                category="ENTERTAINMENT",
             ),
         ]
 
@@ -71,7 +71,7 @@ def test_get_transactions_filters_category_and_skips_current(monkeypatch):
     )
 
     text = transactions_mod.get_transactions.invoke(
-        {"days": 10, "category": "GAMBLING", "limit": 5, "state": STATE}
+        {"days": 10, "category": "ENTERTAINMENT", "limit": 5, "state": STATE}
     )
 
     assert seen["user_id"] == 7

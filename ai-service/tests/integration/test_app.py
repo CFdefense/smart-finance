@@ -12,7 +12,7 @@ TRANSACTION = {
     "amount": 250.0,
     "date": "2026-11-04",
     "pending": False,
-    "category": "GAMBLING",
+    "category": "ENTERTAINMENT",
 }
 ANALYZE_BODY = {"user_id": 7, "transaction": TRANSACTION}
 

@@ -23,7 +23,7 @@ TXN = AnalyzedTransaction(
     amount=250.0,
     date=date(2026, 11, 4),
     pending=False,
-    category="GAMBLING",
+    category="ENTERTAINMENT",
 )
 
 

@@ -6,6 +6,7 @@ from typing import Annotated
 from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 
+from agent.data_models import Category
 from agent.safety import sanitize
 from agent.tools.formatting import cap, money
 from db import load_transactions
@@ -17,7 +18,7 @@ _FETCH_LIMIT = 200
 def get_transactions(
     state: Annotated[dict, InjectedState],
     days: int = 30,
-    category: str | None = None,
+    category: Category | None = None,
     limit: int = 20,
 ) -> str:
     """
