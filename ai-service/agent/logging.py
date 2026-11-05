@@ -1,11 +1,19 @@
-"""Run-scoped logging for the analyzer graph: run ids, node tracing, tool and LLM callbacks."""
+"""
+Run-scoped logging for the analyzer graph: run ids, node tracing, tool and LLM callbacks.
+
+Logging is always on and always verbose (DEBUG), and includes payment details and the content
+nodes and tools read and write. Every line goes to `analyzer.log`; each analysis also gets its
+own `log_<transaction_id>.txt`.
+"""
 
 import ast
+import contextlib
 import contextvars
 import functools
 import logging
 import logging.handlers
 import os
+import re
 import textwrap
 import time
 import uuid
@@ -62,6 +70,23 @@ class RunContextFilter(logging.Filter):
         return True
 
 
+_SECRET = re.compile(r"sk-[A-Za-z0-9_\-*.]{6,}|Bearer\s+[A-Za-z0-9._\-]{8,}")
+
+
+class RedactSecretsFilter(logging.Filter):
+    """Mask API keys and bearer tokens in messages and tracebacks (an OpenAI 401 echoes the key)."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        """Rewrite the record with secrets replaced by `[redacted]` and keep it."""
+        record.msg = _SECRET.sub("[redacted]", record.getMessage())
+        record.args = None
+        if record.exc_info and not record.exc_text:
+            record.exc_text = logging.Formatter().formatException(record.exc_info)
+        if record.exc_text:
+            record.exc_text = _SECRET.sub("[redacted]", record.exc_text)
+        return True
+
+
 class _UtcIsoFormatter(logging.Formatter):
     """Format times like `2026-11-04T21:18:39.788Z` (UTC, milliseconds)."""
 
@@ -82,15 +107,15 @@ def default_log_dir() -> Path:
     return Path(os.getenv("AGENT_LOG_DIR") or Path(__file__).resolve().parent.parent / "logs")
 
 
-def configure_agent_logging(level: str = "INFO", log_dir: Path | None = None) -> None:
+def configure_agent_logging(log_dir: Path | None = None) -> None:
     """
-    Send the analyzer's workflow logs to `<log_dir>/analyzer.log` (idempotent).
+    Send the analyzer's workflow logs, at DEBUG, to `<log_dir>/analyzer.log` (idempotent).
 
     Each line looks like `[2026-11-04T21:18:39.788Z] [PID:178] [INFO] [node] [run=... ] msg`.
     Nothing from the agent goes to stdout, so the terminal keeps only the request lines.
     """
     base = logging.getLogger("agent.analyze")
-    base.setLevel(level.upper())
+    base.setLevel(logging.DEBUG)
     if any(getattr(h, "_agent_analyze", False) for h in base.handlers):
         return
     directory = log_dir or default_log_dir()
@@ -99,10 +124,63 @@ def configure_agent_logging(level: str = "INFO", log_dir: Path | None = None) ->
         directory / LOG_FILE, maxBytes=5_000_000, backupCount=3, encoding="utf-8", delay=True
     )
     handler._agent_analyze = True  # marker so repeated calls do not add handlers
+    handler.addFilter(RedactSecretsFilter())
     handler.addFilter(RunContextFilter())
     handler.setFormatter(_UtcIsoFormatter(_FORMAT))
     base.addHandler(handler)
     base.propagate = False
+
+
+_SAFE_FILE_ID = re.compile(r"[A-Za-z0-9_\-]{1,100}")
+
+
+class _SafeFileHandler(logging.FileHandler):
+    """A file handler that never raises, even when the lazy open fails (read-only dir, full disk)."""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        """Write the record, reporting any failure through `handleError` instead of raising."""
+        try:
+            super().emit(record)
+        except Exception:  # noqa: BLE001 - logging must never break an analysis
+            self.handleError(record)
+
+
+@contextlib.contextmanager
+def run_log_file(transaction_id: str, log_dir: Path | None = None):
+    """
+    Also write this analysis's log lines to `<log_dir>/log_<transaction_id>.txt`.
+
+    Call after `bind_run`. Only lines from the current run reach the file, so concurrent
+    analyses never mix, even two runs of the same transaction (each writes its own lines once).
+    Re-analysing the same transaction appends to its file. The transaction id is a validated
+    identifier, so it is safe as a file name. A file that cannot be written never raises.
+    """
+    base = logging.getLogger("agent.analyze")
+    directory = log_dir or default_log_dir()
+    if not _SAFE_FILE_ID.fullmatch(transaction_id):
+        base.warning("run_log_file.skipped reason=unsafe_transaction_id")
+        yield
+        return
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        base.warning("run_log_file.unavailable dir=%s", directory)
+        yield
+        return
+    run_id = _run_id.get()
+    handler = _SafeFileHandler(
+        directory / f"log_{transaction_id}.txt", encoding="utf-8", delay=True
+    )
+    handler.addFilter(RedactSecretsFilter())
+    handler.addFilter(RunContextFilter())
+    handler.addFilter(lambda record: _run_id.get() == run_id)
+    handler.setFormatter(_UtcIsoFormatter(_FORMAT))
+    base.addHandler(handler)
+    try:
+        yield
+    finally:
+        base.removeHandler(handler)
+        handler.close()
 
 
 def traced_node(name: str) -> Callable:
@@ -121,7 +199,7 @@ def traced_node(name: str) -> Callable:
             ms = int((time.perf_counter() - started) * 1000)
             keys = sorted(result) if isinstance(result, dict) else []
             _node_log.info("node.exit %s ms=%d wrote=%s", name, ms, keys)
-            if content_logging_enabled() and isinstance(result, dict):
+            if isinstance(result, dict):
                 for key in keys:
                     _node_log.info(
                         "node.wrote %s.%s\n%s",
@@ -148,11 +226,6 @@ def _one_line(value: object, limit: int = _ARGS_MAX) -> str:
     """Render a value on one line, capped, so model-supplied text cannot forge log lines."""
     text = " ".join(str(value).split())
     return text if len(text) <= limit else text[:limit] + "..."
-
-
-def content_logging_enabled() -> bool:
-    """Return True when `AGENT_LOG_CONTENT` asks for tool and node content in the INFO log."""
-    return os.getenv("AGENT_LOG_CONTENT", "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 _BOX_WIDTH = 96
@@ -227,7 +300,7 @@ def _arg_names(input_str: object) -> list[str]:
 
 
 class AnalyzerCallbackHandler(BaseCallbackHandler):
-    """Log tool calls and LLM calls. Content appears only at DEBUG."""
+    """Log tool calls and LLM calls, including what the tools were given and returned."""
 
     def __init__(self) -> None:
         """Start with no in-flight timers."""
@@ -255,15 +328,14 @@ class AnalyzerCallbackHandler(BaseCallbackHandler):
         _tool_log.debug("tool.call.args %s %s", name, _one_line(input_str))
 
     def on_tool_end(self, output, *, run_id=None, **kwargs):
-        """Log how big the result was; the content itself only at DEBUG."""
+        """Log how big the result was, then the input and output in a box."""
         ms = self._elapsed_ms(run_id)
         text = str(getattr(output, "content", output))
         _tool_log.info("tool.result chars=%d ms=%d", len(text), ms)
         name = self._names.pop(run_id, "?")
         given = self._inputs.pop(run_id, "")
-        if content_logging_enabled():
-            _tool_log.info("tool.content %s\n%s", name, _box(name, f"input: {given}\n{text}"))
-        _tool_log.debug("tool.result.content %s", text)
+        _tool_log.info("tool.content %s\n%s", name, _box(name, f"input: {given}\n{text}"))
+        _tool_log.debug("tool.result.content %s", _one_line(text, 20_000))
 
     def on_tool_error(self, error, *, run_id=None, **kwargs):
         """Log a failing tool call; the message (which may echo user text) only at DEBUG."""

@@ -14,7 +14,7 @@ import agent.nodes.analysis.notification as notification_mod
 import agent.tools.transactions as transactions_mod
 from agent import AnalyzedTransaction, AnalyzeRequest, Assessment
 from agent.analyze import AnalyzerAgent, build_analyzer_graph
-from agent.logging import RunContextFilter
+from agent.logging import RunContextFilter, default_log_dir
 from db import Account, Rule
 
 TXN = AnalyzedTransaction(
@@ -230,7 +230,7 @@ def test_no_node_ever_writes_the_transaction(world):
 
 
 def test_one_run_logs_a_traceable_workflow(world, caplog):
-    """INFO logs show start, every node, routes, the decision and the end, under one run id."""
+    """Logs show start, every node, routes, the decision and the end, under one run id."""
     caplog.handler.addFilter(RunContextFilter())
     with caplog.at_level(logging.INFO, logger="agent.analyze"):
         run(ScriptedLLM(ASK_HISTORY, AIMessage(content="done")), ScriptedLLM(_assessment("ALERT")))
@@ -253,7 +253,22 @@ def test_one_run_logs_a_traceable_workflow(world, caplog):
         assert expected in text, expected
     assert len({r.run_ctx for r in records}) == 1
     assert next(iter({r.run_ctx for r in records})).startswith("[run=")
-    assert "Casino" not in text  # user text stays out of INFO logs
+    assert "name='Casino Royale' amount=250.00 date=2026-11-04" in text  # payment info is logged
+
+
+def test_each_run_writes_its_own_log_txid_file(world, caplog):
+    """An analysis writes log_<transaction_id>.txt holding that run's lines, start to end."""
+    path = default_log_dir() / "log_t1.txt"
+    path.unlink(missing_ok=True)
+
+    with caplog.at_level(logging.DEBUG, logger="agent.analyze"):
+        run(ScriptedLLM(AIMessage(content="done")), ScriptedLLM(_assessment("OK")))
+
+    text = path.read_text()
+    assert "analyze.start transaction=t1 name='Casino Royale'" in text
+    assert "node.wrote assess.assessment" in text  # node content is always logged
+    assert "analyze.end status=ANALYZED" in text
+    assert "[run=" in text and "txn=" in text
 
 
 def test_constructor_builds_a_working_agent(monkeypatch, world):

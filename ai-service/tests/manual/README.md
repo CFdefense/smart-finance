@@ -1,0 +1,1 @@
+# NOTE: manual/ to be replaced by an automated AI Agent evaluator Framework

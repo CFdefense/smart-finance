@@ -59,19 +59,24 @@ before concluding. Its one tool is `get_transactions`, for comparing with other 
 
 ## Analyzer logging
 
-The analyzer's workflow logs go to `ai-service/logs/analyzer.log` (rotating, 5 MB x 3), not to the
-terminal, which keeps only uvicorn's request lines. Follow it with `tail -f logs/analyzer.log`.
-Each line reads `[time] [PID] [LEVEL] [node|graph|tool|llm|decision] [run=<id> txn=<last 4 of id> user=<id>] message`,
+Logging is always on and always verbose (DEBUG), with payment details. It cannot be turned down.
+The logs hold the merchant name, amount, date and category, plus everything the nodes and tools
+read and write (the loaded context, tool input and output, the assessment, prompts, notification
+text and the graph as Mermaid). Treat the log folder as sensitive. API keys and bearer tokens are
+masked as `[redacted]`, including inside tracebacks.
+
+The analyzer's workflow logs go to the file `ai-service/logs/analyzer.log` (rotating,
+5 MB x 3); the terminal keeps only uvicorn's request lines. Follow it with
+`tail -f logs/analyzer.log`. Each line reads
+`[time] [PID] [LEVEL] [node|graph|tool|llm|decision] [run=<id> txn=<last 4 of id> user=<id>] message`,
 so `grep run=<id> logs/analyzer.log` follows one analysis.
 
-- `AGENT_LOG_LEVEL` (default `INFO`): INFO shows node enter/exit with timings, routing decisions,
-  tool calls, LLM calls and the notify decision. DEBUG adds prompts, raw tool results,
-  notification text and the graph as Mermaid.
-- `AGENT_LOG_CONTENT=true`: also draw boxes under the log lines showing what each node wrote
-  (`node.wrote`: the loaded context, the model's tool calls, the assessment) and what each tool
-  was given and returned (`tool.content`). This puts user-written text (rule descriptions, budget
-  names, merchants) in the log, so leave it off outside local demos.
-- `AGENT_LOG_DIR`: write the file somewhere else.
+Each analysis also writes its own file, `ai-service/logs/log_<transaction_id>.txt`, holding only
+that run's lines. Analysing the same transaction again appends to the same file. These per-
+transaction files are not rotated or deleted, so clear old ones out now and then. On macOS and
+Windows file names are case-insensitive, so ids that differ only in case share one file.
+
+- `AGENT_LOG_DIR`: write the logs somewhere else.
 
 ## Drawing the agent graphs
 
