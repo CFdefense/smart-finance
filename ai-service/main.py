@@ -37,21 +37,24 @@ async def lifespan(app: FastAPI):
     openai_key = os.getenv("OPENAI_API_KEY")
     model = os.getenv("AGENT_MODEL", "gpt-4.1")
 
-    if openai_key:
-        app.state.analyzer_agent = AnalyzerAgent(openai_key, model)
-        app.state.chat_agent = ChatAgent(openai_key, model)
-    else:
-        logging.warning("OPENAI_API_KEY not set; /chat and /analyze are disabled.")
-        app.state.analyzer_agent = None
-        app.state.chat_agent = None
-
-    app.state.detector = CombinedDetector(
+    detector = CombinedDetector(
         [
             ZScoreDetector(threshold=float(os.getenv("ANOMALY_ZSCORE_THRESHOLD", "3.5"))),
             DuplicateDetector(),
             SubscriptionIncreaseDetector(),
         ]
     )
+
+    app.state.detector = detector
+
+    if openai_key:
+        app.state.analyzer_agent = AnalyzerAgent(openai_key, model, detector)
+        app.state.chat_agent = ChatAgent(openai_key, model)
+    else:
+        logging.warning("OPENAI_API_KEY not set; /chat and /analyze are disabled.")
+        app.state.analyzer_agent = None
+        app.state.chat_agent = None
+
     yield
 
     # Cleanup here if we need to
