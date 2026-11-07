@@ -8,6 +8,7 @@ from langchain_core.messages import AIMessage
 
 import agent.analyze as analyze_mod
 import agent.nodes.analysis.claim as claim_mod
+import agent.nodes.analysis.detect as detect_mod
 import agent.nodes.analysis.finalization as finalization_mod
 import agent.nodes.analysis.load_context as load_context_mod
 import agent.nodes.analysis.notification as notification_mod
@@ -50,6 +51,21 @@ class ScriptedLLM:
         return reply.model_copy(deep=True)
 
 
+class CountingDetector:
+    """Counts how often it runs; flags nothing, or raises `error` if given one."""
+
+    def __init__(self, error: Exception | None = None):
+        self.error = error
+        self.calls = 0
+
+    def find_anomalies(self, new, history):
+        """Count the call, then raise or report nothing unusual."""
+        self.calls += 1
+        if self.error:
+            raise self.error
+        return []
+
+
 def _assessment(verdict, should_notify=False):
     return Assessment(
         verdict=verdict, summary="s", should_notify=should_notify, notify_reason="Breaks a rule"
@@ -78,13 +94,14 @@ def world(monkeypatch):
         notification_mod, "send_notification", lambda u, m: seen["sent"].append((u, m))
     )
     monkeypatch.setattr(finalization_mod, "finish_analysis", lambda *a: seen["recorded"].append(a))
+    monkeypatch.setattr(detect_mod, "load_transactions", lambda u, **kw: [])
     return seen
 
 
-def run(investigate, assess):
+def run(investigate, assess, detector=None):
     """Run the graph through a real AnalyzerAgent using the scripted LLMs."""
     agent = AnalyzerAgent.__new__(AnalyzerAgent)
-    agent._graph = build_analyzer_graph(investigate, assess)
+    agent._graph = build_analyzer_graph(investigate, assess, detector or CountingDetector())
     return agent.analyze(REQUEST)
 
 
@@ -130,11 +147,12 @@ def test_duplicate_stops_before_any_llm_call(world, monkeypatch):
     """An already-claimed transaction short-circuits: no LLM, no notification, nothing recorded."""
     monkeypatch.setattr(claim_mod, "claim_analysis", lambda t, u: (False, "done"))
     investigate, assess = ScriptedLLM(AIMessage(content="x")), ScriptedLLM(_assessment("ALERT"))
+    detector = CountingDetector()
 
-    result = run(investigate, assess)
+    result = run(investigate, assess, detector)
 
     assert result.status == "DUPLICATE" and result.assessment is None
-    assert investigate.calls == 0 and assess.calls == 0
+    assert investigate.calls == 0 and assess.calls == 0 and detector.calls == 0
     assert world["sent"] == [] and world["recorded"] == []
 
 
@@ -204,7 +222,9 @@ def test_unexpected_graph_error_becomes_failed_result(world, monkeypatch):
 def test_no_node_ever_writes_the_transaction(world):
     """The transaction is immutable: no state update contains the `transaction` key."""
     graph = build_analyzer_graph(
-        ScriptedLLM(ASK_RULES, AIMessage(content="done")), ScriptedLLM(_assessment("ALERT"))
+        ScriptedLLM(ASK_RULES, AIMessage(content="done")),
+        ScriptedLLM(_assessment("ALERT")),
+        CountingDetector(),
     )
     initial = {
         "run_id": "r",
@@ -277,7 +297,7 @@ def test_constructor_builds_a_working_agent(monkeypatch, world):
 
     monkeypatch.setattr(analyze_mod, "ChatOpenAI", FakeChat)
 
-    result = AnalyzerAgent("sk-test", "gpt-test").analyze(REQUEST)
+    result = AnalyzerAgent("sk-test", "gpt-test", CountingDetector()).analyze(REQUEST)
 
     assert result.status == "ANALYZED"
 
@@ -318,3 +338,14 @@ def test_non_assessment_result_is_a_failed_attempt(world):
 
     assert result.status == "FAILED" and result.error == "assess_failed"
     assert world["recorded"] == [("t1", "failed", None, False, "assess_failed")]
+
+
+def test_anomaly_failure_after_claim_still_records_the_run(world):
+    """Every claimed run checks for anomalies, and a detector crash must not strand the claim."""
+    detector = CountingDetector(error=RuntimeError("detector broke"))
+
+    result = run(ScriptedLLM(AIMessage(content="x")), ScriptedLLM(_assessment("OK")), detector)
+
+    assert detector.calls == 1
+    assert result.status == "ANALYZED"
+    assert world["recorded"] == [("t1", "done", "OK", False, None)]
