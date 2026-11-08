@@ -15,6 +15,7 @@ from agent.logging import (
     bind_run,
     clear_run,
     new_run_id,
+    run_log_file,
 )
 from agent.nodes.analysis import (
     MAX_TOOL_ROUNDS,
@@ -100,50 +101,55 @@ class AnalyzerAgent:
         run_id = new_run_id()
         bind_run(run_id, txn.transaction_id, request.user_id)
         try:
-            started = time.perf_counter()
-            _log.info(
-                "analyze.start amount=%.2f category=%s pending=%s account=%s",
-                txn.amount,
-                txn.category,
-                txn.pending,
-                txn.account_id,
-            )
-            try:
-                state = self._graph.invoke(
-                    {
-                        "run_id": run_id,
-                        "user_id": request.user_id,
-                        "transaction": txn,
-                        "context": "",
-                        "messages": [],
-                        "assessment": None,
-                        "notify": False,
-                        "notified": False,
-                        "status": "",
-                        "error": None,
-                    },
-                    config={"callbacks": [AgentCallbackHandler()], "run_name": "analyze"},
+            with run_log_file(txn.transaction_id):
+                started = time.perf_counter()
+                _log.info(
+                    "analyze.start transaction=%s name=%r amount=%.2f date=%s category=%s "
+                    "pending=%s account=%s",
+                    txn.transaction_id,
+                    txn.name,
+                    txn.amount,
+                    txn.date,
+                    txn.category,
+                    txn.pending,
+                    txn.account_id,
                 )
-                result = AnalysisResult(
-                    transaction_id=txn.transaction_id,
-                    status=state["status"],
-                    assessment=state.get("assessment"),
-                    notified=bool(state.get("notified")),
-                    error=state.get("error"),
+                try:
+                    state = self._graph.invoke(
+                        {
+                            "run_id": run_id,
+                            "user_id": request.user_id,
+                            "transaction": txn,
+                            "context": "",
+                            "messages": [],
+                            "assessment": None,
+                            "notify": False,
+                            "notified": False,
+                            "status": "",
+                            "error": None,
+                        },
+                        config={"callbacks": [AgentCallbackHandler()], "run_name": "analyze"},
+                    )
+                    result = AnalysisResult(
+                        transaction_id=txn.transaction_id,
+                        status=state["status"],
+                        assessment=state.get("assessment"),
+                        notified=bool(state.get("notified")),
+                        error=state.get("error"),
+                    )
+                except Exception as exc:
+                    _log.error("analyze.crashed type=%s", type(exc).__name__)
+                    _log.debug("analyze.crashed detail", exc_info=True)
+                    result = AnalysisResult(
+                        transaction_id=txn.transaction_id, status="FAILED", error="graph_error"
+                    )
+                _log.info(
+                    "analyze.end status=%s verdict=%s notified=%s ms=%d",
+                    result.status,
+                    result.assessment.verdict if result.assessment else None,
+                    result.notified,
+                    int((time.perf_counter() - started) * 1000),
                 )
-            except Exception as exc:
-                _log.error("analyze.crashed type=%s", type(exc).__name__)
-                _log.debug("analyze.crashed detail", exc_info=True)
-                result = AnalysisResult(
-                    transaction_id=txn.transaction_id, status="FAILED", error="graph_error"
-                )
-            _log.info(
-                "analyze.end status=%s verdict=%s notified=%s ms=%d",
-                result.status,
-                result.assessment.verdict if result.assessment else None,
-                result.notified,
-                int((time.perf_counter() - started) * 1000),
-            )
-            return result
+                return result
         finally:
             clear_run()

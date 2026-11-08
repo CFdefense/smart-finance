@@ -1,8 +1,13 @@
 """Shared test fixtures."""
 
 import logging
+import os
+import tempfile
 
 import pytest
+
+# Set before `main` is imported so tests never write to the real ai-service/logs folder.
+os.environ["AGENT_LOG_DIR"] = tempfile.mkdtemp(prefix="agent-test-logs-")
 
 from agent.logging import clear_run
 

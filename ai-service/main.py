@@ -27,8 +27,8 @@ from anomaly import (
 from db import get_connection
 
 load_dotenv()
-logging.basicConfig(level=logging.INFO)
-configure_agent_logging(os.getenv("AGENT_LOG_LEVEL", "INFO"))
+logging.basicConfig(level=logging.WARNING)  # workflow logs go to logs/analyzer.log
+configure_agent_logging()
 
 
 @asynccontextmanager
