@@ -1,33 +1,63 @@
+/*
+ * Dashboard header.
+ *
+ * Keeps the greeting on the left and the
+ * profile dropdown on the right.
+ */
 .header {
   display: flex;
   justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+
   width: 100%;
+  box-sizing: border-box;
+
+  padding: 32px 48px;
 }
 
+/* Adapt the header for narrower screens. */
+@media (max-width: 700px) {
+  .header {
+    padding: 24px 16px;
+    gap: 12px;
+  }
+}
+
+/*
+ * Dashboard greeting.
+ *
+ * Use a smaller, cleaner heading that matches
+ * the typography of our shared navigation.
+ */
 .title {
-  font-size: 4rem;
   font-family:
-    'Inter Tight',
+    Inter,
     -apple-system,
     BlinkMacSystemFont,
     'Segoe UI',
     Roboto,
-    Helvetica,
     Arial,
-    sans-serif,
-    'Apple Color Emoji',
-    'Segoe UI Emoji',
-    'Segoe UI Symbol';
-  display: inline-block;
-  justify-content: flex-start;
-  padding-left: 60px;
+    sans-serif;
+
+  /* Responsive: 1.75rem on smaller screens, up to 2.25rem. */
+  font-size: clamp(1.75rem, 3vw, 2.25rem);
+
+  font-weight: 650;
+  line-height: 1.2;
+  letter-spacing: -0.03em;
+
+  color: #1f2937;
+
+  /* Remove the browser's default h1 margins. */
+  margin: 0;
 }
 
 .icons {
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  padding-right: 70px;
+  padding-right: 0;
   cursor: default;
 }
 
@@ -41,7 +71,7 @@
 
 .account {
   color: #434343;
-  font-size: 60px;
+  font-size: 40px;
   background-color: white;
   border-radius: 10px;
   box-shadow: 4px 8px 15px 2px rgba(0, 0, 0, 0.2);
@@ -400,4 +430,117 @@
     'Apple Color Emoji',
     'Segoe UI Emoji',
     'Segoe UI Symbol';
+}
+
+/*
+ * Consistent dashboard action buttons.
+ *
+ * Both actions have equal importance, so they share
+ * the same appearance and interaction states.
+ */
+.create-budget,
+.set-goals {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+
+  min-height: 54px;
+  padding: 14px 22px;
+
+  background: #6284e2;
+  color: #ffffff;
+  border: 1px solid #6284e2;
+  border-radius: 10px;
+
+  font-family:
+    Inter,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+  font-size: 1.05rem;
+  font-weight: 600;
+
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+/* Same hover behavior for both buttons. */
+.create-budget:hover,
+.set-goals:hover {
+  background: #486cc8;
+  border-color: #486cc8;
+  color: #ffffff;
+}
+
+/* Keep button icons proportional to their labels. */
+.create-budget .material-symbols-outlined,
+.set-goals .material-symbols-outlined {
+  color: inherit;
+  font-size: 23px;
+}
+
+/*
+ * Profile dropdown container.
+ *
+ * Acts as the positioning reference for the menu.
+ */
+.profile-dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+/*
+ * Position the menu beneath the profile icon.
+ *
+ * right: 0 is important: it prevents the menu
+ * from extending off the right edge of the page.
+ */
+.profile-dropdown-content {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  left: auto;
+
+  width: 190px;
+  min-width: 190px;
+  box-sizing: border-box;
+  margin-top: 0;
+
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  z-index: 100;
+}
+
+/*
+ * Consistent sizing for menu actions.
+ */
+.profile-dropdown-content a,
+.profile-dropdown-content button {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 12px 14px;
+
+  font-family:
+    Inter,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #374151;
+  text-decoration: none;
+
+  cursor: pointer;
+}
+
+/* Highlight the hovered menu item. */
+.profile-option:hover,
+.logout-option:hover {
+  background-color: #f3f4f6;
 }

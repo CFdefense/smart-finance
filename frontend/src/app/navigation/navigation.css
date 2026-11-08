@@ -1,0 +1,140 @@
+/*
+ * Navigation container
+ *
+ * Shared across all authenticated pages.
+ */
+.app-navigation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 20px;
+
+  padding: 16px 32px;
+  background-color: #ffffff;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+/*
+ * Application branding
+ */
+.navigation-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  color: #1f2937;
+  white-space: nowrap;
+}
+
+.navigation-brand .material-symbols-outlined {
+  font-size: 30px;
+  color: #2563eb;
+}
+
+.brand-name {
+  font-size: 1.2rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+/*
+ * Navigation links container
+ */
+.navigation-links {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/*
+ * Shared appearance for links and disabled items.
+ */
+.navigation-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+
+  padding: 10px 14px;
+  border-radius: 8px;
+
+  color: #4b5563;
+  font-size: 0.95rem;
+  font-weight: 500;
+  text-decoration: none;
+
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.navigation-link .material-symbols-outlined {
+  font-size: 21px;
+}
+
+/*
+ * Hover effects only apply to usable links.
+ */
+a.navigation-link:hover {
+  background-color: #f3f4f6;
+  color: #111827;
+}
+
+/*
+ * Angular adds the "active" class automatically
+ * when the link matches the current route.
+ */
+.navigation-link.active {
+  color: #1d4ed8;
+  background-color: #eff6ff;
+  font-weight: 600;
+}
+
+/*
+ * Visible keyboard focus makes navigation
+ * accessible without a mouse.
+ */
+a.navigation-link:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 3px;
+}
+
+/*
+ * Budgets and Rules are visible but not
+ * clickable until their pages are implemented.
+ */
+.navigation-link.disabled {
+  color: #9ca3af;
+  cursor: default;
+}
+
+/*
+ * Responsive layout for tablets and phones.
+ */
+@media (max-width: 700px) {
+  .app-navigation {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+    padding: 14px 16px;
+  }
+
+  .navigation-links {
+    justify-content: space-between;
+    gap: 4px;
+  }
+
+  .navigation-link {
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 6px;
+    font-size: 0.8rem;
+  }
+
+  .navigation-link .material-symbols-outlined {
+    font-size: 23px;
+  }
+}

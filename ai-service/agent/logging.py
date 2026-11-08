@@ -1,5 +1,5 @@
 """
-Run-scoped logging for the analyzer graph: run ids, node tracing, tool and LLM callbacks.
+Run-scoped logging for the agent graphs: run ids, node tracing, tool and LLM callbacks.
 
 Logging is always on and always verbose (DEBUG), and includes payment details and the content
 nodes and tools read and write. Every line goes to `analyzer.log`; each analysis also gets its
@@ -25,11 +25,14 @@ from typing import Any
 from langchain_core.callbacks import BaseCallbackHandler
 from pydantic import BaseModel
 
-GRAPH = "agent.analyze.graph"
-NODE = "agent.analyze.node"
-TOOL = "agent.analyze.tool"
-LLM = "agent.analyze.llm"
-DECISION = "agent.analyze.decision"
+BASE = "agent.run"
+GRAPH = f"{BASE}.graph"
+NODE = f"{BASE}.node"
+TOOL = f"{BASE}.tool"
+LLM = f"{BASE}.llm"
+DECISION = f"{BASE}.decision"
+
+_HANDLER_MARKER = "_agent_run"
 
 _run_id = contextvars.ContextVar("run_id", default="-")
 _txn_id = contextvars.ContextVar("txn_id", default="-")
@@ -42,14 +45,14 @@ _llm_log = logging.getLogger(LLM)
 
 
 def new_run_id() -> str:
-    """Return a short id that ties together every log line of one analysis run."""
+    """Return a short id that ties together every log line of one agent run."""
     return uuid.uuid4().hex[:8]
 
 
-def bind_run(run_id: str, transaction_id: str, user_id: int) -> None:
-    """Attach the run, transaction and user ids to every log line made in this context."""
+def bind_run(run_id: str, transaction_id: str | None, user_id: int) -> None:
+    """Attach the run, transaction (if any) and user ids to every log line in this context."""
     _run_id.set(run_id)
-    _txn_id.set(transaction_id)
+    _txn_id.set(transaction_id or "-")
     _user_id.set(str(user_id))
 
 
@@ -64,8 +67,8 @@ class RunContextFilter(logging.Filter):
         if _run_id.get() == "-":
             record.run_ctx = "[-]"
         else:
-            txn = _txn_id.get()[-_TXN_TAIL:]  # last chars only; analyze.start has the full id
-            record.run_ctx = f"[run={_run_id.get()} txn={txn} user={_user_id.get()}]"
+            txn = f" txn={_txn_id.get()[-_TXN_TAIL:]}" if _txn_id.get() != "-" else ""
+            record.run_ctx = f"[run={_run_id.get()}{txn} user={_user_id.get()}]"
         record.component = record.name.rsplit(".", 1)[-1]
         return True
 
@@ -109,21 +112,21 @@ def default_log_dir() -> Path:
 
 def configure_agent_logging(log_dir: Path | None = None) -> None:
     """
-    Send the analyzer's workflow logs, at DEBUG, to `<log_dir>/analyzer.log` (idempotent).
+    Send the agents' workflow logs, at DEBUG, to `<log_dir>/analyzer.log` (idempotent).
 
     Each line looks like `[2026-11-04T21:18:39.788Z] [PID:178] [INFO] [node] [run=... ] msg`.
     Nothing from the agent goes to stdout, so the terminal keeps only the request lines.
     """
-    base = logging.getLogger("agent.analyze")
+    base = logging.getLogger(BASE)
     base.setLevel(logging.DEBUG)
-    if any(getattr(h, "_agent_analyze", False) for h in base.handlers):
+    if any(getattr(h, _HANDLER_MARKER, False) for h in base.handlers):
         return
     directory = log_dir or default_log_dir()
     directory.mkdir(parents=True, exist_ok=True)
     handler = logging.handlers.RotatingFileHandler(
         directory / LOG_FILE, maxBytes=5_000_000, backupCount=3, encoding="utf-8", delay=True
     )
-    handler._agent_analyze = True  # marker so repeated calls do not add handlers
+    setattr(handler, _HANDLER_MARKER, True)  # so repeated calls do not add handlers
     handler.addFilter(RedactSecretsFilter())
     handler.addFilter(RunContextFilter())
     handler.setFormatter(_UtcIsoFormatter(_FORMAT))
@@ -155,7 +158,7 @@ def run_log_file(transaction_id: str, log_dir: Path | None = None):
     Re-analysing the same transaction appends to its file. The transaction id is a validated
     identifier, so it is safe as a file name. A file that cannot be written never raises.
     """
-    base = logging.getLogger("agent.analyze")
+    base = logging.getLogger(BASE)
     directory = log_dir or default_log_dir()
     if not _SAFE_FILE_ID.fullmatch(transaction_id):
         base.warning("run_log_file.skipped reason=unsafe_transaction_id")
@@ -183,10 +186,10 @@ def run_log_file(transaction_id: str, log_dir: Path | None = None):
         handler.close()
 
 
-def traced_node(name: str) -> Callable:
+def traced_node(name: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Wrap a graph node to log entry, exit (with timing and written keys) and failures."""
 
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             _node_log.info("node.enter %s", name)
@@ -299,7 +302,7 @@ def _arg_names(input_str: object) -> list[str]:
     return sorted(str(key) for key in parsed) if isinstance(parsed, dict) else []
 
 
-class AnalyzerCallbackHandler(BaseCallbackHandler):
+class AgentCallbackHandler(BaseCallbackHandler):
     """Log tool calls and LLM calls, including what the tools were given and returned."""
 
     def __init__(self) -> None:

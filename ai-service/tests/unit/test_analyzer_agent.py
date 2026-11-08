@@ -232,10 +232,10 @@ def test_no_node_ever_writes_the_transaction(world):
 def test_one_run_logs_a_traceable_workflow(world, caplog):
     """Logs show start, every node, routes, the decision and the end, under one run id."""
     caplog.handler.addFilter(RunContextFilter())
-    with caplog.at_level(logging.INFO, logger="agent.analyze"):
+    with caplog.at_level(logging.INFO, logger="agent.run"):
         run(ScriptedLLM(ASK_HISTORY, AIMessage(content="done")), ScriptedLLM(_assessment("ALERT")))
 
-    records = [r for r in caplog.records if r.name.startswith("agent.analyze")]
+    records = [r for r in caplog.records if r.name.startswith("agent.run")]
     text = "\n".join(r.getMessage() for r in records)
     for expected in (
         "analyze.start",
@@ -261,7 +261,7 @@ def test_each_run_writes_its_own_log_txid_file(world, caplog):
     path = default_log_dir() / "log_t1.txt"
     path.unlink(missing_ok=True)
 
-    with caplog.at_level(logging.DEBUG, logger="agent.analyze"):
+    with caplog.at_level(logging.DEBUG, logger="agent.run"):
         run(ScriptedLLM(AIMessage(content="done")), ScriptedLLM(_assessment("OK")))
 
     text = path.read_text()

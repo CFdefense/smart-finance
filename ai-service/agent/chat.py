@@ -1,21 +1,51 @@
+import logging
+from typing import Any
+
+from langchain_core.messages import AIMessage
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
+from langgraph.prebuilt import ToolNode
 from pydantic import SecretStr
 
 from agent.data_models import ChatRequest, ChatResponse
+from agent.logging import BASE, AgentCallbackHandler, bind_run, clear_run, log_route, new_run_id
 from agent.nodes import load_context, make_respond
-from agent.state import AgentState
+from agent.state import ChatState
+from agent.tools import web_search
+
+_log = logging.getLogger(f"{BASE}.chat")
+
+MAX_TOOL_ROUNDS = 4
+_UNAVAILABLE = "Sorry, the assistant is having trouble right now. Please try again shortly."
+_GAVE_UP = "I couldn't finish looking that up. Please try asking again."
 
 
-def build_chat_graph(llm) -> CompiledStateGraph:
-    """Wire the chat workflow: load_context -> respond."""
-    graph = StateGraph(AgentState)
+def route_after_respond(state: ChatState) -> str:
+    """Run the tools while the model asks for them and the round cap allows; else end."""
+    messages = state["messages"]
+    last = messages[-1]
+    if isinstance(last, AIMessage) and last.tool_calls:
+        rounds = sum(1 for m in messages if isinstance(m, AIMessage) and m.tool_calls)
+        if rounds > MAX_TOOL_ROUNDS:
+            log_route("respond", "END", "round_cap")
+            return END
+        log_route("respond", "tools", f"tool_calls={len(last.tool_calls)} round={rounds}")
+        return "tools"
+    log_route("respond", "END", "answered")
+    return END
+
+
+def build_chat_graph(llm_with_tools, tools) -> CompiledStateGraph[Any, Any, Any, Any]:
+    """Wire the chat workflow: load_context -> respond <-> tools."""
+    graph = StateGraph(ChatState)
     graph.add_node("load_context", load_context)
-    graph.add_node("respond", make_respond(llm))
+    graph.add_node("respond", make_respond(llm_with_tools))
+    graph.add_node("tools", ToolNode(tools, handle_tool_errors=True))
     graph.add_edge(START, "load_context")
     graph.add_edge("load_context", "respond")
-    graph.add_edge("respond", END)
+    graph.add_conditional_edges("respond", route_after_respond, {"tools": "tools", END: END})
+    graph.add_edge("tools", "respond")
     return graph.compile()
 
 
@@ -24,16 +54,32 @@ class ChatAgent:
 
     def __init__(self, openai_key: str, model: str):
         """Create and compile the conversational graph."""
-        self._graph = build_chat_graph(ChatOpenAI(api_key=SecretStr(openai_key), model=model))
+        tools = [web_search]
+        llm = ChatOpenAI(api_key=SecretStr(openai_key), model=model)
+        self._graph = build_chat_graph(llm.bind_tools(tools), tools)
 
     def generate_answer(self, request: ChatRequest) -> ChatResponse:
-        """Generate a conversational answer."""
-        result = self._graph.invoke(
-            {
-                "user_id": request.user_id,
-                "message": request.message,
-                "context": "",
-                "response": "",
-            }
-        )
-        return ChatResponse(response=result["response"])
+        """Answer the user. Never raises; every log line of the run shares one run id."""
+        run_id = new_run_id()
+        bind_run(run_id, None, request.user_id)
+        try:
+            _log.info("chat.start message_chars=%d", len(request.message))
+            try:
+                result = self._graph.invoke(
+                    {
+                        "user_id": request.user_id,
+                        "context": "",
+                        "messages": [request.message],
+                    },
+                    config={"callbacks": [AgentCallbackHandler()], "run_name": "chat"},
+                )
+            except Exception as exc:
+                _log.error("chat.crashed type=%s", type(exc).__name__)
+                _log.debug("chat.crashed detail", exc_info=True)
+                return ChatResponse(response=_UNAVAILABLE)
+            last = result["messages"][-1]
+            answered = isinstance(last, AIMessage) and not last.tool_calls and bool(last.text)
+            _log.info("chat.end answered=%s", answered)
+            return ChatResponse(response=last.text if answered else _GAVE_UP)
+        finally:
+            clear_run()

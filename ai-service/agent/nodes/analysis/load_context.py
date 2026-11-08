@@ -11,7 +11,7 @@ from agent.nodes.context import (
     format_goals,
     format_rules,
 )
-from agent.state import AnalyzerState
+from agent.state import AnalyzerState, StateUpdate
 from db import load_accounts, load_budgets, load_goals, load_rules
 
 _log = logging.getLogger(NODE)
@@ -28,7 +28,7 @@ def _section(name: str, build: Callable[[], str]) -> str:
 
 
 @traced_node("load_context")
-def load_account_context(state: AnalyzerState) -> dict:
+def load_account_context(state: AnalyzerState) -> StateUpdate:
     """
     Load the accounts, rules, budgets and goals as text. No LLM involved.
 

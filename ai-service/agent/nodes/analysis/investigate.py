@@ -1,29 +1,29 @@
 """Investigate node and routing for gathering additional transaction context."""
 
 import logging
-from collections.abc import Callable
+from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 from agent.logging import GRAPH, NODE, log_route, traced_node
 from agent.prompts import INVESTIGATE_SYSTEM_PROMPT, transaction_block
-from agent.state import AnalyzerState
+from agent.state import AnalyzerState, StateUpdate
 
 MAX_TOOL_ROUNDS = 4
 _MAX_FINDINGS_CHARS = 8000
 _log = logging.getLogger(NODE)
 
 
-def _rounds(messages: list) -> int:
+def _rounds(messages: list[Any]) -> int:
     """Count the model replies that asked for tools."""
     return sum(1 for m in messages if isinstance(m, AIMessage) and m.tool_calls)
 
 
-def make_investigate(llm_with_tools) -> Callable[[AnalyzerState], dict]:
+def make_investigate(llm_with_tools):
     """Build the node where the model may call tools to gather more information."""
 
     @traced_node("investigate")
-    def investigate(state: AnalyzerState) -> dict:
+    def investigate(state: AnalyzerState) -> StateUpdate:
         """Ask the model what else it needs; seed the conversation on the first call."""
         history, seed = state["messages"], []
         if not history:
@@ -66,7 +66,7 @@ def route_after_investigate(state: AnalyzerState) -> str:
     return "assess"
 
 
-def build_findings(messages: list) -> str:
+def build_findings(messages: list[Any]) -> str:
     """Turn tool results and the analyst's last note into plain text for the assess step."""
     parts = [f"[{m.name}]\n{m.content}" for m in messages if isinstance(m, ToolMessage)]
     notes = [m for m in messages if isinstance(m, AIMessage) and not m.tool_calls and m.content]

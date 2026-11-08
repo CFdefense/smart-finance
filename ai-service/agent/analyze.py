@@ -1,5 +1,6 @@
 import logging
 import time
+from typing import Any
 
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
@@ -10,7 +11,7 @@ from pydantic import SecretStr
 from agent.data_models import AnalysisResult, AnalyzeRequest, Assessment
 from agent.logging import (
     GRAPH,
-    AnalyzerCallbackHandler,
+    AgentCallbackHandler,
     bind_run,
     clear_run,
     new_run_id,
@@ -40,7 +41,7 @@ _LLM_TIMEOUT_SECONDS = 60
 __all__ = ["MAX_TOOL_ROUNDS", "AnalyzerAgent", "build_analyzer_graph"]
 
 
-def build_analyzer_graph(investigate_llm, assess_llm) -> CompiledStateGraph:
+def build_analyzer_graph(investigate_llm, assess_llm) -> CompiledStateGraph[Any, Any, Any, Any]:
     """
     Wire the analyzer workflow.
 
@@ -127,7 +128,7 @@ class AnalyzerAgent:
                             "status": "",
                             "error": None,
                         },
-                        config={"callbacks": [AnalyzerCallbackHandler()], "run_name": "analyze"},
+                        config={"callbacks": [AgentCallbackHandler()], "run_name": "analyze"},
                     )
                     result = AnalysisResult(
                         transaction_id=txn.transaction_id,

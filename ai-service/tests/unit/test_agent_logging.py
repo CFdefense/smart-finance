@@ -8,7 +8,7 @@ import pytest
 from agent.logging import (
     GRAPH,
     NODE,
-    AnalyzerCallbackHandler,
+    AgentCallbackHandler,
     RunContextFilter,
     bind_run,
     configure_agent_logging,
@@ -70,7 +70,7 @@ def test_traced_node_logs_traceback_and_reraises(caplog):
 
 def test_log_route_records_target_and_reason(caplog):
     """Routing decisions are logged with the reason."""
-    with caplog.at_level(logging.INFO, logger="agent.analyze.graph"):
+    with caplog.at_level(logging.INFO, logger="agent.run.graph"):
         log_route("claim", "END", "duplicate")
 
     assert "route claim -> END reason=duplicate" in caplog.text
@@ -78,9 +78,9 @@ def test_log_route_records_target_and_reason(caplog):
 
 def test_callback_handler_logs_tool_call_and_result(caplog):
     """Tool start logs the name and args; end logs the size and the input and output."""
-    handler = AnalyzerCallbackHandler()
+    handler = AgentCallbackHandler()
 
-    with caplog.at_level(logging.INFO, logger="agent.analyze.tool"):
+    with caplog.at_level(logging.INFO, logger="agent.run.tool"):
         handler.on_tool_start({"name": "get_rules"}, "{'days': 3}", run_id=None)
         handler.on_tool_end("a rule description", run_id=None)
 
@@ -92,7 +92,7 @@ def test_callback_handler_logs_tool_call_and_result(caplog):
 
 def test_callback_handler_times_concurrent_tool_calls_independently(monkeypatch):
     """Two overlapping tool calls each get their own timer, keyed by run id."""
-    handler = AnalyzerCallbackHandler()
+    handler = AgentCallbackHandler()
     clock = iter([0.0, 1.0, 3.0, 6.0])
     monkeypatch.setattr("agent.logging.time.perf_counter", lambda: next(clock))
 
@@ -106,9 +106,9 @@ def test_callback_handler_times_concurrent_tool_calls_independently(monkeypatch)
 
 def test_callback_handler_error_messages_only_at_debug_and_single_line(caplog):
     """Error messages (which can echo user text) are not logged at INFO; args stay one line."""
-    handler = AnalyzerCallbackHandler()
+    handler = AgentCallbackHandler()
 
-    with caplog.at_level(logging.INFO, logger="agent.analyze"):
+    with caplog.at_level(logging.INFO, logger="agent.run"):
         handler.on_tool_start({"name": "t"}, "{'category': 'x\\nFAKE log line'}", run_id="r1")
         handler.on_tool_error(ValueError("input_value='secret merchant'"), run_id="r1")
         handler.on_llm_error(RuntimeError("echoed user text"), run_id="r2")
@@ -124,7 +124,7 @@ def test_callback_handler_error_messages_only_at_debug_and_single_line(caplog):
 
 def test_configure_writes_workflow_lines_to_file_not_stdout(tmp_path, capsys):
     """Workflow lines go to analyzer.log in the dated format and nothing reaches stdout."""
-    base = logging.getLogger("agent.analyze")
+    base = logging.getLogger("agent.run")
     saved, saved_level = list(base.handlers), base.level
     for handler in saved:
         base.removeHandler(handler)
@@ -154,7 +154,7 @@ def test_configure_writes_workflow_lines_to_file_not_stdout(tmp_path, capsys):
 
 def test_run_log_file_keeps_each_transactions_lines_in_its_own_file(tmp_path):
     """Lines of a run go to log_<txid>.txt; a different transaction's lines stay out of it."""
-    base = logging.getLogger("agent.analyze")
+    base = logging.getLogger("agent.run")
     saved_level = base.level
     base.setLevel(logging.DEBUG)
     try:
@@ -177,7 +177,7 @@ def test_run_log_file_keeps_each_transactions_lines_in_its_own_file(tmp_path):
 
 def test_run_log_file_writes_each_line_once_when_the_same_transaction_runs_twice(tmp_path):
     """Two overlapping runs of one transaction share the file but never duplicate lines."""
-    base = logging.getLogger("agent.analyze")
+    base = logging.getLogger("agent.run")
     saved_level = base.level
     base.setLevel(logging.DEBUG)
     try:
@@ -197,7 +197,7 @@ def test_run_log_file_writes_each_line_once_when_the_same_transaction_runs_twice
 
 def test_run_log_file_never_raises_when_the_file_cannot_be_written(tmp_path, monkeypatch):
     """A file that cannot be opened is reported through logging's error hook, not raised."""
-    base = logging.getLogger("agent.analyze")
+    base = logging.getLogger("agent.run")
     saved_level = base.level
     base.setLevel(logging.DEBUG)
     monkeypatch.setattr(logging, "raiseExceptions", False)  # keep the report off stderr
@@ -222,9 +222,9 @@ def test_run_log_file_skips_an_unsafe_transaction_id(tmp_path):
 
 def test_tool_result_debug_dump_is_one_line(caplog):
     """Raw tool output at DEBUG cannot forge a log line with embedded newlines."""
-    handler = AnalyzerCallbackHandler()
+    handler = AgentCallbackHandler()
 
-    with caplog.at_level(logging.DEBUG, logger="agent.analyze.tool"):
+    with caplog.at_level(logging.DEBUG, logger="agent.run.tool"):
         handler.on_tool_start({"name": "t"}, "{}", run_id="r1")
         handler.on_tool_end("ok\n[2026-01-01T00:00:00.000Z] [PID:1] [ERROR] fake", run_id="r1")
 
@@ -237,7 +237,7 @@ def test_tool_result_debug_dump_is_one_line(caplog):
 def test_api_keys_are_redacted_from_messages_and_tracebacks(tmp_path):
     """An OpenAI 401 echoes the key; neither the message nor the traceback may reach the file."""
     key = "sk-proj-abcdEFGH1234"
-    base = logging.getLogger("agent.analyze")
+    base = logging.getLogger("agent.run")
     saved, saved_level = list(base.handlers), base.level
     for handler in saved:
         base.removeHandler(handler)
@@ -272,7 +272,7 @@ def test_content_logging_shows_what_nodes_and_tools_produced(caplog):
         return {"context": "Accounts:\n- Checking $100", "notify": True}
 
     node({})
-    handler = AnalyzerCallbackHandler()
+    handler = AgentCallbackHandler()
     handler.on_tool_start({"name": "get_rules"}, "{'days': 30}", run_id="r1")
     handler.on_tool_end("Rules:\n- Flag over $200", run_id="r1")
     handler.on_tool_start({"name": "get_rules"}, "{}", run_id="r2")

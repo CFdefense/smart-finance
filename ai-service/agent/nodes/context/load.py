@@ -1,10 +1,14 @@
 """Graph node that loads a user's financial data into the agent state."""
 
+import logging
 from datetime import date, timedelta
 
+from agent.logging import NODE, traced_node
 from agent.nodes.context.format import MAX_TRANSACTIONS, RECENT_DAYS, format_financial_context
-from agent.state import AgentState
+from agent.state import ChatState, StateUpdate
 from db import load_accounts, load_budgets, load_goals, load_transactions
+
+_log = logging.getLogger(NODE)
 
 
 def load_financial_context(user_id: int) -> str:
@@ -21,6 +25,16 @@ def load_financial_context(user_id: int) -> str:
     )
 
 
-def load_context(state: AgentState) -> dict:
-    """Look up the user's financial data and summarize it as text."""
-    return {"context": load_financial_context(state["user_id"])}
+@traced_node("load_context")
+def load_context(state: ChatState) -> StateUpdate:
+    """
+    Look up the user's financial data and summarize it as text.
+
+    If the database is unavailable the chat continues without data, and the model tells the user.
+    """
+    try:
+        return {"context": load_financial_context(state["user_id"])}
+    except Exception as exc:
+        _log.warning("load_context.failed continuing without data type=%s", type(exc).__name__)
+        _log.debug("load_context.failed detail", exc_info=True)
+        return {"context": "(The user's financial data is temporarily unavailable.)"}

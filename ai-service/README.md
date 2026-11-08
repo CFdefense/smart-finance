@@ -25,6 +25,7 @@ uv sync
    POST /chat
    Request:  {"user_id": 1, "message": "How much did I spend on food?"}
    Response: {"response": "..."}   (answered by the LLM; needs OPENAI_API_KEY)
+   May search the web with Tavily, which needs TAVILY_API_KEY (without it, chat still works but search fails gracefully).
 
    POST /analyze
    Request:  {"user_id": 1,
@@ -57,15 +58,16 @@ monthly budgets and the savings goals up front (the `load_context` node), so the
 sees all of them. The prompts ask it to check the transaction against every rule, budget and goal
 before concluding. Its one tool is `get_transactions`, for comparing with other spending.
 
-## Analyzer logging
+## Agent logging
 
-Logging is always on and always verbose (DEBUG), with payment details. It cannot be turned down.
+Both agents (chat and analyzer) log under `agent.run.*`. Logging is always on and always verbose
+(DEBUG), with payment details. It cannot be turned down.
 The logs hold the merchant name, amount, date and category, plus everything the nodes and tools
 read and write (the loaded context, tool input and output, the assessment, prompts, notification
 text and the graph as Mermaid). Treat the log folder as sensitive. API keys and bearer tokens are
 masked as `[redacted]`, including inside tracebacks.
 
-The analyzer's workflow logs go to the file `ai-service/logs/analyzer.log` (rotating,
+The agents' workflow logs go to the file `ai-service/logs/analyzer.log` (rotating,
 5 MB x 3); the terminal keeps only uvicorn's request lines. Follow it with
 `tail -f logs/analyzer.log`. Each line reads
 `[time] [PID] [LEVEL] [node|graph|tool|llm|decision] [run=<id> txn=<last 4 of id> user=<id>] message`,

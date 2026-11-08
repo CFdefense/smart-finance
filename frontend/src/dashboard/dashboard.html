@@ -1,13 +1,14 @@
-<head>
-  <link
-    rel="stylesheet"
-    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=account_circle,person,logout,add,edit_square,target,attach_money,payments,account_balance_wallet" />
-</head>
-
 <main class="main">
   <div class="header">
     <div>
-      <p class="title">Hello, User</p>
+      <!-- Show a personalized greeting using the user's profile. -->
+      @if (profileLoading()) {
+        <h1 class="title">Welcome back</h1>
+      } @else if (firstName()) {
+        <h1 class="title">Welcome back, {{ firstName() }}</h1>
+      } @else {
+        <h1 class="title">Welcome back</h1>
+      }
     </div>
     <div class="profile-dropdown">
       <div class="icons">
@@ -39,17 +40,16 @@
   </div>
   <div class="parent">
     <div class="budget-buttons">
-      <button type="button" class="create-budget">
-        <span class="material-symbols-outlined add">add</span>
-        Create Budget
+      <!-- Open the Budgets page to create, edit, or delete budgets. -->
+      <button type="button" class="create-budget" (click)="openBudgets()">
+        <span class="material-symbols-outlined add" aria-hidden="true">account_balance_wallet</span>
+        Manage Budgets
       </button>
-      <button type="button" class="edit-budget">
-        <span class="material-symbols-outlined edit_square">edit_square</span>
-        Edit Budget
-      </button>
-      <button type="button" class="set-goals">
-        <span class="material-symbols-outlined target">target</span>
-        Set Goals
+
+      <!-- Open the Goals page to manage financial goals. -->
+      <button type="button" class="set-goals" (click)="openGoals()">
+        <span class="material-symbols-outlined target" aria-hidden="true">target</span>
+        Manage Goals
       </button>
     </div>
 
@@ -57,17 +57,41 @@
       <div class="total-budget">
         <span class="material-symbols-outlined attach-money">attach_money</span>
         <p class="total-budget-title">Total Budget</p>
-        <p class="total-budget-amount">$2,000</p>
+        <p class="total-budget-amount">
+          @if (budgetsLoading()) {
+            Loading...
+          } @else if (budgetsError()) {
+            Unavailable
+          } @else {
+            {{ totalBudget() | currency }}
+          }
+        </p>
       </div>
       <div class="actual-spent">
         <span class="material-symbols-outlined payments">payments</span>
         <p class="actual-spent-title">Actual Spent</p>
-        <p class="actual-spent-amount">$1,568</p>
+        <p class="actual-spent-amount">
+          @if (budgetsLoading()) {
+            Loading...
+          } @else if (budgetsError()) {
+            Unavailable
+          } @else {
+            {{ totalSpent() | currency }}
+          }
+        </p>
       </div>
       <div class="remaining-budget">
         <span class="material-symbols-outlined account-balance-wallet">account_balance_wallet</span>
         <p class="remaining-budget-title">Remaining Budget</p>
-        <p class="remaining-budget-amount">$432</p>
+        <p class="remaining-budget-amount">
+          @if (budgetsLoading()) {
+            Loading...
+          } @else if (budgetsError()) {
+            Unavailable
+          } @else {
+            {{ totalRemaining() | currency }}
+          }
+        </p>
       </div>
     </div>
   </div>

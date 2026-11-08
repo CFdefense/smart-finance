@@ -1,0 +1,53 @@
+<!--
+  Shared application navigation.
+
+  RouterLink handles client-side navigation.
+  RouterLinkActive highlights the currently selected page.
+-->
+<nav class="app-navigation" aria-label="Main navigation">
+  <!-- Application branding -->
+  <div class="navigation-brand">
+    <span class="material-symbols-outlined" aria-hidden="true">account_balance_wallet</span>
+
+    <span class="brand-name">Smart Finance</span>
+  </div>
+
+  <!-- Navigation links -->
+  <div class="navigation-links">
+    <!-- Dashboard -->
+    <a
+      class="navigation-link"
+      routerLink="/dashboard"
+      routerLinkActive="active"
+      ariaCurrentWhenActive="page">
+      <span class="material-symbols-outlined" aria-hidden="true">dashboard</span>
+      <span>Dashboard</span>
+    </a>
+
+    <!-- Budgets: navigate to the dedicated budget management page. -->
+    <a
+      class="navigation-link"
+      routerLink="/budgets"
+      routerLinkActive="active"
+      ariaCurrentWhenActive="page">
+      <span class="material-symbols-outlined" aria-hidden="true">pie_chart</span>
+      <span>Budgets</span>
+    </a>
+
+    <!-- Goals -->
+    <a
+      class="navigation-link"
+      routerLink="/goals"
+      routerLinkActive="active"
+      ariaCurrentWhenActive="page">
+      <span class="material-symbols-outlined" aria-hidden="true">flag</span>
+      <span>Goals</span>
+    </a>
+
+    <!-- Rules: route not implemented yet -->
+    <span class="navigation-link disabled" aria-disabled="true" title="Rules coming soon">
+      <span class="material-symbols-outlined" aria-hidden="true">tune</span>
+      <span>Rules</span>
+    </span>
+  </div>
+</nav>

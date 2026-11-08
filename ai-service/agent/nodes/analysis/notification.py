@@ -4,16 +4,18 @@ import logging
 
 from agent.logging import NODE, traced_node
 from agent.safety import build_notification
-from agent.state import AnalyzerState
+from agent.state import AnalyzerState, StateUpdate
 from notifications import send_notification
 
 _log = logging.getLogger(NODE)
 
 
 @traced_node("notify")
-def notify(state: AnalyzerState) -> dict:
+def notify(state: AnalyzerState) -> StateUpdate:
     """Send the templated notification to the state's user. The model never picks the target."""
     txn, assessment = state["transaction"], state["assessment"]
+    if assessment is None:  # the graph only routes here with an assessment
+        raise ValueError("notify needs an assessment")
     try:
         message = build_notification(txn.name, txn.amount, assessment.notify_reason)
         send_notification(state["user_id"], message)

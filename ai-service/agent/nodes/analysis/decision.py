@@ -3,7 +3,7 @@
 import logging
 
 from agent.logging import DECISION, log_route, traced_node
-from agent.state import AnalyzerState
+from agent.state import AnalyzerState, StateUpdate
 
 _log = logging.getLogger(DECISION)
 
@@ -18,9 +18,11 @@ def decide_notification(verdict: str, should_notify: bool) -> tuple[bool, str]:
 
 
 @traced_node("decide")
-def decide(state: AnalyzerState) -> dict:
+def decide(state: AnalyzerState) -> StateUpdate:
     """Combine the model's assessment with the policy to decide whether to notify."""
     assessment = state["assessment"]
+    if assessment is None:  # the graph only routes here with an assessment
+        raise ValueError("decide needs an assessment")
     notify, rule = decide_notification(assessment.verdict, assessment.should_notify)
     _log.info(
         "decision verdict=%s model_should_notify=%s -> notify=%s rule=%s",
