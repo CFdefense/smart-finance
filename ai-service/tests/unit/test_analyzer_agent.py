@@ -16,6 +16,7 @@ import agent.tools.transactions as transactions_mod
 from agent import AnalyzedTransaction, AnalyzeRequest, Assessment
 from agent.analyze import AnalyzerAgent, build_analyzer_graph
 from agent.logging import RunContextFilter, default_log_dir
+from anomaly import FlaggedTransaction
 from db import Account, Rule
 
 TXN = AnalyzedTransaction(
@@ -28,6 +29,19 @@ TXN = AnalyzedTransaction(
     category="ENTERTAINMENT",
 )
 REQUEST = AnalyzeRequest(user_id=7, transaction=TXN)
+INITIAL_STATE = {
+    "run_id": "r",
+    "user_id": 7,
+    "transaction": TXN,
+    "context": "",
+    "messages": [],
+    "anomaly": None,
+    "assessment": None,
+    "notify": False,
+    "notified": False,
+    "status": "",
+    "error": None,
+}
 ASK_HISTORY = AIMessage(
     content="", tool_calls=[{"name": "get_transactions", "args": {}, "id": "c1"}]
 )
@@ -54,17 +68,20 @@ class ScriptedLLM:
 
 
 class CountingDetector:
-    """Counts how often it runs; flags nothing, or raises `error` if given one."""
+    """Counts its runs; raises `error`, flags new transactions with `reason`, or flags nothing."""
 
-    def __init__(self, error: Exception | None = None):
+    def __init__(self, error: Exception | None = None, reason: str | None = None):
         self.error = error
+        self.reason = reason
         self.calls = 0
 
     def find_anomalies(self, new, history):
-        """Count the call, then raise or report nothing unusual."""
+        """Count the call, then raise, flag the new transactions, or report nothing unusual."""
         self.calls += 1
         if self.error:
             raise self.error
+        if self.reason:
+            return [FlaggedTransaction(transaction=t, reason=self.reason) for t in new]
         return []
 
 
@@ -227,22 +244,14 @@ def test_unexpected_graph_error_becomes_failed_result(world, monkeypatch):
 def test_no_node_ever_writes_the_transaction(world):
     """The transaction is immutable: no state update contains the `transaction` key."""
     graph = build_analyzer_graph(
-        ScriptedLLM(ASK_HISTORY, AIMessage(content="done")), ScriptedLLM(_assessment("ALERT"))
+        ScriptedLLM(ASK_HISTORY, AIMessage(content="done")),
+        ScriptedLLM(_assessment("ALERT")),
+        CountingDetector(),
     )
-    initial = {
-        "run_id": "r",
-        "user_id": 7,
-        "transaction": TXN,
-        "context": "",
-        "messages": [],
-        "assessment": None,
-        "notify": False,
-        "notified": False,
-        "status": "",
-        "error": None,
-    }
 
-    updates = [u for chunk in graph.stream(initial, stream_mode="updates") for u in chunk.values()]
+    updates = [
+        u for chunk in graph.stream(INITIAL_STATE, stream_mode="updates") for u in chunk.values()
+    ]
 
     assert updates and all("transaction" not in (u or {}) for u in updates)
 
@@ -362,3 +371,17 @@ def test_anomaly_failure_after_claim_still_records_the_run(world):
     assert detector.calls == 1
     assert result.status == "ANALYZED"
     assert world["recorded"] == [("t1", "done", "OK", False, None)]
+
+
+def test_flagged_transaction_writes_the_anomaly_to_state(world):
+    """A detector flag reaches the graph state as (True, reason) and the run still finishes."""
+    detector = CountingDetector(reason="$250.00 is far above your typical purchase")
+    graph = build_analyzer_graph(
+        ScriptedLLM(AIMessage(content="x")), ScriptedLLM(_assessment("OK")), detector
+    )
+
+    state = graph.invoke(INITIAL_STATE)
+
+    assert detector.calls == 1
+    assert state["anomaly"] == (True, "$250.00 is far above your typical purchase")
+    assert state["status"] == "ANALYZED"

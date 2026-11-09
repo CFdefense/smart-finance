@@ -18,7 +18,7 @@ from agent.nodes.analysis import (
 from agent.nodes.context import format_accounts_context
 from agent.prompts import ASSESS_SYSTEM_PROMPT, INVESTIGATE_SYSTEM_PROMPT, transaction_block
 from anomaly import FlaggedTransaction
-from db import Account, Transaction, Budget, Goal, Rule
+from db import Account, Budget, Goal, Rule, Transaction
 
 TXN = AnalyzedTransaction(
     transaction_id="t1",
@@ -161,6 +161,8 @@ def test_anomaly_compares_the_transaction_to_the_rest_of_its_history(monkeypatch
     assert detector.new[0].amount == TXN.amount and detector.new[0].category == TXN.category
     assert detector.history == [other]
     assert result == {"anomaly": expected}
+
+
 def _stub_loaders(monkeypatch, **overrides):
     """Replace the four loaders with fakes; `overrides` swaps any of them."""
     fakes = {
