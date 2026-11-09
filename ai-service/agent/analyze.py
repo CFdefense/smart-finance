@@ -49,7 +49,10 @@ def build_analyzer_graph(
     """
     Wire the analyzer workflow.
 
-    claim -> load_context -> anomaly -> investigate <-> tools -> assess -> decide -> notify? -> finalize
+    `anomaly` has no outgoing edge. It only writes `anomaly_flagged`/`anomaly_reason`, which
+    `decide` reads from state. LangGraph runs both branches in the same superstep and finishes
+    it before the next one, so anomaly is always done before assess (and so decide) can run. An
+    `anomaly -> decide` edge would instead run decide early, before there is an assessment.
     """
     graph = StateGraph(AnalyzerState)
     graph.add_node("claim", claim_transaction)
@@ -66,8 +69,8 @@ def build_analyzer_graph(
     graph.add_conditional_edges(
         "claim", route_after_claim, {"load_context": "load_context", END: END}
     )
-    graph.add_edge("load_context", "anomaly")
-    graph.add_edge("anomaly", "investigate")
+    graph.add_edge("load_context", "investigate")
+    graph.add_edge("load_context", "anomaly")  # fan-out: runs alongside investigate
     graph.add_conditional_edges(
         "investigate", route_after_investigate, {"tools": "tools", "assess": "assess"}
     )
