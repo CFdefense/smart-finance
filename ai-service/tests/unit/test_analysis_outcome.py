@@ -98,14 +98,26 @@ def test_notify_failure_is_reported_not_raised(monkeypatch, caplog):
 
 
 def test_finalize_records_done_for_a_successful_run(monkeypatch):
-    """A healthy run is recorded as done with its verdict and notified flag."""
+    """A healthy run is recorded as done with its verdict, notified flag and anomaly."""
     recorded = []
     monkeypatch.setattr(finalize_mod, "finish_analysis", lambda *a: recorded.append(a))
 
-    result = finalize(_state(assessment=_assessment("ALERT"), notified=True))
+    result = finalize(
+        _state(assessment=_assessment("ALERT"), notified=True, anomaly=(True, "too big"))
+    )
 
     assert result == {"status": "ANALYZED"}
-    assert recorded == [("t1", "done", "ALERT", True, None)]
+    assert recorded == [("t1", "done", "ALERT", True, None, True, "too big")]
+
+
+def test_finalize_records_no_reason_when_nothing_was_flagged(monkeypatch):
+    """A checked, unflagged transaction is recorded as not flagged with no reason (NULL)."""
+    recorded = []
+    monkeypatch.setattr(finalize_mod, "finish_analysis", lambda *a: recorded.append(a))
+
+    finalize(_state(assessment=_assessment("OK"), anomaly=(False, "")))
+
+    assert recorded == [("t1", "done", "OK", False, None, False, None)]
 
 
 def test_finalize_records_failed_for_a_failed_run(monkeypatch):
@@ -113,10 +125,11 @@ def test_finalize_records_failed_for_a_failed_run(monkeypatch):
     recorded = []
     monkeypatch.setattr(finalize_mod, "finish_analysis", lambda *a: recorded.append(a))
 
-    result = finalize(_state(status="FAILED", error="assess_failed", assessment=None))
+    result = finalize(_state(status="FAILED", error="assess_failed", assessment=None, anomaly=None))
 
     assert result == {"status": "FAILED"}
-    assert recorded == [("t1", "failed", None, False, "assess_failed")]
+    # anomaly None means detection failed or never ran: both columns are NULL.
+    assert recorded == [("t1", "failed", None, False, "assess_failed", None, None)]
 
 
 def test_finalize_never_raises_when_the_database_write_fails(monkeypatch, caplog):

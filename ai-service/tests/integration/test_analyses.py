@@ -81,10 +81,10 @@ def test_claim_lifecycle(user_with_rules):
     assert claim_analysis(txn, user_id) == (True, None)
     assert claim_analysis(txn, user_id) == (False, "started")
 
-    finish_analysis(txn, "failed", None, False, "boom")
+    finish_analysis(txn, "failed", None, False, "boom", None, None)
     assert claim_analysis(txn, user_id) == (True, None)
 
-    finish_analysis(txn, "done", "OK", False, None)
+    finish_analysis(txn, "done", "OK", False, None, False, None)
     assert claim_analysis(txn, user_id) == (False, "done")
 
     with get_connection() as conn:
@@ -94,3 +94,24 @@ def test_claim_lifecycle(user_with_rules):
             (txn,),
         )
     assert claim_analysis(txn, user_id) == (True, None)
+
+
+@pytest.mark.parametrize(
+    ("flagged", "reason"),
+    [(True, "$900.00 is far above your typical purchase"), (False, None), (None, None)],
+)
+def test_finish_analysis_records_the_anomaly(user_with_rules, flagged, reason):
+    """The anomaly result is saved: flagged with a reason, checked and clean, or not run."""
+    user_id, tag, _, _ = user_with_rules
+    txn = f"txn-anomaly-{tag}-{flagged}"
+    claim_analysis(txn, user_id)
+
+    finish_analysis(txn, "done", "REVIEW", True, None, flagged, reason)
+
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT status, verdict, notified, anomaly_flagged, anomaly_reason "
+            "FROM transaction_analyses WHERE transaction_id = %s",
+            (txn,),
+        ).fetchone()
+    assert row == ("done", "REVIEW", True, flagged, reason)

@@ -137,7 +137,7 @@ def test_alert_uses_tools_notifies_and_records(world):
     assert result.status == "ANALYZED" and result.notified is True
     assert result.assessment.verdict == "ALERT"
     assert world["sent"] == [(7, "Casino Royale $250.00: Breaks a rule")]
-    assert world["recorded"] == [("t1", "done", "ALERT", True, None)]
+    assert world["recorded"] == [("t1", "done", "ALERT", True, None, False, None)]
     assert investigate.calls == 2
 
 
@@ -194,7 +194,7 @@ def test_assess_failure_is_failed_without_notification(world):
 
     assert result.status == "FAILED" and result.error == "assess_failed"
     assert world["sent"] == []
-    assert world["recorded"] == [("t1", "failed", None, False, "assess_failed")]
+    assert world["recorded"] == [("t1", "failed", None, False, "assess_failed", False, None)]
 
 
 def test_investigate_failure_still_reaches_assess(world):
@@ -335,7 +335,7 @@ def test_context_failure_after_claim_still_records_the_run(world, monkeypatch):
     result = run(ScriptedLLM(AIMessage(content="x")), ScriptedLLM(_assessment("OK")))
 
     assert result.status == "ANALYZED"
-    assert world["recorded"] == [("t1", "done", "OK", False, None)]
+    assert world["recorded"] == [("t1", "done", "OK", False, None, False, None)]
 
 
 def test_finalize_retries_the_write_once(world, monkeypatch):
@@ -359,7 +359,7 @@ def test_non_assessment_result_is_a_failed_attempt(world):
     result = run(ScriptedLLM(AIMessage(content="x")), ScriptedLLM(None))
 
     assert result.status == "FAILED" and result.error == "assess_failed"
-    assert world["recorded"] == [("t1", "failed", None, False, "assess_failed")]
+    assert world["recorded"] == [("t1", "failed", None, False, "assess_failed", False, None)]
 
 
 def test_anomaly_failure_after_claim_still_records_the_run(world):
@@ -370,11 +370,11 @@ def test_anomaly_failure_after_claim_still_records_the_run(world):
 
     assert detector.calls == 1
     assert result.status == "ANALYZED"
-    assert world["recorded"] == [("t1", "done", "OK", False, None)]
+    assert world["recorded"] == [("t1", "done", "OK", False, None, None, None)]
 
 
 def test_flagged_transaction_writes_the_anomaly_to_state(world):
-    """A detector flag reaches the graph state as (True, reason) and the run still finishes."""
+    """A detector flag reaches the graph state as (True, reason) and is recorded at the end."""
     detector = CountingDetector(reason="$250.00 is far above your typical purchase")
     graph = build_analyzer_graph(
         ScriptedLLM(AIMessage(content="x")), ScriptedLLM(_assessment("OK")), detector
@@ -385,3 +385,6 @@ def test_flagged_transaction_writes_the_anomaly_to_state(world):
     assert detector.calls == 1
     assert state["anomaly"] == (True, "$250.00 is far above your typical purchase")
     assert state["status"] == "ANALYZED"
+    assert world["recorded"] == [
+        ("t1", "done", "OK", False, None, True, "$250.00 is far above your typical purchase")
+    ]
