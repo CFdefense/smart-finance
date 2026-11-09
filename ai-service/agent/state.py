@@ -25,7 +25,8 @@ class AnalyzerState(TypedDict):
     transaction: AnalyzedTransaction  # frozen; no node ever returns this key
     context: str  # accounts summary
     messages: Annotated[list[Any], add_messages]  # investigate <-> tools loop
-    anomaly: tuple[bool, str] | None  # whether an anomaly was detected and the reason
+    anomaly_flagged: bool | None  # None = detection failed or didn't run
+    anomaly_reason: str | None  # why it was flagged; None unless flagged
     assessment: Assessment | None
     notify: bool  # decide's output
     notified: bool

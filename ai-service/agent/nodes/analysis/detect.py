@@ -16,7 +16,7 @@ def make_detect_anomaly(detector: AnomalyDetector):
     @traced_node("anomaly")
     def detect_anomaly(state: AnalyzerState) -> StateUpdate:
         """
-        Write `anomaly` as (flagged, reason), or None if detection failed.
+        Write `anomaly_flagged` and `anomaly_reason`; both are None if detection failed.
 
         The transaction's own stored row is left out of history so it is never compared to
         itself. The transaction is already claimed, so a failure here must not abort the run.
@@ -39,9 +39,9 @@ def make_detect_anomaly(detector: AnomalyDetector):
         except Exception as exc:
             _log.warning("anomaly.failed continuing without detection type=%s", type(exc).__name__)
             _log.debug("anomaly.failed detail", exc_info=True)
-            return {"anomaly": None}
+            return {"anomaly_flagged": None, "anomaly_reason": None}
         if not flagged:
-            return {"anomaly": (False, "")}
-        return {"anomaly": (True, flagged[0].reason)}
+            return {"anomaly_flagged": False, "anomaly_reason": None}
+        return {"anomaly_flagged": True, "anomaly_reason": flagged[0].reason}
 
     return detect_anomaly
