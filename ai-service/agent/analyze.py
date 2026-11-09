@@ -128,6 +128,7 @@ class AnalyzerAgent:
                             "transaction": txn,
                             "context": "",
                             "messages": [],
+                            "anomaly": None,
                             "assessment": None,
                             "notify": False,
                             "notified": False,
