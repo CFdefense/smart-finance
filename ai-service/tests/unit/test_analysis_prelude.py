@@ -137,14 +137,20 @@ class RecordingDetector:
 
 @pytest.mark.parametrize(
     ("reason", "expected"),
-    [(None, (False, "")), ("Possible duplicate; went up", (True, "Possible duplicate; went up"))],
+    [
+        (None, {"anomaly_flagged": False, "anomaly_reason": None}),
+        (
+            "Possible duplicate; went up",
+            {"anomaly_flagged": True, "anomaly_reason": "Possible duplicate; went up"},
+        ),
+    ],
 )
 def test_anomaly_compares_the_transaction_to_the_rest_of_its_history(monkeypatch, reason, expected):
     """
     The detector sees this transaction as new and the user's other transactions as history.
 
     The transaction's own stored row is left out of history, or it would look like a duplicate
-    of itself. The node writes only `anomaly`: whether it was flagged and why.
+    of itself. The node writes only `anomaly_flagged` and `anomaly_reason`.
     """
     me = Transaction(transaction_id="t1", name=TXN.name, amount=99.5, date=TXN.date)
     other = Transaction(transaction_id="t0", name="Grocer", amount=40.0, date=date(2026, 10, 1))
@@ -160,7 +166,7 @@ def test_anomaly_compares_the_transaction_to_the_rest_of_its_history(monkeypatch
     assert [t.transaction_id for t in detector.new] == ["t1"]
     assert detector.new[0].amount == TXN.amount and detector.new[0].category == TXN.category
     assert detector.history == [other]
-    assert result == {"anomaly": expected}
+    assert result == expected
 
 
 def _stub_loaders(monkeypatch, **overrides):

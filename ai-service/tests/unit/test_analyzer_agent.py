@@ -35,7 +35,8 @@ INITIAL_STATE = {
     "transaction": TXN,
     "context": "",
     "messages": [],
-    "anomaly": None,
+    "anomaly_flagged": None,
+    "anomaly_reason": None,
     "assessment": None,
     "notify": False,
     "notified": False,
@@ -374,7 +375,7 @@ def test_anomaly_failure_after_claim_still_records_the_run(world):
 
 
 def test_flagged_transaction_writes_the_anomaly_to_state(world):
-    """A detector flag reaches the graph state as (True, reason) and is recorded at the end."""
+    """A detector flag reaches the graph state with its reason and is recorded at the end."""
     detector = CountingDetector(reason="$250.00 is far above your typical purchase")
     graph = build_analyzer_graph(
         ScriptedLLM(AIMessage(content="x")), ScriptedLLM(_assessment("OK")), detector
@@ -383,8 +384,11 @@ def test_flagged_transaction_writes_the_anomaly_to_state(world):
     state = graph.invoke(INITIAL_STATE)
 
     assert detector.calls == 1
-    assert state["anomaly"] == (True, "$250.00 is far above your typical purchase")
+    assert state["anomaly_flagged"] is True
+    assert state["anomaly_reason"] == "$250.00 is far above your typical purchase"
     assert state["status"] == "ANALYZED"
+    # A flag always notifies, even when the model's verdict is OK.
+    assert len(world["sent"]) == 1
     assert world["recorded"] == [
-        ("t1", "done", "OK", False, None, True, "$250.00 is far above your typical purchase")
+        ("t1", "done", "OK", True, None, True, "$250.00 is far above your typical purchase")
     ]
