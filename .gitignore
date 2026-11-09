@@ -40,6 +40,5 @@ __pycache__/
 *.ruff_cache
 *.pytest_cache
 
-# Logs
+# All logs (the AI service's analyzer.log and log_<txid>.txt hold payment data)
 logs/
-*.log

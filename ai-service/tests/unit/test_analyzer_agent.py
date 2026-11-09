@@ -12,10 +12,10 @@ import agent.nodes.analysis.detect as detect_mod
 import agent.nodes.analysis.finalization as finalization_mod
 import agent.nodes.analysis.load_context as load_context_mod
 import agent.nodes.analysis.notification as notification_mod
-import agent.tools.rules as rules_mod
+import agent.tools.transactions as transactions_mod
 from agent import AnalyzedTransaction, AnalyzeRequest, Assessment
 from agent.analyze import AnalyzerAgent, build_analyzer_graph
-from agent.logging import RunContextFilter
+from agent.logging import RunContextFilter, default_log_dir
 from db import Account, Rule
 
 TXN = AnalyzedTransaction(
@@ -28,7 +28,9 @@ TXN = AnalyzedTransaction(
     category="ENTERTAINMENT",
 )
 REQUEST = AnalyzeRequest(user_id=7, transaction=TXN)
-ASK_RULES = AIMessage(content="", tool_calls=[{"name": "get_rules", "args": {}, "id": "c1"}])
+ASK_HISTORY = AIMessage(
+    content="", tool_calls=[{"name": "get_transactions", "args": {}, "id": "c1"}]
+)
 
 
 class ScriptedLLM:
@@ -86,10 +88,13 @@ def world(monkeypatch):
         lambda u: [Account(account_id="acc-1", name="Checking", account_type="depository")],
     )
     monkeypatch.setattr(
-        rules_mod,
+        load_context_mod,
         "load_rules",
         lambda u, a: [Rule(id=1, description="no gambling", account_ids=[])],
     )
+    monkeypatch.setattr(load_context_mod, "load_budgets", lambda u, today: [])
+    monkeypatch.setattr(load_context_mod, "load_goals", lambda u: [])
+    monkeypatch.setattr(transactions_mod, "load_transactions", lambda *a, **k: [])
     monkeypatch.setattr(
         notification_mod, "send_notification", lambda u, m: seen["sent"].append((u, m))
     )
@@ -106,8 +111,8 @@ def run(investigate, assess, detector=None):
 
 
 def test_alert_uses_tools_notifies_and_records(world):
-    """ALERT: the model asks for rules, the rules reach assess, the user is notified."""
-    investigate = ScriptedLLM(ASK_RULES, AIMessage(content="Violates gambling rule."))
+    """ALERT: the model asks for history, the findings reach assess, the user is notified."""
+    investigate = ScriptedLLM(ASK_HISTORY, AIMessage(content="Violates gambling rule."))
     assess = ScriptedLLM(_assessment("ALERT"))
 
     result = run(investigate, assess)
@@ -199,7 +204,7 @@ def test_notify_failure_marks_the_run_failed(world, monkeypatch):
 
 def test_tool_loop_is_capped(world):
     """A model that asks for tools forever stops after the round cap and still assesses."""
-    investigate = ScriptedLLM(ASK_RULES)  # repeats forever
+    investigate = ScriptedLLM(ASK_HISTORY)  # repeats forever
     result = run(investigate, ScriptedLLM(_assessment("OK")))
 
     assert result.status == "ANALYZED"
@@ -222,9 +227,7 @@ def test_unexpected_graph_error_becomes_failed_result(world, monkeypatch):
 def test_no_node_ever_writes_the_transaction(world):
     """The transaction is immutable: no state update contains the `transaction` key."""
     graph = build_analyzer_graph(
-        ScriptedLLM(ASK_RULES, AIMessage(content="done")),
-        ScriptedLLM(_assessment("ALERT")),
-        CountingDetector(),
+        ScriptedLLM(ASK_HISTORY, AIMessage(content="done")), ScriptedLLM(_assessment("ALERT"))
     )
     initial = {
         "run_id": "r",
@@ -245,10 +248,10 @@ def test_no_node_ever_writes_the_transaction(world):
 
 
 def test_one_run_logs_a_traceable_workflow(world, caplog):
-    """INFO logs show start, every node, routes, the decision and the end, under one run id."""
+    """Logs show start, every node, routes, the decision and the end, under one run id."""
     caplog.handler.addFilter(RunContextFilter())
     with caplog.at_level(logging.INFO, logger="agent.run"):
-        run(ScriptedLLM(ASK_RULES, AIMessage(content="done")), ScriptedLLM(_assessment("ALERT")))
+        run(ScriptedLLM(ASK_HISTORY, AIMessage(content="done")), ScriptedLLM(_assessment("ALERT")))
 
     records = [r for r in caplog.records if r.name.startswith("agent.run")]
     text = "\n".join(r.getMessage() for r in records)
@@ -268,7 +271,22 @@ def test_one_run_logs_a_traceable_workflow(world, caplog):
         assert expected in text, expected
     assert len({r.run_ctx for r in records}) == 1
     assert next(iter({r.run_ctx for r in records})).startswith("[run=")
-    assert "Casino" not in text  # user text stays out of INFO logs
+    assert "name='Casino Royale' amount=250.00 date=2026-11-04" in text  # payment info is logged
+
+
+def test_each_run_writes_its_own_log_txid_file(world, caplog):
+    """An analysis writes log_<transaction_id>.txt holding that run's lines, start to end."""
+    path = default_log_dir() / "log_t1.txt"
+    path.unlink(missing_ok=True)
+
+    with caplog.at_level(logging.DEBUG, logger="agent.run"):
+        run(ScriptedLLM(AIMessage(content="done")), ScriptedLLM(_assessment("OK")))
+
+    text = path.read_text()
+    assert "analyze.start transaction=t1 name='Casino Royale'" in text
+    assert "node.wrote assess.assessment" in text  # node content is always logged
+    assert "analyze.end status=ANALYZED" in text
+    assert "[run=" in text and "txn=" in text
 
 
 def test_constructor_builds_a_working_agent(monkeypatch, world):
@@ -281,13 +299,8 @@ def test_constructor_builds_a_working_agent(monkeypatch, world):
             self.kwargs = kwargs
 
         def bind_tools(self, tools):
-            """Check the four tools are bound and return a scripted investigator."""
-            assert [t.name for t in tools] == [
-                "get_transactions",
-                "get_rules",
-                "get_budgets",
-                "get_goals",
-            ]
+            """Check the one tool is bound and return a scripted investigator."""
+            assert [t.name for t in tools] == ["get_transactions"]
             return ScriptedLLM(AIMessage(content="fine"))
 
         def with_structured_output(self, schema):

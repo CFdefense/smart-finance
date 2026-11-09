@@ -51,14 +51,34 @@ uv sync
    GET /health
    Response: {"status": "ok", "database": "ok"}   ("unreachable" if Postgres is down)
 
+## How the analyzer gets its data
+
+Every run loads the user's accounts, the rules that apply to the transaction's account, the
+monthly budgets and the savings goals up front (the `load_context` node), so the model always
+sees all of them. The prompts ask it to check the transaction against every rule, budget and goal
+before concluding. Its one tool is `get_transactions`, for comparing with other spending.
+
 ## Agent logging
 
-Both agents (chat and analyzer) log under `agent.run.*`. Set `AGENT_LOG_LEVEL` (default `INFO`).
-INFO shows each run's workflow: node enter/exit with timings, routing decisions, tool calls and
-LLM calls (plus the notify decision for the analyzer). Every line is tagged
-`[run=<id> txn=<transaction_id> user=<id>]` (chat has no `txn`) so `grep run=<id>` follows one
-run. INFO never contains user text, search text or exception messages. DEBUG adds prompts, raw
-tool results, tool arguments, notification text and the graph as Mermaid.
+Both agents (chat and analyzer) log under `agent.run.*`. Logging is always on and always verbose
+(DEBUG), with payment details. It cannot be turned down.
+The logs hold the merchant name, amount, date and category, plus everything the nodes and tools
+read and write (the loaded context, tool input and output, the assessment, prompts, notification
+text and the graph as Mermaid). Treat the log folder as sensitive. API keys and bearer tokens are
+masked as `[redacted]`, including inside tracebacks.
+
+The agents' workflow logs go to the file `ai-service/logs/analyzer.log` (rotating,
+5 MB x 3); the terminal keeps only uvicorn's request lines. Follow it with
+`tail -f logs/analyzer.log`. Each line reads
+`[time] [PID] [LEVEL] [node|graph|tool|llm|decision] [run=<id> txn=<last 4 of id> user=<id>] message`,
+so `grep run=<id> logs/analyzer.log` follows one analysis.
+
+Each analysis also writes its own file, `ai-service/logs/log_<transaction_id>.txt`, holding only
+that run's lines. Analysing the same transaction again appends to the same file. These per-
+transaction files are not rotated or deleted, so clear old ones out now and then. On macOS and
+Windows file names are case-insensitive, so ids that differ only in case share one file.
+
+- `AGENT_LOG_DIR`: write the logs somewhere else.
 
 ## Drawing the agent graphs
 
@@ -74,3 +94,23 @@ is fine). The optional second argument is the output file, which defaults to `<a
 in the current directory. No API key or database is needed, but it needs internet access because
 the image is drawn by the mermaid.ink service. From code, use
 `agent.graph_image.save_graph_image(graph, path)`.
+
+## Trying the analyzer by hand
+
+Scripts in `tests/manual/` (not collected by pytest) set up and drive a local demo. They need the
+Postgres from `docker-compose.yml`, the migrations applied, and a real `OPENAI_API_KEY`.
+
+```
+cargo run --bin seed-sandbox                          # from the repo root: users and accounts
+uv run python tests/manual/seed_christian.py          # budgets, rules, goals, recent spending
+uv run uvicorn main:app                               # terminal A
+tail -f logs/analyzer.log                             # terminal B: the agent's workflow
+uv run python tests/manual/trigger.py list            # terminal C: pick a scenario
+uv run python tests/manual/trigger.py bestbuy
+```
+
+`trigger.py` also takes `custom --name "Nike" --amount 120 --category SHOPPING`. Each analysis is
+recorded in the `transaction_analyses` table by transaction id, so sending the same id again is
+not analyzed or notified a second time: `trigger.py duplicate` sends one transaction twice and the
+second reply is `DUPLICATE`. Failed analyses and crashed runs (stuck `started` for over 10
+minutes) can be retried; finished ones cannot.
