@@ -23,6 +23,7 @@ dev = [
 [tool.ruff]
 line-length = 100
 target-version = "py39"
+src = [".", "test-framework"]
 
 [tool.ruff.lint]
 # Enable common Python linting rules
@@ -67,8 +68,8 @@ skip-magic-trailing-comma = false
 line-ending = "auto"
 
 [tool.pytest.ini_options]
-pythonpath = ["."]
+pythonpath = [".", "test-framework"]
 addopts = "--cov=. --cov-report=term-missing --cov-report=html:../docs/coverage/ai-service --cov-fail-under=75"
 
 [tool.coverage.run]
-omit = ["tests/*"]
+omit = ["tests/*", "test-framework/node_modules/*"]
