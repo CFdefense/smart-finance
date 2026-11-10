@@ -19,7 +19,7 @@ uv sync
       3. `/analyze` - POST only (405 in a browser). Takes a transaction to analyze.
       4. `/anomaly` - POST only (405 in a browser).
       5. `/docs` - Shows API documentation. **Use 'Try it out' here** to test the POST routes (`/chat`, `/analyze`, `/anomaly`).
-4. Test using `pytest`
+4. Test using `pytest`. To evaluate the agents themselves with LLM graders, see `test-framework/README.md`.
 
 ## API
    POST /chat

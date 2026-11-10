@@ -1,0 +1,12 @@
+description: Smart Finance agent evals
+# A display label only; provider.py reads the test's vars.
+prompts:
+  - "{{agent}}: {{message}}{{transaction.name}}"
+providers:
+  - id: file://provider.py
+    label: smart-finance-agent
+extensions:
+  - file://hooks.py:on_event
+evaluateOptions:
+  maxConcurrency: 1
+tests: file://../tests/evals/*.yaml

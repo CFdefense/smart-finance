@@ -1,0 +1,21 @@
+# Chat evals. See ../../test-framework/README.md for the format.
+- description: Chat knows the user's rules and goals
+  vars:
+    persona: christian@test.com
+    agent: chat
+    rules:
+      - description: No gambling, casinos or betting sites on any account.
+    goals:
+      - name: Spring break trip
+        description: Save for a trip with friends.
+        account: TD Bank Student Checking
+        target_amount: 2500
+        days_until_target: 120
+    message: What rules and savings goals do I have set up?
+    expected: >-
+      Lists the no-gambling rule and the Spring break trip goal with its $2,500 target,
+      without inventing others.
+  assert:
+    - { type: python, value: "file://graders.py:adherence", config: { threshold: 0.7 } }
+    - { type: python, value: "file://graders.py:accuracy", config: { threshold: 0.7 } }
+    - { type: python, value: "file://graders.py:goal", config: { threshold: 0.7 } }
