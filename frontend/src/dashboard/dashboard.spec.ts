@@ -20,6 +20,7 @@ describe('UserDashboard', () => {
 
   let budgetService: {
     getBudgets: ReturnType<typeof vi.fn>;
+    getSpendingByCategory: ReturnType<typeof vi.fn>;
   };
 
   let authService: {
@@ -94,7 +95,20 @@ describe('UserDashboard', () => {
     };
 
     budgetService = {
+      // Existing budget API mock.
       getBudgets: vi.fn().mockReturnValue(of({ month: '2026-11', budgets: mockBudgets })),
+
+      // New monthly category-spending API mock.
+      getSpendingByCategory: vi.fn().mockReturnValue(
+        of({
+          month: '2026-11',
+          total: 100,
+          categories: [
+            { category: 'GROCERIES', amount: 60 },
+            { category: 'FOOD_DINING', amount: 40 },
+          ],
+        }),
+      ),
     };
 
     authService = {
@@ -604,5 +618,74 @@ describe('UserDashboard', () => {
     expect(component.categoryLabel('FOOD_DINING')).toBe('Food Dining');
     expect(component.categoryLabel('GROCERIES')).toBe('Groceries');
     expect(component.categoryLabel('OTHER')).toBe('Other');
+  });
+
+  it('loads category spending when dashboard initializes', () => {
+    expect(budgetService.getSpendingByCategory).toHaveBeenCalledOnce();
+    expect(component.categorySpendingLoading()).toBe(false);
+    expect(component.categorySpendingError()).toBe(false);
+    expect(component.expenseChart().total).toBe(100);
+  });
+
+  it('calculates category percentages correctly', () => {
+    const chart = component.expenseChart();
+
+    expect(chart.segments).toHaveLength(2);
+
+    expect(chart.segments[0].label).toBe('Groceries');
+    expect(chart.segments[0].percent).toBe(60);
+
+    expect(chart.segments[1].label).toBe('Food Dining');
+    expect(chart.segments[1].percent).toBe(40);
+  });
+
+  it('positions the second donut segment after the first', () => {
+    const segments = component.expenseChart().segments;
+
+    // The first segment starts at zero.
+    expect(segments[0].dashoffset).toBe(0);
+
+    // The second is shifted backward by the length of
+    // the first, preventing both segments from overlapping.
+    expect(segments[1].dashoffset).toBeLessThan(0);
+  });
+
+  it('handles an empty spending response', () => {
+    component.categorySpending.set({
+      month: '2026-11',
+      total: 0,
+      categories: [],
+    });
+
+    expect(component.expenseChart().total).toBe(0);
+    expect(component.expenseChart().segments).toEqual([]);
+  });
+
+  it('handles a failed spending request', () => {
+    budgetService.getSpendingByCategory.mockReturnValue(
+      throwError(() => new Error('Spending API unavailable')),
+    );
+
+    component.loadCategorySpending();
+
+    expect(component.categorySpendingError()).toBe(true);
+    expect(component.categorySpendingLoading()).toBe(false);
+  });
+
+  it('ignores invalid category amounts', () => {
+    component.categorySpending.set({
+      month: '2026-11',
+      total: 100,
+      categories: [
+        { category: 'GROCERIES', amount: 100 },
+        { category: 'SHOPPING', amount: Number.NaN },
+        { category: 'OTHER', amount: -20 },
+      ],
+    });
+
+    const chart = component.expenseChart();
+
+    expect(chart.segments).toHaveLength(1);
+    expect(chart.segments[0].category).toBe('GROCERIES');
   });
 });

@@ -2,8 +2,12 @@ import { Component, signal, inject, OnInit, computed } from '@angular/core';
 import { Router } from '@angular/router';
 import { AuthService } from '../app/services/auth.service';
 import { ProfileService } from '../app/services/profile.service';
-import { BudgetService, type Budget } from '../app/services/budget.service';
-import { CurrencyPipe } from '@angular/common';
+import {
+  BudgetService,
+  type Budget,
+  type CategorySpendingResponse,
+} from '../app/services/budget.service';
+import { CurrencyPipe, DecimalPipe } from '@angular/common';
 import {
   PlaidService,
   type PlaidAccount,
@@ -14,7 +18,7 @@ import { Subscription } from 'rxjs';
 import type { OnDestroy } from '@angular/core';
 
 @Component({
-  imports: [CurrencyPipe],
+  imports: [CurrencyPipe, DecimalPipe],
   selector: 'app-root',
   styleUrl: './dashboard.css',
   templateUrl: './dashboard.html',
@@ -257,6 +261,110 @@ export class UserDashboard implements OnInit, OnDestroy {
   readonly totalRemaining = computed(() => this.totalBudget() - this.totalSpent());
 
   /**
+   * Monthly expense data returned by the Rust API.
+   *
+   * This is separate from budgets because users can spend
+   * money in categories for which no budget exists.
+   */
+  readonly categorySpending = signal<CategorySpendingResponse | null>(null);
+  readonly categorySpendingLoading = signal(true);
+  readonly categorySpendingError = signal(false);
+
+  /**
+   * Colors used consistently for each spending category.
+   *
+   * These match the Category enum in our Rust backend.
+   */
+  private readonly expenseColors: Record<string, string> = {
+    GROCERIES: '#6284e2',
+    FOOD_DINING: '#20a68a',
+    SHOPPING: '#f59e0b',
+    TRANSPORTATION: '#9b6ee8',
+    ENTERTAINMENT: '#f06f83',
+    UTILITIES: '#3b9cba',
+    HEALTHCARE: '#d278a6',
+    OTHER: '#94a3b8',
+  };
+
+  /**
+   * Calculate the segments used by the SVG donut chart.
+   *
+   * An SVG circle can be made into a ring by setting:
+   * - fill="none"
+   * - stroke="some color"
+   * - stroke-width="..."
+   *
+   * We use stroke-dasharray to control how much of the
+   * circle each category occupies, and stroke-dashoffset
+   * to position that category after the previous ones.
+   *
+   * The values come from Rust; this computed signal only
+   * converts financial totals into drawing instructions.
+   */
+  readonly expenseChart = computed(() => {
+    const response = this.categorySpending();
+
+    // SVG circle radius: 72 units.
+    // Circumference = 2 * PI * radius.
+    const circumference = 2 * Math.PI * 72;
+
+    // Avoid drawing misleading segments if data is missing
+    // or the backend reports no positive spending.
+    if (!response || response.total <= 0) {
+      return {
+        total: 0,
+        month: response?.month ?? '',
+        segments: [] as {
+          category: string;
+          label: string;
+          amount: number;
+          percent: number;
+          color: string;
+          dasharray: string;
+          dashoffset: number;
+        }[],
+      };
+    }
+
+    let distance = 0;
+
+    const segments = response.categories
+      .filter((item) => Number.isFinite(item.amount) && item.amount > 0)
+      .map((item) => {
+        // Percentage of total spending represented by this category.
+        const ratio = item.amount / response.total;
+
+        // Convert that fraction into a length along the circle.
+        const length = ratio * circumference;
+
+        const segment = {
+          category: item.category,
+          label: this.categoryLabel(item.category),
+          amount: item.amount,
+          percent: ratio * 100,
+          color: this.expenseColors[item.category] ?? '#94a3b8',
+
+          // The first number is the visible part of the ring.
+          // The second number represents the remaining gap.
+          dasharray: `${length} ${circumference}`,
+
+          // Negative offset advances the next segment around
+          // the circle, directly after the preceding segment.
+          dashoffset: distance === 0 ? 0 : -distance,
+        };
+
+        distance += length;
+        return segment;
+      });
+
+    return {
+      total: response.total,
+      month: response.month,
+      segments,
+    };
+  });
+
+  /**
    * Load all information needed for the dashboard.
    *
    * Each request has independent loading/error state.
@@ -267,6 +375,7 @@ export class UserDashboard implements OnInit, OnDestroy {
     this.loadProfile();
     this.loadBudgetSummary();
     this.loadAccounts();
+    this.loadCategorySpending();
   }
 
   /**
@@ -462,6 +571,28 @@ export class UserDashboard implements OnInit, OnDestroy {
       error: () => {
         this.budgetsError.set(true);
         this.budgetsLoading.set(false);
+      },
+    });
+  }
+
+  /**
+   * Load spending totals across all transaction categories.
+   *
+   * This request is independent from budget loading so
+   * failures in either section don't hide the other.
+   */
+  loadCategorySpending(): void {
+    this.categorySpendingLoading.set(true);
+    this.categorySpendingError.set(false);
+
+    this.budgetService.getSpendingByCategory().subscribe({
+      next: (response) => {
+        this.categorySpending.set(response);
+        this.categorySpendingLoading.set(false);
+      },
+      error: () => {
+        this.categorySpendingError.set(true);
+        this.categorySpendingLoading.set(false);
       },
     });
   }

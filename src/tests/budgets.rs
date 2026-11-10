@@ -523,3 +523,209 @@ async fn delete_budget_owned_by_other_user_is_not_found() {
     cleanup(&pool, &email_b).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
+
+/// The spending endpoint should not require authentication
+/// to be bypassed by someone who knows the URL.
+#[tokio::test]
+async fn spending_by_category_requires_authentication() {
+    let app = test_app().await;
+
+    let (status, _) = call(&app, "GET", "/api/budgets/spending-by-category", "", None).await;
+
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+}
+
+/// An authenticated user with no linked transactions should
+/// receive a valid zero-spending response.
+#[tokio::test]
+async fn spending_by_category_empty_for_new_user() {
+    let app = test_app().await;
+    let pool = test_pool().await;
+
+    let email = unique_email("spending_empty");
+    let cookie = authenticated_cookie(app.clone(), &email).await;
+
+    let (status, response) = call(
+        &app,
+        "GET",
+        "/api/budgets/spending-by-category",
+        &cookie,
+        None,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(response["total"], 0.0);
+    assert_eq!(response["categories"], json!([]));
+
+    cleanup(&pool, &email).await;
+}
+
+/// Invalid month parameters must return a validation error.
+#[tokio::test]
+async fn spending_by_category_rejects_invalid_month() {
+    let app = test_app().await;
+    let pool = test_pool().await;
+
+    let email = unique_email("spending_invalid_month");
+    let cookie = authenticated_cookie(app.clone(), &email).await;
+
+    let (status, _) = call(
+        &app,
+        "GET",
+        "/api/budgets/spending-by-category?month=2026-99",
+        &cookie,
+        None,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    cleanup(&pool, &email).await;
+}
+
+/// Verify that spending is grouped correctly without requiring
+/// the user to create budgets for those categories.
+///
+/// Also verify that only the signed-in user's transactions
+/// are included in their spending totals.
+#[tokio::test]
+async fn spending_by_category_aggregates_transactions() {
+    let app = test_app().await;
+    let pool = test_pool().await;
+
+    let email_a = unique_email("spending_group_a");
+    let email_b = unique_email("spending_group_b");
+
+    let cookie_a = authenticated_cookie(app.clone(), &email_a).await;
+    let cookie_b = authenticated_cookie(app.clone(), &email_b).await;
+
+    // Resolve the new users' database IDs.
+    let user_a: i32 = sqlx::query_scalar("SELECT id FROM users WHERE email = $1")
+        .bind(&email_a)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    let user_b: i32 = sqlx::query_scalar("SELECT id FROM users WHERE email = $1")
+        .bind(&email_b)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    // Create an isolated connection and account for each user.
+    for user_id in [user_a, user_b] {
+        let item_id = format!("spending-item-{user_id}");
+        let account_id = format!("spending-account-{user_id}");
+
+        sqlx::query(
+            "INSERT INTO plaid_links (user_id, item_id, access_token)
+             VALUES ($1, $2, $3)",
+        )
+        .bind(user_id)
+        .bind(&item_id)
+        .bind(format!("access-spending-{user_id}"))
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "INSERT INTO plaid_accounts
+             (account_id, item_id, name, account_type)
+             VALUES ($1, $2, 'Checking', 'depository')",
+        )
+        .bind(&account_id)
+        .bind(&item_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+
+    // The API supports requesting a specific calendar month.
+    let date = chrono::NaiveDate::from_ymd_opt(2026, 11, 10).unwrap();
+
+    // Add two grocery purchases and one dining purchase
+    // to user A. A negative amount represents a credit
+    // and must not count toward the current spending model.
+    for (suffix, category, amount) in [
+        ("g1", "GROCERIES", 25.0),
+        ("g2", "GROCERIES", 35.0),
+        ("d1", "FOOD_DINING", 40.0),
+        ("credit", "GROCERIES", -10.0),
+    ] {
+        sqlx::query(
+            "INSERT INTO plaid_transactions
+             (transaction_id, account_id, name, amount,
+              date, pending, category)
+             VALUES ($1, $2, 'Test Purchase', $3,
+                     $4, false, $5)",
+        )
+        .bind(format!("spending-{suffix}-{user_a}"))
+        .bind(format!("spending-account-{user_a}"))
+        .bind(amount)
+        .bind(date)
+        .bind(category)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+
+    // User B has spending too, but user A must never see it.
+    sqlx::query(
+        "INSERT INTO plaid_transactions
+         (transaction_id, account_id, name, amount,
+          date, pending, category)
+         VALUES ($1, $2, 'Other User', 500.0,
+                 $3, false, 'SHOPPING')",
+    )
+    .bind(format!("spending-other-{user_b}"))
+    .bind(format!("spending-account-{user_b}"))
+    .bind(date)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // User A's categories should total:
+    // Groceries: 25 + 35 = 60
+    // Dining: 40
+    // Total: 100
+    let (status, result) = call(
+        &app,
+        "GET",
+        "/api/budgets/spending-by-category?month=2026-11",
+        &cookie_a,
+        None,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(result["month"], "2026-11");
+    assert_eq!(result["total"], 100.0);
+    assert_eq!(result["categories"].as_array().unwrap().len(), 2);
+
+    let groceries = result["categories"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["category"] == "GROCERIES")
+        .unwrap();
+
+    assert_eq!(groceries["amount"], 60.0);
+
+    // User B sees only their own shopping expense.
+    let (_, other_result) = call(
+        &app,
+        "GET",
+        "/api/budgets/spending-by-category?month=2026-11",
+        &cookie_b,
+        None,
+    )
+    .await;
+
+    assert_eq!(other_result["total"], 500.0);
+
+    // Deleting test users cascades to linked accounts
+    // and transactions, leaving the database clean.
+    cleanup(&pool, &email_a).await;
+    cleanup(&pool, &email_b).await;
+}

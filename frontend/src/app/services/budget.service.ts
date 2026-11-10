@@ -65,6 +65,29 @@ export interface BudgetsResponse {
 }
 
 /**
+ * Spending for one category during a calendar month.
+ *
+ * These values are calculated by Rust from synced
+ * Plaid transactions, not from the user's budget limits.
+ */
+export interface CategorySpending {
+  category: BudgetCategory;
+  amount: number;
+}
+
+/**
+ * Response from GET /api/budgets/spending-by-category.
+ *
+ * The API includes spending even in categories without
+ * a corresponding monthly budget.
+ */
+export interface CategorySpendingResponse {
+  month: string;
+  total: number;
+  categories: CategorySpending[];
+}
+
+/**
  * Communicates with the Rust budget endpoints.
  *
  * All requests include the user's authentication cookie.
@@ -87,6 +110,23 @@ export class BudgetService {
     const params = month ? new HttpParams().set('month', month) : new HttpParams();
 
     return this.http.get<BudgetsResponse>(this.baseUrl, {
+      params,
+      withCredentials: true,
+    });
+  }
+
+  /**
+   * Fetch monthly spending grouped by category.
+   *
+   * This uses the dedicated Rust endpoint rather than
+   * trying to reconstruct spending from the budgets list.
+   *
+   * When month is omitted, Rust uses the current UTC month.
+   */
+  getSpendingByCategory(month?: string): Observable<CategorySpendingResponse> {
+    const params = month ? new HttpParams().set('month', month) : new HttpParams();
+
+    return this.http.get<CategorySpendingResponse>(`${this.baseUrl}/spending-by-category`, {
       params,
       withCredentials: true,
     });

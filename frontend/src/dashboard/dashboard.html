@@ -321,22 +321,117 @@
         }
       </article>
 
-      <!-- Placeholder for the next feature. -->
+      <!--
+  Expenses-by-category chart.
+
+  Rust calculates current-month spending across all
+  connected accounts. Angular only renders the results.
+-->
       <article class="financial-chart-card">
         <div class="chart-heading">
           <div>
             <h2>Expenses by Category</h2>
-            <p>Where your money goes</p>
+            <p>
+              @if (categorySpending()?.month) {
+                Spending for {{ categorySpending()?.month }}
+              } @else {
+                Current month's spending
+              }
+            </p>
           </div>
 
           <span class="material-symbols-outlined" aria-hidden="true">donut_small</span>
         </div>
 
-        <div class="chart-placeholder">
-          <span class="material-symbols-outlined" aria-hidden="true">pie_chart</span>
+        @if (categorySpendingLoading()) {
+          <p class="chart-message">Loading expense categories...</p>
+        } @else if (categorySpendingError()) {
+          <div class="chart-message" role="alert">
+            <p>Unable to load your expense breakdown.</p>
 
-          <p>Category breakdown coming next.</p>
-        </div>
+            <button type="button" (click)="loadCategorySpending()">Try Again</button>
+          </div>
+        } @else if (expenseChart().segments.length === 0) {
+          <p class="chart-message">
+            No categorized spending found for this month. Your chart will appear when transactions
+            are available.
+          </p>
+        } @else {
+          <div class="expense-chart-content">
+            <!--
+        SVG donut chart.
+
+        Every circle has the same center and radius.
+        Each segment has a different visible stroke length.
+        SVG rotation makes the chart start at 12 o'clock.
+      -->
+            <div class="expense-donut-container">
+              <svg
+                class="expense-donut"
+                viewBox="0 0 220 220"
+                role="img"
+                aria-label="Donut chart showing monthly spending by category">
+                <!-- Background track -->
+                <circle cx="110" cy="110" r="72" fill="none" stroke="#e2e8f0" stroke-width="30" />
+
+                <!-- Spending categories -->
+                @for (segment of expenseChart().segments; track segment.category) {
+                  <circle
+                    cx="110"
+                    cy="110"
+                    r="72"
+                    fill="none"
+                    stroke-width="30"
+                    [attr.stroke]="segment.color"
+                    [attr.stroke-dasharray]="segment.dasharray"
+                    [attr.stroke-dashoffset]="segment.dashoffset"
+                    transform="rotate(-90 110 110)">
+                    <title>
+                      {{ segment.label }}:
+                      {{ segment.amount | currency: 'USD' }}
+                      ({{ segment.percent | number: '1.1-1' }}%)
+                    </title>
+                  </circle>
+                }
+
+                <!-- Total spending in the center -->
+                <text x="110" y="103" text-anchor="middle" class="expense-donut-label">
+                  Total Spent
+                </text>
+
+                <text x="110" y="125" text-anchor="middle" class="expense-donut-total">
+                  {{ expenseChart().total | currency: 'USD' : 'symbol' : '1.0-0' }}
+                </text>
+              </svg>
+            </div>
+
+            <!--
+        Accessible category legend.
+
+        This also lets users read exact spending amounts
+        without relying entirely on colors.
+      -->
+            <div class="expense-legend">
+              @for (segment of expenseChart().segments; track segment.category) {
+                <div class="expense-legend-row">
+                  <div class="expense-legend-name">
+                    <span
+                      class="expense-color-dot"
+                      [style.background-color]="segment.color"
+                      aria-hidden="true"></span>
+
+                    <span>{{ segment.label }}</span>
+                  </div>
+
+                  <div class="expense-legend-amount">
+                    <strong>{{ segment.amount | currency: 'USD' }}</strong>
+                    <span>{{ segment.percent | number: '1.1-1' }}%</span>
+                  </div>
+                </div>
+              }
+            </div>
+          </div>
+        }
       </article>
     </section>
 
