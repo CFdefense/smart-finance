@@ -8,6 +8,7 @@ import {
   PlaidService,
   type PlaidAccount,
   type PlaidTransaction,
+  type NetWorthSnapshot,
 } from '../app/services/plaid.service';
 import { Subscription } from 'rxjs';
 import type { OnDestroy } from '@angular/core';
@@ -85,6 +86,100 @@ export class UserDashboard implements OnInit, OnDestroy {
       liabilities,
       included,
       excluded,
+    };
+  });
+
+  /**
+   * Historical net-worth snapshots retrieved from Rust.
+   *
+   * We keep history state independent from the current
+   * balance summary, because either API request can fail
+   * without preventing the other from displaying.
+   */
+  readonly netWorthHistory = signal<NetWorthSnapshot[]>([]);
+  readonly netWorthHistoryLoading = signal(true);
+  readonly netWorthHistoryError = signal(false);
+
+  /**
+   * Convert historical financial values into SVG coordinates.
+   *
+   * Our SVG uses a fixed logical coordinate system:
+   * - X: 50 to 590
+   * - Y: 35 to 195
+   *
+   * The browser scales this coordinate system to fit
+   * the graph's available width.
+   *
+   * This is presentation math only. The financial amounts
+   * themselves come directly from the Rust API.
+   */
+  readonly netWorthChart = computed(() => {
+    const history = [...this.netWorthHistory()].sort((a, b) =>
+      a.snapshot_date.localeCompare(b.snapshot_date),
+    );
+
+    if (history.length === 0) {
+      return {
+        points: '',
+        markers: [] as { x: number; y: number; amount: number; date: string }[],
+        minValue: 0,
+        maxValue: 0,
+        firstDate: '',
+        lastDate: '',
+      };
+    }
+
+    // Work out the smallest and largest historical values.
+    const values = history.map((snapshot) => snapshot.amount);
+    const minimum = Math.min(...values);
+    const maximum = Math.max(...values);
+
+    // Add vertical padding so the chart doesn't touch its edges.
+    // A constant balance still needs a visible plot range.
+    const padding = Math.max((maximum - minimum) * 0.1, 1);
+    const minValue = minimum - padding;
+    const maxValue = maximum + padding;
+    const range = maxValue - minValue;
+
+    const left = 50;
+    const right = 590;
+    const top = 35;
+    const bottom = 195;
+
+    // Convert each real snapshot into a point on the graph.
+    const markers = history.map((snapshot) => {
+      // Space points according to actual calendar dates,
+      // rather than assuming snapshots are one day apart.
+      const firstDay = Date.parse(`${history[0].snapshot_date}T00:00:00Z`);
+      const lastDay = Date.parse(`${history[history.length - 1].snapshot_date}T00:00:00Z`);
+      const currentDay = Date.parse(`${snapshot.snapshot_date}T00:00:00Z`);
+
+      const x =
+        firstDay === lastDay
+          ? (left + right) / 2
+          : left + ((currentDay - firstDay) / (lastDay - firstDay)) * (right - left);
+
+      // SVG Y coordinates grow downward, so invert the value.
+      const y = bottom - ((snapshot.amount - minValue) / range) * (bottom - top);
+
+      return {
+        x,
+        y,
+        amount: snapshot.amount,
+        date: snapshot.snapshot_date,
+      };
+    });
+
+    // A polyline draws one connected line through all points.
+    const points = markers.map((marker) => `${marker.x},${marker.y}`).join(' ');
+
+    return {
+      points,
+      markers,
+      minValue,
+      maxValue,
+      firstDate: history[0].snapshot_date,
+      lastDate: history[history.length - 1].snapshot_date,
     };
   });
 
@@ -187,6 +282,7 @@ export class UserDashboard implements OnInit, OnDestroy {
    * We display real balances returned by Plaid rather than
    * hardcoded demonstration data.
    */
+
   loadAccounts(): void {
     this.accountsLoading.set(true);
     this.accountsError.set(false);
@@ -195,10 +291,18 @@ export class UserDashboard implements OnInit, OnDestroy {
       next: (response) => {
         this.accounts.set(response.accounts);
         this.accountsLoading.set(false);
+
+        // The backend has now recorded today's snapshot.
+        // Fetch history afterward so the graph includes it.
+        this.loadNetWorthHistory();
       },
       error: () => {
         this.accountsError.set(true);
         this.accountsLoading.set(false);
+
+        // A failed account refresh should not hide previously
+        // recorded history. Attempt to retrieve it separately.
+        this.loadNetWorthHistory();
       },
     });
   }
@@ -266,6 +370,28 @@ export class UserDashboard implements OnInit, OnDestroy {
           this.transactionsLoading.set(false);
         },
       });
+  }
+
+  /**
+   * Retrieve real historical net-worth values from Rust.
+   *
+   * An empty array is a legitimate response when the user
+   * has no saved snapshots yet.
+   */
+  loadNetWorthHistory(): void {
+    this.netWorthHistoryLoading.set(true);
+    this.netWorthHistoryError.set(false);
+
+    this.plaidService.getNetWorthHistory().subscribe({
+      next: (response) => {
+        this.netWorthHistory.set(response.snapshots);
+        this.netWorthHistoryLoading.set(false);
+      },
+      error: () => {
+        this.netWorthHistoryError.set(true);
+        this.netWorthHistoryLoading.set(false);
+      },
+    });
   }
 
   /**

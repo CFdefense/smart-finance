@@ -190,4 +190,31 @@ describe('PlaidService', () => {
       offset: 0,
     });
   });
+
+  it('retrieves historical net-worth snapshots', () => {
+    let snapshotCount = -1;
+
+    service.getNetWorthHistory().subscribe((response) => {
+      snapshotCount = response.snapshots.length;
+    });
+
+    const request = httpMock.expectOne(`${baseUrl}/net-worth/history`);
+
+    expect(request.request.method).toBe('GET');
+    expect(request.request.withCredentials).toBe(true);
+
+    // Simulate real historical data returned by Rust.
+    request.flush({
+      snapshots: [
+        {
+          snapshot_date: '2026-11-10',
+          amount: 12500,
+          included_accounts: 3,
+          excluded_accounts: 0,
+        },
+      ],
+    });
+
+    expect(snapshotCount).toBe(1);
+  });
 });

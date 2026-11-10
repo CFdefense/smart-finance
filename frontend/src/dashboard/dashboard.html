@@ -227,6 +227,119 @@
       }
     </section>
 
+    <!--
+  Financial charts.
+
+  Desktop: two columns side by side.
+  Mobile: charts stack vertically.
+
+  The right panel will become our expenses-by-category
+  chart in the next implementation section.
+-->
+    <section class="dashboard-charts" aria-label="Financial charts">
+      <!-- Historical net-worth chart -->
+      <article class="financial-chart-card">
+        <div class="chart-heading">
+          <div>
+            <h2>Net Worth Over Time</h2>
+            <p>Historical linked-account balances</p>
+          </div>
+
+          <span class="material-symbols-outlined" aria-hidden="true">show_chart</span>
+        </div>
+
+        @if (netWorthHistoryLoading()) {
+          <p class="chart-message">Loading net-worth history...</p>
+        } @else if (netWorthHistoryError()) {
+          <div class="chart-message" role="alert">
+            <p>Unable to load net-worth history.</p>
+            <button type="button" (click)="loadNetWorthHistory()">Try Again</button>
+          </div>
+        } @else if (netWorthHistory().length === 0) {
+          <p class="chart-message">
+            No historical data yet. Your history will appear after your connected accounts have been
+            recorded.
+          </p>
+        } @else {
+          <!--
+        A responsive SVG chart.
+
+        The viewBox establishes a coordinate system that
+        scales automatically with the card's width.
+      -->
+          <svg
+            class="net-worth-graph"
+            viewBox="0 0 640 250"
+            role="img"
+            aria-label="Line chart showing historical net worth in US dollars">
+            <!-- Horizontal reference lines -->
+            <line x1="50" y1="35" x2="590" y2="35" class="chart-grid-line" />
+            <line x1="50" y1="115" x2="590" y2="115" class="chart-grid-line" />
+            <line x1="50" y1="195" x2="590" y2="195" class="chart-grid-line" />
+
+            <!-- Y-axis labels reflect actual data bounds. -->
+            <text x="45" y="39" class="chart-axis-label" text-anchor="end">
+              {{ netWorthChart().maxValue | currency: 'USD' : 'symbol' : '1.0-0' }}
+            </text>
+
+            <text x="45" y="199" class="chart-axis-label" text-anchor="end">
+              {{ netWorthChart().minValue | currency: 'USD' : 'symbol' : '1.0-0' }}
+            </text>
+
+            <!-- Connect the historical data points. -->
+            @if (netWorthHistory().length > 1) {
+              <polyline class="chart-line" [attr.points]="netWorthChart().points" />
+            }
+
+            <!-- One circle for every actual recorded snapshot. -->
+            @for (point of netWorthChart().markers; track point.date) {
+              <circle class="chart-point" [attr.cx]="point.x" [attr.cy]="point.y" r="5">
+                <!-- Native SVG tooltip on hover. -->
+                <title>
+                  {{ point.date }}:
+                  {{ point.amount | currency: 'USD' }}
+                </title>
+              </circle>
+            }
+
+            <!-- X-axis date labels -->
+            <text x="50" y="225" class="chart-axis-label">
+              {{ netWorthChart().firstDate }}
+            </text>
+
+            <text x="590" y="225" class="chart-axis-label" text-anchor="end">
+              {{ netWorthChart().lastDate }}
+            </text>
+          </svg>
+
+          @if (netWorthHistory().length === 1) {
+            <p class="chart-message chart-hint">
+              Only one day of history is available so far. More points will appear as new snapshots
+              are recorded.
+            </p>
+          }
+        }
+      </article>
+
+      <!-- Placeholder for the next feature. -->
+      <article class="financial-chart-card">
+        <div class="chart-heading">
+          <div>
+            <h2>Expenses by Category</h2>
+            <p>Where your money goes</p>
+          </div>
+
+          <span class="material-symbols-outlined" aria-hidden="true">donut_small</span>
+        </div>
+
+        <div class="chart-placeholder">
+          <span class="material-symbols-outlined" aria-hidden="true">pie_chart</span>
+
+          <p>Category breakdown coming next.</p>
+        </div>
+      </article>
+    </section>
+
     <div class="budget-buttons">
       <!-- Open the Budgets page to create, edit, or delete budgets. -->
       <button type="button" class="create-budget" (click)="openBudgets()">

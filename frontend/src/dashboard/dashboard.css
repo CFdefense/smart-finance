@@ -763,3 +763,138 @@
     flex-wrap: wrap;
   }
 }
+
+/*
+ * Dashboard chart row.
+ *
+ * Match the width of the net-worth and account sections.
+ * Use equal-width columns on desktop.
+ */
+.dashboard-charts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+
+  width: min(1100px, calc(100% - 48px));
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+.financial-chart-card {
+  min-width: 0;
+  padding: 24px;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 4px 18px rgba(15, 23, 42, 0.06);
+}
+
+.chart-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.chart-heading h2 {
+  margin: 0 0 5px;
+  font-size: 1.15rem;
+  color: #1f2937;
+}
+
+.chart-heading p {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.85rem;
+}
+
+.chart-heading > .material-symbols-outlined {
+  color: #6284e2;
+  font-size: 27px;
+}
+
+.net-worth-graph {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.chart-grid-line {
+  stroke: #e2e8f0;
+  stroke-width: 1;
+  stroke-dasharray: 4 5;
+}
+
+.chart-axis-label {
+  font-size: 13px;
+  fill: #64748b;
+}
+
+.chart-line {
+  fill: none;
+  stroke: #6284e2;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.chart-point {
+  fill: #6284e2;
+  stroke: white;
+  stroke-width: 2;
+}
+
+.chart-message {
+  color: #64748b;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.chart-message button {
+  padding: 8px 14px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.chart-hint {
+  margin-top: 8px;
+  font-size: 0.8rem;
+}
+
+.chart-placeholder {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+
+  min-height: 210px;
+  gap: 12px;
+
+  color: #94a3b8;
+  text-align: center;
+}
+
+.chart-placeholder .material-symbols-outlined {
+  font-size: 52px;
+}
+
+.chart-placeholder p {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+/* Stack the charts on narrow screens. */
+@media (max-width: 800px) {
+  .dashboard-charts {
+    grid-template-columns: 1fr;
+    width: calc(100% - 24px);
+  }
+
+  .financial-chart-card {
+    padding: 18px;
+  }
+}

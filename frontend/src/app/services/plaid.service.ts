@@ -70,6 +70,28 @@ export interface PlaidExchangeTokenResponse {
 }
 
 /**
+ * A historical net-worth snapshot saved by Rust.
+ *
+ * Each snapshot represents one calendar day.
+ * Amounts are in USD, matching the backend calculation.
+ */
+export interface NetWorthSnapshot {
+  snapshot_date: string;
+  amount: number;
+  included_accounts: number;
+  excluded_accounts: number;
+}
+
+/**
+ * Response from GET /api/plaid/net-worth/history.
+ *
+ * Rust returns historical snapshots oldest to newest.
+ */
+export interface NetWorthHistoryResponse {
+  snapshots: NetWorthSnapshot[];
+}
+
+/**
  * Handles communication between Angular and our Rust Plaid endpoints.
  *
  * This service only makes HTTP requests.
@@ -93,6 +115,18 @@ export class PlaidService {
    */
   getAccounts(): Observable<PlaidAccountsResponse> {
     return this.http.get<PlaidAccountsResponse>(`${this.baseUrl}/accounts`, {
+      withCredentials: true,
+    });
+  }
+
+  /**
+   * Retrieve historical linked-account net-worth snapshots.
+   *
+   * Rust determines which records belong to the signed-in user.
+   * withCredentials sends the authentication cookie.
+   */
+  getNetWorthHistory(): Observable<NetWorthHistoryResponse> {
+    return this.http.get<NetWorthHistoryResponse>(`${this.baseUrl}/net-worth/history`, {
       withCredentials: true,
     });
   }

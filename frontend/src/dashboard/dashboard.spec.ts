@@ -69,6 +69,7 @@ describe('UserDashboard', () => {
   let plaidService: {
     getAccounts: ReturnType<typeof vi.fn>;
     getTransactions: ReturnType<typeof vi.fn>;
+    getNetWorthHistory: ReturnType<typeof vi.fn>;
   };
 
   const mockAccounts: PlaidAccount[] = [
@@ -119,6 +120,19 @@ describe('UserDashboard', () => {
           total: 1,
           limit: 20,
           offset: 0,
+        }),
+      ),
+
+      getNetWorthHistory: vi.fn().mockReturnValue(
+        of({
+          snapshots: [
+            {
+              snapshot_date: '2026-11-10',
+              amount: 2000,
+              included_accounts: 1,
+              excluded_accounts: 0,
+            },
+          ],
         }),
       ),
     };
@@ -313,5 +327,282 @@ describe('UserDashboard', () => {
 
     expect(component.transactionsError()).toBe(true);
     expect(component.transactionsLoading()).toBe(false);
+  });
+
+  it('loads net-worth history after loading accounts', () => {
+    expect(plaidService.getAccounts).toHaveBeenCalledOnce();
+    expect(plaidService.getNetWorthHistory).toHaveBeenCalledOnce();
+
+    expect(component.netWorthHistory()).toHaveLength(1);
+    expect(component.netWorthHistoryLoading()).toBe(false);
+  });
+
+  it('creates a chart marker for one historical snapshot', () => {
+    const chart = component.netWorthChart();
+
+    expect(chart.markers).toHaveLength(1);
+    expect(chart.markers[0].amount).toBe(2000);
+
+    // A single point is centered rather than stretched
+    // across an imaginary historical timeline.
+    expect(chart.markers[0].x).toBe(320);
+  });
+
+  it('plots multiple historical snapshots in date order', () => {
+    component.netWorthHistory.set([
+      {
+        snapshot_date: '2026-11-12',
+        amount: 1500,
+        included_accounts: 1,
+        excluded_accounts: 0,
+      },
+      {
+        snapshot_date: '2026-11-10',
+        amount: 1000,
+        included_accounts: 1,
+        excluded_accounts: 0,
+      },
+    ]);
+
+    const chart = component.netWorthChart();
+
+    expect(chart.markers).toHaveLength(2);
+    expect(chart.firstDate).toBe('2026-11-10');
+    expect(chart.lastDate).toBe('2026-11-12');
+
+    // The higher net worth should appear higher in SVG.
+    expect(chart.markers[1].y).toBeLessThan(chart.markers[0].y);
+  });
+
+  it('handles an empty net-worth history', () => {
+    component.netWorthHistory.set([]);
+
+    expect(component.netWorthChart().markers).toEqual([]);
+    expect(component.netWorthChart().points).toBe('');
+  });
+
+  it('handles failure when retrieving net-worth history', () => {
+    plaidService.getNetWorthHistory.mockReturnValue(
+      throwError(() => new Error('History unavailable')),
+    );
+
+    component.loadNetWorthHistory();
+
+    expect(component.netWorthHistoryError()).toBe(true);
+    expect(component.netWorthHistoryLoading()).toBe(false);
+  });
+
+  /**
+   * Verify that a constant net worth doesn't cause
+   * division by zero when calculating SVG coordinates.
+   */
+  it('plots equal net-worth values safely', () => {
+    component.netWorthHistory.set([
+      {
+        snapshot_date: '2026-11-10',
+        amount: 2000,
+        included_accounts: 1,
+        excluded_accounts: 0,
+      },
+      {
+        snapshot_date: '2026-11-11',
+        amount: 2000,
+        included_accounts: 1,
+        excluded_accounts: 0,
+      },
+    ]);
+
+    const chart = component.netWorthChart();
+
+    expect(chart.markers).toHaveLength(2);
+    expect(chart.markers[0].y).toBe(chart.markers[1].y);
+    expect(Number.isFinite(chart.markers[0].y)).toBe(true);
+  });
+
+  /**
+   * Verify that gaps in calendar dates are proportional.
+   *
+   * A snapshot on November 11 should be much closer to
+   * November 10 than November 20.
+   */
+  it('spaces historical points according to actual dates', () => {
+    component.netWorthHistory.set([
+      {
+        snapshot_date: '2026-11-10',
+        amount: 1000,
+        included_accounts: 1,
+        excluded_accounts: 0,
+      },
+      {
+        snapshot_date: '2026-11-11',
+        amount: 1200,
+        included_accounts: 1,
+        excluded_accounts: 0,
+      },
+      {
+        snapshot_date: '2026-11-20',
+        amount: 1500,
+        included_accounts: 1,
+        excluded_accounts: 0,
+      },
+    ]);
+
+    const markers = component.netWorthChart().markers;
+
+    expect(markers).toHaveLength(3);
+    expect(markers[0].x).toBe(50);
+    expect(markers[2].x).toBe(590);
+
+    // November 11 is 10% of the way through the date range.
+    expect(markers[1].x).toBeCloseTo(104);
+  });
+
+  /**
+   * Negative net worth is valid when liabilities exceed assets.
+   */
+  it('supports negative historical net worth', () => {
+    component.netWorthHistory.set([
+      {
+        snapshot_date: '2026-11-10',
+        amount: -3000,
+        included_accounts: 2,
+        excluded_accounts: 0,
+      },
+      {
+        snapshot_date: '2026-11-11',
+        amount: -2000,
+        included_accounts: 2,
+        excluded_accounts: 0,
+      },
+    ]);
+
+    const chart = component.netWorthChart();
+
+    expect(chart.minValue).toBeLessThan(-3000);
+    expect(chart.maxValue).toBeGreaterThan(-2000);
+    expect(chart.markers[1].y).toBeLessThan(chart.markers[0].y);
+  });
+
+  /**
+   * A selected account should always begin at page zero.
+   */
+  it('resets pagination when switching accounts', () => {
+    component.selectAccount('account-123');
+
+    component.transactionPage.set(3);
+    component.selectAccount('account-456');
+
+    expect(component.selectedAccountId()).toBe('account-456');
+    expect(component.transactionPage()).toBe(0);
+
+    expect(plaidService.getTransactions).toHaveBeenLastCalledWith('account-456', 20, 0);
+  });
+
+  /**
+   * Test the page-navigation guards.
+   */
+  it('does not navigate before the first transaction page', () => {
+    component.selectAccount('account-123');
+    plaidService.getTransactions.mockClear();
+
+    component.previousTransactionPage();
+
+    expect(component.transactionPage()).toBe(0);
+    expect(plaidService.getTransactions).not.toHaveBeenCalled();
+  });
+
+  it('does not navigate beyond the final transaction page', () => {
+    component.selectAccount('account-123');
+    plaidService.getTransactions.mockClear();
+
+    // Our default mock response contains only one transaction.
+    component.nextTransactionPage();
+
+    expect(component.transactionPage()).toBe(0);
+    expect(plaidService.getTransactions).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Verify that the Next button requests the correct
+   * database offset when there are multiple pages.
+   */
+  it('loads the next transaction page when available', () => {
+    component.selectAccount('account-123');
+
+    // Simulate three pages of transactions.
+    component.transactionTotal.set(45);
+
+    component.nextTransactionPage();
+
+    expect(component.transactionPage()).toBe(1);
+    expect(plaidService.getTransactions).toHaveBeenLastCalledWith('account-123', 20, 20);
+  });
+
+  it('returns to the previous transaction page', () => {
+    component.selectAccount('account-123');
+    component.transactionTotal.set(45);
+
+    component.nextTransactionPage();
+    component.previousTransactionPage();
+
+    expect(component.transactionPage()).toBe(0);
+    expect(plaidService.getTransactions).toHaveBeenLastCalledWith('account-123', 20, 0);
+  });
+
+  it('does not load transactions without a selected account', () => {
+    plaidService.getTransactions.mockClear();
+
+    component.loadTransactions();
+
+    expect(plaidService.getTransactions).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Verify that unknown account types aren't incorrectly
+   * counted as assets or liabilities.
+   */
+  it('excludes unsupported account types from net worth', () => {
+    component.accounts.set([
+      {
+        ...mockAccounts[0],
+        account_type: 'other',
+        current_balance: 5000,
+      },
+    ]);
+
+    const result = component.netWorthSummary();
+
+    expect(result.amount).toBe(0);
+    expect(result.included).toBe(0);
+    expect(result.excluded).toBe(1);
+  });
+
+  it('excludes non-finite balances from net worth', () => {
+    component.accounts.set([
+      {
+        ...mockAccounts[0],
+        current_balance: Number.NaN,
+      },
+      {
+        ...mockAccounts[0],
+        account_id: 'infinite',
+        current_balance: Number.POSITIVE_INFINITY,
+      },
+    ]);
+
+    const result = component.netWorthSummary();
+
+    expect(result.included).toBe(0);
+    expect(result.excluded).toBe(2);
+    expect(result.amount).toBe(0);
+  });
+
+  /**
+   * Test the readable category-label conversion.
+   */
+  it('formats transaction categories for display', () => {
+    expect(component.categoryLabel('FOOD_DINING')).toBe('Food Dining');
+    expect(component.categoryLabel('GROCERIES')).toBe('Groceries');
+    expect(component.categoryLabel('OTHER')).toBe('Other');
   });
 });
