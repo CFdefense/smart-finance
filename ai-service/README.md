@@ -19,7 +19,7 @@ uv sync
       3. `/analyze` - POST only (405 in a browser). Takes a transaction to analyze.
       4. `/anomaly` - POST only (405 in a browser).
       5. `/docs` - Shows API documentation. **Use 'Try it out' here** to test the POST routes (`/chat`, `/analyze`, `/anomaly`).
-4. Test using `pytest`. To evaluate the agents themselves with LLM graders, see `test-framework/README.md`.
+4. Test using `pytest`. To evaluate the agents themselves with LLM graders, see `tests/README.md`.
 
 ## API
    POST /chat
@@ -94,23 +94,3 @@ is fine). The optional second argument is the output file, which defaults to `<a
 in the current directory. No API key or database is needed, but it needs internet access because
 the image is drawn by the mermaid.ink service. From code, use
 `agent.graph_image.save_graph_image(graph, path)`.
-
-## Trying the analyzer by hand
-
-Scripts in `tests/manual/` (not collected by pytest) set up and drive a local demo. They need the
-Postgres from `docker-compose.yml`, the migrations applied, and a real `OPENAI_API_KEY`.
-
-```
-cargo run --bin seed-sandbox                          # from the repo root: users and accounts
-uv run python tests/manual/seed_christian.py          # budgets, rules, goals, recent spending
-uv run uvicorn main:app                               # terminal A
-tail -f logs/analyzer.log                             # terminal B: the agent's workflow
-uv run python tests/manual/trigger.py list            # terminal C: pick a scenario
-uv run python tests/manual/trigger.py bestbuy
-```
-
-`trigger.py` also takes `custom --name "Nike" --amount 120 --category SHOPPING`. Each analysis is
-recorded in the `transaction_analyses` table by transaction id, so sending the same id again is
-not analyzed or notified a second time: `trigger.py duplicate` sends one transaction twice and the
-second reply is `DUPLICATE`. Failed analyses and crashed runs (stuck `started` for over 10
-minutes) can be retried; finished ones cannot.

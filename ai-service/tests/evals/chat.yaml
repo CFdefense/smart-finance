@@ -1,4 +1,4 @@
-# Chat evals. See ../../test-framework/README.md for the format.
+# Chat evals. See ../README.md for the format.
 # The chat agent sees accounts, budgets, goals and recent transactions (not rules).
 - description: Chat reports the user's savings goal accurately
   vars:

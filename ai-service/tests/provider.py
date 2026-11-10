@@ -3,7 +3,7 @@
 import sys
 from pathlib import Path
 
-# promptfoo runs this file with test-framework/ on sys.path; the agent code lives one level up.
+# promptfoo runs this file with tests/ on sys.path; the agent code is in ai-service/.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import evaldb  # noqa: E402

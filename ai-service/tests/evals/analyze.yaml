@@ -1,5 +1,5 @@
-# Analyzer evals. See ../../test-framework/README.md for the format.
-# Account names come from the Plaid sandbox (run `uv run python tests/manual/trigger.py list` for ideas).
+# Analyzer evals. See ../README.md for the format.
+# Account names come from the Plaid sandbox (for christian@test.com: TD Bank Student Checking).
 - description: Best Buy purchase breaks the $200 single-purchase rule
   vars:
     persona: christian@test.com
