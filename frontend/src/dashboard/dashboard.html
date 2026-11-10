@@ -39,27 +39,50 @@
     </div>
   </div>
   <div class="parent">
-    <div class="budget-buttons">
-      <!-- Open the Budgets page to create, edit, or delete budgets. -->
-      <button type="button" class="create-budget" (click)="openBudgets()">
-        <span class="material-symbols-outlined add" aria-hidden="true">account_balance_wallet</span>
-        Manage Budgets
-      </button>
-
-      <!-- Open the Goals page to manage financial goals. -->
-      <button type="button" class="set-goals" (click)="openGoals()">
-        <span class="material-symbols-outlined target" aria-hidden="true">target</span>
-        Manage Goals
-      </button>
-    </div>
-
     <!--
-  Connected financial accounts.
-
-  The selected account expands to show its transactions.
-  This section will eventually sit immediately below the
-  net-worth summary in our completed dashboard.
+  Current linked-account net worth.
+  This belongs at the very top of the financial dashboard.
 -->
+    <section class="net-worth-card" aria-labelledby="net-worth-heading">
+      <div class="net-worth-content">
+        <div class="net-worth-label">
+          <span class="material-symbols-outlined" aria-hidden="true">account_balance_wallet</span>
+          <h2 id="net-worth-heading">Total Net Worth</h2>
+        </div>
+
+        @if (accountsLoading()) {
+          <p class="net-worth-value">Loading...</p>
+        } @else if (accountsError()) {
+          <p class="net-worth-value">Unavailable</p>
+        } @else if (netWorthSummary().included === 0) {
+          <p class="net-worth-value">Unavailable</p>
+          <p class="net-worth-note">Connect supported accounts with available USD balances.</p>
+        } @else {
+          <p class="net-worth-value">
+            {{ netWorthSummary().amount | currency: 'USD' }}
+          </p>
+
+          <div class="net-worth-breakdown">
+            <span>
+              Assets:
+              {{ netWorthSummary().assets | currency: 'USD' }}
+            </span>
+
+            <span>
+              Liabilities:
+              {{ netWorthSummary().liabilities | currency: 'USD' }}
+            </span>
+          </div>
+
+          @if (netWorthSummary().excluded > 0) {
+            <p class="net-worth-note">Partial total: some accounts could not be included.</p>
+          }
+        }
+
+        <p class="net-worth-note">Based on your connected financial accounts.</p>
+      </div>
+    </section>
+
     <section class="dashboard-accounts" aria-labelledby="accounts-heading">
       <div class="accounts-heading">
         <div>
@@ -204,6 +227,21 @@
       }
     </section>
 
+    <div class="budget-buttons">
+      <!-- Open the Budgets page to create, edit, or delete budgets. -->
+      <button type="button" class="create-budget" (click)="openBudgets()">
+        <span class="material-symbols-outlined add" aria-hidden="true">account_balance_wallet</span>
+        Manage Budgets
+      </button>
+
+      <!-- Open the Goals page to manage financial goals. -->
+      <button type="button" class="set-goals" (click)="openGoals()">
+        <span class="material-symbols-outlined target" aria-hidden="true">target</span>
+        Manage Goals
+      </button>
+    </div>
+
+    <!-- Monthly budget summary, displayed below the charts. -->
     <div class="totals-and-remaining">
       <div class="total-budget">
         <span class="material-symbols-outlined attach-money">attach_money</span>

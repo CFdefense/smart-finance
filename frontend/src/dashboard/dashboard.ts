@@ -35,6 +35,59 @@ export class UserDashboard implements OnInit, OnDestroy {
 
   // Connected financial accounts.
   readonly accounts = signal<PlaidAccount[]>([]);
+
+  /**
+   * Calculate net worth using the connected Plaid accounts.
+   *
+   * Plaid reports balances differently depending on account type:
+   * - Depository and investment: balances are assets.
+   * - Credit and loan: balances are debts (liabilities).
+   *
+   * Only USD accounts with available balances are included.
+   * Unknown types/currencies are skipped rather than guessed.
+   *
+   * This represents linked-account net worth, not necessarily
+   * the user's complete financial net worth.
+   */
+  readonly netWorthSummary = computed(() => {
+    let assets = 0;
+    let liabilities = 0;
+    let included = 0;
+    let excluded = 0;
+
+    for (const account of this.accounts()) {
+      const balance = account.current_balance;
+      const type = account.account_type.toLowerCase();
+      const currency = account.currency_code?.toUpperCase();
+
+      // Ignore missing balances, unsupported currencies, and
+      // non-finite values to avoid misleading calculations.
+      if (balance === null || !Number.isFinite(balance) || currency !== 'USD') {
+        excluded++;
+        continue;
+      }
+
+      if (type === 'depository' || type === 'investment') {
+        assets += balance;
+        included++;
+      } else if (type === 'credit' || type === 'loan') {
+        liabilities += balance;
+        included++;
+      } else {
+        // Some account types don't have clear balance semantics.
+        excluded++;
+      }
+    }
+
+    return {
+      amount: assets - liabilities,
+      assets,
+      liabilities,
+      included,
+      excluded,
+    };
+  });
+
   readonly accountsLoading = signal(true);
   readonly accountsError = signal(false);
 
