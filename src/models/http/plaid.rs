@@ -49,6 +49,33 @@ pub struct AccountsResponse {
     pub accounts: Vec<AccountResponse>,
 }
 
+/// One recorded daily value of a user's linked-account net worth.
+///
+/// We store the total as well as the number of accounts
+/// included or excluded from that calculation.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct NetWorthSnapshot {
+    /// Calendar date when the snapshot was recorded.
+    pub snapshot_date: NaiveDate,
+
+    /// Linked-account assets minus liabilities, in USD.
+    pub amount: f64,
+
+    /// Number of supported accounts used in this snapshot.
+    pub included_accounts: i32,
+
+    /// Accounts skipped due to unsupported type, currency,
+    /// or unavailable balance.
+    pub excluded_accounts: i32,
+}
+
+/// Response containing the authenticated user's history.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct NetWorthHistoryResponse {
+    /// Historical values in chronological order.
+    pub snapshots: Vec<NetWorthSnapshot>,
+}
+
 /// Singular Plaid financial account.
 ///
 /// Also the account model returned by [`crate::plaid::client::PlaidClient::get_accounts`].

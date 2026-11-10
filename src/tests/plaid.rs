@@ -385,6 +385,90 @@ async fn get_transactions_filters_by_account() {
     cleanup(&pool, &email).await;
 }
 
+/// Verify daily net-worth snapshots and user-data isolation.
+///
+/// We test that:
+/// 1. A new user initially has no recorded history.
+/// 2. Fetching connected accounts records net worth.
+/// 3. Repeated fetches do not create duplicate daily rows.
+/// 4. A different user cannot read those snapshots.
+#[tokio::test]
+async fn net_worth_history_records_daily_snapshots() {
+    let app = test_app().await;
+    let pool = test_pool().await;
+
+    let email_a = unique_email("net_worth_a");
+    let email_b = unique_email("net_worth_b");
+
+    // Create two separate authenticated users.
+    let cookie_a = authenticated_cookie(app.clone(), &email_a).await;
+    let cookie_b = authenticated_cookie(app.clone(), &email_b).await;
+
+    // Give user A a unique mocked Plaid connection.
+    let user_a_id: i32 = sqlx::query_scalar("SELECT id FROM users WHERE email = $1")
+        .bind(&email_a)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    let public_token = format!("public-history-{user_a_id}");
+
+    let (status, _) = call(
+        &app,
+        "POST",
+        "/api/plaid/exchange-token",
+        &cookie_a,
+        Some(json!({ "public_token": public_token })),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+
+    // Before loading accounts, there should be no history.
+    let (status, history) =
+        call(&app, "GET", "/api/plaid/net-worth/history", &cookie_a, None).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(history["snapshots"].as_array().unwrap().len(), 0);
+
+    // The mock returns one USD checking account with $100.
+    // Loading accounts should create today's snapshot.
+    let (status, _) = call(&app, "GET", "/api/plaid/accounts", &cookie_a, None).await;
+
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, history) =
+        call(&app, "GET", "/api/plaid/net-worth/history", &cookie_a, None).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(history["snapshots"].as_array().unwrap().len(), 1);
+    assert_eq!(history["snapshots"][0]["amount"], 100.0);
+    assert_eq!(history["snapshots"][0]["included_accounts"], 1);
+
+    // Loading the same account again should update today's
+    // existing snapshot, not insert a duplicate.
+    let (status, _) = call(&app, "GET", "/api/plaid/accounts", &cookie_a, None).await;
+
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, history) =
+        call(&app, "GET", "/api/plaid/net-worth/history", &cookie_a, None).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(history["snapshots"].as_array().unwrap().len(), 1);
+
+    // User B must not have access to User A's history.
+    let (status, other_history) =
+        call(&app, "GET", "/api/plaid/net-worth/history", &cookie_b, None).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(other_history["snapshots"].as_array().unwrap().len(), 0);
+
+    // Remove temporary users and their related data.
+    cleanup(&pool, &email_a).await;
+    cleanup(&pool, &email_b).await;
+}
+
 // ─── Data-isolation test ──────────────────────────────────────────────────────
 
 #[tokio::test]
