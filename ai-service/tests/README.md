@@ -19,21 +19,42 @@ Three LLM graders then judge the response: **adherence**, **accuracy** and **goa
 
 ### Prerequisites
 
-- Node >= 22.22, `cargo`, `sqlx-cli`, `uv`, and Postgres running (`docker compose up -d db`).
-- `.env` (repo root) with `DATABASE_URL`, `OPENAI_API_KEY`, `PLAID_CLIENT_ID`, `PLAID_SECRET`,
-  `PLAID_ENV=sandbox`. Optional: `AGENT_MODEL` (the agent under test) and `EVAL_JUDGE_MODEL` (the
-  grader); both default to `gpt-4.1`. The `DATABASE_URL` role must be allowed to create and drop
-  databases, and the URL must be a plain `postgres://user:pw@host:port/db` (no `?dbname=` override).
-- From `ai-service/`: `uv sync`
-- From `ai-service/tests/`: `npm install`
+Ensure you have Node >= 22.22, `cargo`, `sqlx-cli`, `uv`, and Docker installed.
+
+1. **Environment variables:** Ensure your `.env` (in the repo root) has:
+   - `DATABASE_URL` (plain `postgres://user:pw@host:port/db` with permissions to create and drop databases)
+   - `OPENAI_API_KEY`
+   - `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV=sandbox`
+   - *Optional:* `AGENT_MODEL` (agent under test) and `EVAL_JUDGE_MODEL` (grader LLM); both default to `gpt-4.1`.
+
+2. **Setup and Install:**
+
+```bash
+# 1. Start Postgres (from repo root)
+docker compose up -d db
+
+# 2. Set up Python environment & dependencies
+cd ai-service
+uv sync
+
+# 3. Install promptfoo locally
+cd tests
+npm install
+```
 
 ### Run the evals
 
 ```bash
 cd ai-service/tests
-npm run eval                                  # every file in evals/
-npm run eval -- --filter-pattern "Best Buy"   # only tests whose description matches
-npm run view                                  # browse the last results in a browser
+
+# Run every test in evals/
+npm run eval
+
+# Run a specific test matching a description
+npm run eval -- --filter-pattern "Best Buy"
+
+# Launch the web UI to inspect scores & judge reasoning
+npm run view
 ```
 
 `promptfoo eval` exits non-zero when any test fails. Do not run two evals at once: the start of each
