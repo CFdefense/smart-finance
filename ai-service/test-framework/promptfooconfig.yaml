@@ -5,6 +5,9 @@ prompts:
 providers:
   - id: file://provider.py
     label: smart-finance-agent
+    # timeout (ms) covers a cold first test (migrations + cargo build + Plaid seeding); one worker
+    # stops `-j N` from racing several workers on the same persona DB.
+    config: { timeout: 900000, workers: 1 }
 extensions:
   - file://hooks.py:on_event
 evaluateOptions:

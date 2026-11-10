@@ -14,6 +14,7 @@ from urllib.parse import urlsplit, urlunsplit
 import psycopg
 from dotenv import find_dotenv, load_dotenv
 from psycopg import sql
+from psycopg.conninfo import conninfo_to_dict
 
 from definition import DefinitionError, EvalCase
 
@@ -50,14 +51,26 @@ def db_name(eval_id: str, email: str) -> str:
 
 
 def database_url(url: str, name: str) -> str:
-    """Return `url` pointed at database `name`."""
-    return urlunsplit(urlsplit(url)._replace(path=f"/{name}"))
+    """Return `url` pointed at database `name`, or raise if libpq would resolve elsewhere."""
+    out = urlunsplit(urlsplit(url)._replace(path=f"/{name}"))
+    if conninfo_to_dict(out).get("dbname") != name:
+        raise ValueError(
+            "DATABASE_URL must be a plain postgres://user:pw@host:port/db URL "
+            "without a `dbname` override in its query string"
+        )
+    return out
 
 
 def _check(name: str) -> None:
     """Refuse any name that is not an eval database, so the real one is never touched."""
     if not name.startswith(PREFIX):
         raise ValueError(f"{name!r} is not an eval database (must start with {PREFIX})")
+
+
+def _check_url(url: str) -> None:
+    """Refuse any URL whose resolved database is not an eval database."""
+    if not (conninfo_to_dict(url).get("dbname") or "").startswith(PREFIX):
+        raise ValueError(f"URL does not resolve to an eval database (must start with {PREFIX})")
 
 
 def _create(admin: str, name: str) -> None:
@@ -76,7 +89,7 @@ def _drop(admin: str, name: str) -> None:
 
 def drop_databases(admin: str, eval_id: str | None = None) -> list[str]:
     """Drop the eval databases of one run (or every eval database) and return their names."""
-    prefix = PREFIX + (run_key(eval_id) + "_" if eval_id else "")
+    prefix = PREFIX + (run_key(eval_id) + "_" if eval_id is not None else "")
     pattern = prefix.replace("_", r"\_") + "%"
     with psycopg.connect(admin, autocommit=True) as conn:
         rows = conn.execute(
@@ -97,11 +110,13 @@ def _run(cmd: list[str], **kwargs) -> None:
 
 
 def _migrate(url: str) -> None:
+    _check_url(url)
     _run(["sqlx", "migrate", "run", "--source", str(MIGRATIONS), "--database-url", url])
 
 
 def _seed(url: str, persona: dict) -> None:
     """Seed only `persona` from Plaid into the eval database using the existing binary."""
+    _check_url(url)
     _run(["cargo", "build", "--bin", "seed-sandbox"], cwd=REPO)
     with tempfile.TemporaryDirectory() as tmp:
         fixtures = Path(tmp) / "persona.json"
@@ -131,6 +146,7 @@ def ensure_persona(admin: str, eval_id: str, persona: dict) -> PersonaDb:
     """Return the run's seeded database for `persona`, building it on first use."""
     name = db_name(eval_id, persona["email"])
     url = database_url(admin, name)
+    _check_url(url)
     user_id = _user_id(url, persona["email"])
     if user_id is None:
         _drop(admin, name)
@@ -151,6 +167,7 @@ def ensure_persona(admin: str, eval_id: str, persona: dict) -> PersonaDb:
 
 def account_ids(url: str, user_id: int) -> dict[str, str]:
     """Return the user's accounts as {account name: Plaid account id}."""
+    _check_url(url)
     with psycopg.connect(url) as conn:
         rows = conn.execute(
             "SELECT a.name, a.account_id FROM plaid_accounts a "
@@ -172,6 +189,7 @@ def resolve_account(accounts: dict[str, str], name: str) -> str:
 
 def reset(url: str, user_id: int, case: EvalCase, accounts: dict[str, str]) -> None:
     """Replace the user's goals, budgets, rules and analyses with the test's definitions."""
+    _check_url(url)
     today = date.today()
     with psycopg.connect(url) as conn:
         for table in ("budgets", "rules", "goals", "transaction_analyses"):

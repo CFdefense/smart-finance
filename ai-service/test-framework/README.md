@@ -81,4 +81,6 @@ failed grade.
   transactions), so chat tests should not expect rule recall. The analyze agent does receive rules.
 - The code is in this folder as flat modules (`definition`, `evaldb`, `facts`, `runner`, `judge`,
   `graders`, `provider`, `hooks`) and is unit-tested from `ai-service/tests/unit/test_eval_*.py`.
+- The provider is pinned to a single worker with a 15 minute timeout so the first (cold) run can
+  finish seeding.
 - Evals cost LLM calls and need Plaid credentials, so they are not part of CI.

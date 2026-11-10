@@ -13,6 +13,7 @@ from definition import DefinitionError, parse
 PERSONA = {"email": "christian@test.com", "first_name": "Christian"}
 PERSONAS = {PERSONA["email"]: PERSONA}
 ADMIN = "postgres://postgres:postgres@localhost:5432/smart_finance"
+EVAL_URL = "postgres://x/smartfinance_eval_ab_x"
 ACCOUNTS = {"TD Bank Student Checking": "acc_1", "Discover it Student": "acc_2"}
 
 
@@ -106,6 +107,24 @@ def test_database_url_swaps_only_the_database():
     )
 
 
+def test_database_url_rejects_a_dbname_override_to_the_real_database():
+    """A `dbname` query parameter would beat the path, so the real database is refused."""
+    url = ADMIN + "?dbname=smart_finance&sslmode=require"
+
+    with pytest.raises(ValueError, match="dbname") as err:
+        evaldb.database_url(url, "smartfinance_eval_ab_x")
+    assert "postgres:postgres" not in str(err.value)
+
+
+def test_database_url_allows_a_dbname_override_equal_to_the_eval_name():
+    """A `dbname` that already names the eval database is harmless."""
+    url = ADMIN + "?dbname=smartfinance_eval_ab_x&sslmode=require"
+
+    out = evaldb.database_url(url, "smartfinance_eval_ab_x")
+
+    assert out.endswith("/smartfinance_eval_ab_x?dbname=smartfinance_eval_ab_x&sslmode=require")
+
+
 def test_create_and_drop_quote_the_name(conn):
     """CREATE/DROP use a quoted identifier."""
     evaldb._create(ADMIN, "smartfinance_eval_ab_x")
@@ -140,6 +159,13 @@ def test_drop_databases_without_a_run_sweeps_every_eval_database(conn):
     evaldb.drop_databases(ADMIN)
 
     assert conn.calls[0][1] == ("smartfinance\\_eval\\_%",)
+
+
+def test_drop_databases_with_an_empty_run_id_is_still_run_scoped(conn):
+    """An empty eval id is a run (key of ""), not "no run", so it never sweeps everything."""
+    evaldb.drop_databases(ADMIN, "")
+
+    assert conn.calls[0][1] == (f"smartfinance\\_eval\\_{evaldb.run_key('')}\\_%",)
 
 
 def test_seed_runs_the_binary_with_only_the_chosen_persona(monkeypatch):
@@ -196,7 +222,7 @@ def test_user_id_is_none_when_the_database_is_missing(monkeypatch):
 
     monkeypatch.setattr(evaldb.psycopg, "connect", boom)
 
-    assert evaldb._user_id("postgres://x/y", "a@test.com") is None
+    assert evaldb._user_id(EVAL_URL, "a@test.com") is None
 
 
 def test_ensure_persona_reuses_a_seeded_database(monkeypatch):
@@ -243,7 +269,7 @@ def test_account_ids_maps_name_to_plaid_id(conn):
     """Account names resolve to Plaid ids."""
     conn.answers["FROM plaid_accounts"] = [("TD Bank Student Checking", "acc_1")]
 
-    assert evaldb.account_ids("postgres://x/y", 7) == {"TD Bank Student Checking": "acc_1"}
+    assert evaldb.account_ids(EVAL_URL, 7) == {"TD Bank Student Checking": "acc_1"}
 
 
 def test_resolve_account_names_the_choices_on_error():
@@ -258,7 +284,7 @@ def test_reset_clears_then_inserts_the_definitions(conn):
     conn.answers["INSERT INTO rules"] = [(5,)]
     conn.answers["SELECT COALESCE"] = [(1000.0,)]
 
-    evaldb.reset("postgres://x/y", 7, make_case(), ACCOUNTS)
+    evaldb.reset(EVAL_URL, 7, make_case(), ACCOUNTS)
 
     statements = [text.split(" (")[0].split(" WHERE")[0] for text, _ in conn.calls]
     assert statements[:4] == [
@@ -289,4 +315,37 @@ def test_reset_rejects_an_unknown_account_before_committing(conn):
     case = make_case(goals=[{"name": "G", "account": "Nope", "target_amount": 5}])
 
     with pytest.raises(DefinitionError, match="unknown account"):
-        evaldb.reset("postgres://x/y", 7, case, ACCOUNTS)
+        evaldb.reset(EVAL_URL, 7, case, ACCOUNTS)
+
+
+def test_functions_refuse_the_real_database_url_before_connecting(monkeypatch):
+    """reset, account_ids, _migrate and _seed reject a non-eval URL without any I/O."""
+    touched = []
+    monkeypatch.setattr(evaldb.psycopg, "connect", lambda *a, **k: touched.append("connect"))
+    monkeypatch.setattr(evaldb.subprocess, "run", lambda *a, **k: touched.append("run"))
+
+    with pytest.raises(ValueError, match="eval database"):
+        evaldb.reset(ADMIN, 7, make_case(), ACCOUNTS)
+    with pytest.raises(ValueError, match="eval database"):
+        evaldb.account_ids(ADMIN, 7)
+    with pytest.raises(ValueError, match="eval database"):
+        evaldb._migrate(ADMIN)
+    with pytest.raises(ValueError, match="eval database"):
+        evaldb._seed(ADMIN, PERSONA)
+    assert touched == []
+
+
+def test_check_url_follows_a_dbname_query_override():
+    """The guard looks at the database libpq would use, not just the URL path."""
+    evaldb._check_url(EVAL_URL)
+    with pytest.raises(ValueError, match="eval database"):
+        evaldb._check_url("postgres://x/smartfinance_eval_ab_x?dbname=smart_finance")
+
+
+def test_ensure_persona_checks_the_url_before_updating_users(monkeypatch):
+    """The users UPDATE step is guarded: a URL that resolves to the real database is refused."""
+    monkeypatch.setattr(evaldb, "database_url", lambda admin, name: ADMIN)
+    monkeypatch.setattr(evaldb, "_user_id", lambda url, email: pytest.fail("must not query"))
+
+    with pytest.raises(ValueError, match="eval database"):
+        evaldb.ensure_persona(ADMIN, "eval-1", PERSONA)
