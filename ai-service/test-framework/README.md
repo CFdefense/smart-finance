@@ -9,7 +9,9 @@ and an LLM judge grades the response for **adherence**, **accuracy** and **goal*
 - Node >= 22.22, `cargo`, `sqlx-cli`, `uv`, and Postgres running (`docker compose up -d db`).
 - `.env` (repo root) with `DATABASE_URL`, `OPENAI_API_KEY`, `PLAID_CLIENT_ID`, `PLAID_SECRET`,
   `PLAID_ENV=sandbox`. Optional: `AGENT_MODEL`, `EVAL_JUDGE_MODEL` (both default to `gpt-4.1`).
-- `cd ai-service && uv sync` and `cd test-framework && npm install`.
+  The `DATABASE_URL` role must be allowed to create and drop databases.
+- From `ai-service/`: `uv sync`
+- From `ai-service/test-framework/`: `npm install`
 
 ## Run
 
@@ -21,10 +23,14 @@ npm run eval -- --filter-pattern "Best Buy"   # one test
 ```
 
 Each persona is seeded from the Plaid sandbox once per run into its own throwaway database
-(`smartfinance_eval_*`), so a run needs network access and takes a minute or so to start. Your
-real database is never modified. Notifications are switched off for the persona, so no email or SMS
-is sent. Databases are dropped when the run ends; an interrupted run's leftovers are swept at the
-next start.
+(`smartfinance_eval_*`), so a run needs network access and takes a minute or so to start. The first
+run also compiles the `seed-sandbox` binary (`cargo build`), which can take a few minutes on a cold
+build. Your real database is never modified. Notifications are switched off for the persona, so no
+email or SMS is sent (results still report `notified: true` for an ALERT). Databases are dropped
+when the run ends; an interrupted run's leftovers are swept at the next start.
+
+`promptfoo eval` exits non-zero when any test fails. Do not run two evals at once: each run's start
+sweeps all `smartfinance_eval_*` databases.
 
 ## Writing a test
 
@@ -67,8 +73,12 @@ failed grade.
 ## Notes
 
 - Always run with `--no-cache` (the npm script does): a cached answer would skip the database setup.
-- Plaid's sandbox leaves every transaction category as `OTHER`, so a budget in another category
-  shows $0 spent until the persona has spending in that category.
+- The Plaid sandbox puts every transaction in category `OTHER`, so only a budget on `OTHER` ever
+  shows real spend. Budgets in other categories always show $0 spent (the `SHOPPING` / `FOOD_DINING`
+  budgets in `tests/evals/analyze.yaml` therefore cannot trip; they show the format, not test
+  budget logic).
+- The chat agent is not given the user's rules (only accounts, budgets, goals and recent
+  transactions), so chat tests should not expect rule recall. The analyze agent does receive rules.
 - The code is in this folder as flat modules (`definition`, `evaldb`, `facts`, `runner`, `judge`,
   `graders`, `provider`, `hooks`) and is unit-tested from `ai-service/tests/unit/test_eval_*.py`.
 - Evals cost LLM calls and need Plaid credentials, so they are not part of CI.
