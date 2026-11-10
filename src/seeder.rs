@@ -3,14 +3,14 @@
 //! Exposes functions to seed `PostgreSQL` with pre-configured tester users,
 //! linked Plaid institutions, financial accounts, and synchronized transactions.
 
+use crate::{error::AppError, plaid::client::PlaidClient};
 use argon2::{
     password_hash::{rand_core::OsRng, PasswordHasher, SaltString},
     Argon2,
 };
+use chrono::{Datelike, Months, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
-
-use crate::{error::AppError, plaid::client::PlaidClient};
 
 /// Represents a single tester configuration from fixtures.
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -303,4 +303,166 @@ pub async fn seed_tester_profile(
 
     result.transactions_synced = total_tx;
     Ok(result)
+}
+
+/// Adds a realistic volume of SYNTHETIC transactions to an
+/// existing sandbox tester's connected checking account.
+///
+/// This does not call Plaid or change account balances.
+/// The inserted transactions are only for dashboard testing.
+///
+/// Each transaction receives a stable, unique identifier.
+/// Re-running this function will not duplicate existing rows.
+///
+/// Returns the number of newly inserted transactions.
+///
+/// # Errors
+///
+/// Returns an AppError if a database operation fails.
+pub async fn seed_demo_transactions(pool: &PgPool, user_id: i32) -> Result<usize, AppError> {
+    // Find one existing checking/depository account for this
+    // specific user. We don't create fake Plaid connections.
+    //
+    // We deliberately avoid credit and loan accounts to
+    // prevent the demo expenses from being counted twice.
+    let account_id: Option<String> = sqlx::query_scalar(
+        r#"
+        SELECT a.account_id
+        FROM plaid_accounts a
+        JOIN plaid_links l ON l.item_id = a.item_id
+        WHERE l.user_id = $1
+          AND a.account_type = 'depository'
+        ORDER BY a.id
+        LIMIT 1
+        "#,
+    )
+    .bind(user_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(AppError::from)?;
+
+    // Without a checking/depository account, there's no safe
+    // existing account to attach demo transactions to.
+    let Some(account_id) = account_id else {
+        tracing::warn!("Skipping demo transactions: user {user_id} has no depository account");
+        return Ok(0);
+    };
+
+    // Eight spending categories, matching the Rust Category
+    // enum and the database CHECK constraint.
+    //
+    // Names and amounts vary so the dashboard charts have
+    // realistic-looking proportions rather than equal slices.
+    let merchants: [(&str, &str, f64); 16] = [
+        ("Supermarket", "GROCERIES", 68.25),
+        ("Farmers Market", "GROCERIES", 34.80),
+        ("Coffee Shop", "FOOD_DINING", 8.75),
+        ("Restaurant", "FOOD_DINING", 46.50),
+        ("Clothing Store", "SHOPPING", 82.40),
+        ("Online Retailer", "SHOPPING", 39.95),
+        ("Gas Station", "TRANSPORTATION", 42.60),
+        ("Train Ticket", "TRANSPORTATION", 18.00),
+        ("Movie Theater", "ENTERTAINMENT", 27.50),
+        ("Streaming Service", "ENTERTAINMENT", 15.99),
+        ("Electric Company", "UTILITIES", 112.00),
+        ("Internet Provider", "UTILITIES", 64.99),
+        ("Pharmacy", "HEALTHCARE", 22.35),
+        ("Doctor Copay", "HEALTHCARE", 30.00),
+        ("Pet Supplies", "OTHER", 24.90),
+        ("Household Supplies", "OTHER", 19.75),
+    ];
+
+    let today = Utc::now().date_naive();
+
+    // Always use the first of the month as the anchor.
+    // This avoids issues when subtracting months from dates
+    // like January 31 or March 31.
+    let current_month = NaiveDate::from_ymd_opt(today.year(), today.month(), 1)
+        .expect("Current calendar month must be valid");
+
+    let mut inserted = 0_usize;
+
+    // Generate up to twelve months of history:
+    // current month plus the previous eleven months.
+    for month_offset in 0..12_u32 {
+        let month = current_month
+            .checked_sub_months(Months::new(month_offset))
+            .expect("Demo month must be valid");
+
+        // Generate 32 transactions per complete month.
+        //
+        // Each merchant occurs twice, with a slightly
+        // different amount on each occurrence.
+        for index in 0..32_usize {
+            let (merchant, category, base_amount) = merchants[index % merchants.len()];
+
+            // Restrict generated dates to days 1 through 28.
+            // Those days exist in every calendar month.
+            let day = (index % 28 + 1) as u32;
+
+            let date = NaiveDate::from_ymd_opt(month.year(), month.month(), day)
+                .expect("Day 1 through 28 must be valid");
+
+            // Don't create transactions dated in the future.
+            if date > today {
+                continue;
+            }
+
+            // Deterministic variation makes consecutive
+            // transactions more realistic and makes repeat
+            // runs reproducible.
+            let variation = 1.0 + ((index * 7 + month_offset as usize) % 11) as f64 / 100.0;
+
+            let amount = (base_amount * variation * 100.0).round() / 100.0;
+
+            // Unique per user, month, and transaction index.
+            //
+            // The prefix clearly distinguishes our synthetic
+            // test data from genuine Plaid transaction IDs.
+            let transaction_id = format!(
+                "smart-finance-demo-v1-{user_id}-{:04}{:02}-{index:02}",
+                month.year(),
+                month.month(),
+            );
+
+            // Use a SQL transaction ID conflict check so
+            // re-running the generator never duplicates rows.
+            //
+            // category_overridden = TRUE prevents the Plaid
+            // category synchronization logic from replacing
+            // these intentional demonstration categories.
+            let result = sqlx::query(
+                r#"
+                INSERT INTO plaid_transactions
+                    (
+                        transaction_id,
+                        account_id,
+                        name,
+                        amount,
+                        date,
+                        pending,
+                        category,
+                        category_overridden
+                    )
+                VALUES ($1, $2, $3, $4, $5, FALSE, $6, TRUE)
+                ON CONFLICT (transaction_id) DO NOTHING
+                "#,
+            )
+            .bind(transaction_id)
+            .bind(&account_id)
+            .bind(merchant)
+            .bind(amount)
+            .bind(date)
+            .bind(category)
+            .execute(pool)
+            .await
+            .map_err(AppError::from)?;
+
+            // rows_affected() is 1 for a new insertion and
+            // 0 when this transaction already exists.
+            inserted += result.rows_affected() as usize;
+        }
+    }
+
+    Ok(inserted)
 }

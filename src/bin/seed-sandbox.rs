@@ -10,7 +10,7 @@ use std::path::Path;
 use smart_finance::{
     db,
     plaid::client::PlaidClient,
-    seeder::{seed_tester_profile, TesterFixture},
+    seeder::{seed_demo_transactions, seed_tester_profile, TesterFixture},
 };
 
 #[tokio::main]
@@ -21,6 +21,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 1. Parse command-line arguments
     let args: Vec<String> = env::args().collect();
     let reset = args.iter().any(|arg| arg == "--reset" || arg == "-r");
+
+    // Optional synthetic transaction generation.
+    //
+    // Unlike --reset, this adds test transactions without
+    // deleting existing accounts, users, or transactions.
+    let demo_transactions = args.iter().any(|arg| arg == "--demo-transactions");
+
     let fixtures_path = args
         .windows(2)
         .find(|w| w[0] == "--fixtures")
@@ -50,6 +57,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if plaid_env != "sandbox" && !args.iter().any(|arg| arg == "--force") {
         eprintln!("Safety error: PLAID_ENV is not set to 'sandbox' (found '{plaid_env}').");
         eprintln!("Use --force if you intentionally wish to proceed.");
+        std::process::exit(1);
+    }
+
+    // ------------------------------------------------------------
+    // SAFETY CHECKS FOR SYNTHETIC DEMO TRANSACTIONS
+    // ------------------------------------------------------------
+
+    // Synthetic dashboard fixtures must never be written
+    // while the application is configured for production.
+    //
+    // This restriction applies even if someone uses --force.
+    if demo_transactions && plaid_env != "sandbox" {
+        eprintln!("Safety error: demo transactions require PLAID_ENV=sandbox.");
+        std::process::exit(1);
+    }
+
+    // Avoid accidentally deleting existing sandbox users
+    // when the intention is only to add demo transactions.
+    if demo_transactions && reset {
+        eprintln!("Safety error: do not combine --demo-transactions with --reset.");
         std::process::exit(1);
     }
 
@@ -88,11 +115,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 println!("  User exists (id={}).", res.user_id);
             }
+
             println!("  Linked bank connection (item_id={}).", res.item_id);
             println!("  Saved {} account(s).", res.accounts_saved);
             println!("  Synced {} transaction(s).", res.transactions_synced);
         }
+
+        // --------------------------------------------------------
+        // ADD SYNTHETIC TRANSACTIONS WHEN REQUESTED
+        // --------------------------------------------------------
+        //
+        // This code runs for BOTH existing and newly seeded users.
+        //
+        // That is important because seed_tester_profile() normally
+        // skips users who already have linked Plaid accounts.
+        //
+        // We want to add more transactions WITHOUT resetting
+        // existing tester accounts.
+        if demo_transactions {
+            let count = seed_demo_transactions(&pool, res.user_id).await?;
+
+            println!("  Added {count} synthetic transactions for dashboard testing.");
+        }
     }
+
+    // 6. Print completion banner
 
     println!("\n==================================================");
     println!("✓ Sandbox seeding completed successfully!");

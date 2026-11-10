@@ -6,10 +6,19 @@ use argon2::{
 };
 
 use super::fixtures::{cleanup, mock_plaid_url, test_pool, unique_email};
+
+use tokio::sync::Mutex;
+
+/// Prevent these two seeder integration tests from using
+/// their shared mock Plaid identifiers simultaneously.
+///
+/// Other unrelated Rust tests can still run concurrently.
+static SEEDER_TEST_LOCK: Mutex<()> = Mutex::const_new(());
+
 use crate::{
     models::http::user::SignupRequest,
     plaid::client::PlaidClient,
-    seeder::{hash_password, seed_tester_profile, TesterFixture},
+    seeder::{hash_password, seed_demo_transactions, seed_tester_profile, TesterFixture},
 };
 
 #[test]
@@ -89,7 +98,12 @@ fn test_sandbox_fixtures_validity() {
 
 #[tokio::test]
 async fn test_seed_tester_profile_lifecycle() {
+    // Hold this lock throughout the test so the demo
+    // transaction test cannot modify shared mock state.
+    let _guard = SEEDER_TEST_LOCK.lock().await;
+
     let pool = test_pool().await;
+
     let plaid = PlaidClient::with_base_url(mock_plaid_url());
     let email = unique_email("seed_test");
 
@@ -133,5 +147,80 @@ async fn test_seed_tester_profile_lifecycle() {
     assert_eq!(res_reset.accounts_saved, 1);
 
     // Clean up
+    cleanup(&pool, &email).await;
+}
+
+/// Verify that synthetic dashboard transactions are generated
+/// successfully without duplicating data on repeated runs.
+
+#[tokio::test]
+async fn test_demo_transactions_are_repeatable() {
+    // Run after or before the lifecycle test, never
+    // simultaneously, to avoid shared Plaid mock collisions.
+    let _guard = SEEDER_TEST_LOCK.lock().await;
+
+    let pool = test_pool().await;
+
+    // Use our existing mocked Plaid server.
+    // No real financial institution is contacted.
+    let plaid = PlaidClient::with_base_url(mock_plaid_url());
+
+    // Generate a unique test account to prevent conflicts
+    // with other automated tests.
+    let email = unique_email("demo_transactions");
+
+    let tester = TesterFixture {
+        email: email.clone(),
+        first_name: "Demo".to_string(),
+        last_name: "Tester".to_string(),
+        password: "Password123".to_string(),
+        institution_id: "ins_109508".to_string(),
+        sandbox_username: "custom_test".to_string(),
+        sandbox_password: "pass_good".to_string(),
+    };
+
+    // Create the test user and their sandbox bank account.
+    let seeded = seed_tester_profile(&pool, &plaid, &tester, false)
+        .await
+        .expect("Sandbox tester setup should succeed");
+
+    // First run: synthetic transactions should be inserted.
+    let first_count = seed_demo_transactions(&pool, seeded.user_id)
+        .await
+        .expect("First demo seed should succeed");
+
+    assert!(
+        first_count > 0,
+        "Expected synthetic transactions to be inserted"
+    );
+
+    // Second run: all synthetic transaction IDs already exist,
+    // so no new rows should be inserted.
+    let second_count = seed_demo_transactions(&pool, seeded.user_id)
+        .await
+        .expect("Second demo seed should succeed");
+
+    assert_eq!(second_count, 0);
+
+    // Verify all eight supported spending categories
+    // are represented in the generated transactions.
+    let category_count = sqlx::query_scalar::<_, i64>(
+        r#"
+        SELECT COUNT(DISTINCT t.category)
+        FROM plaid_transactions t
+        JOIN plaid_accounts a ON a.account_id = t.account_id
+        JOIN plaid_links l ON l.item_id = a.item_id
+        WHERE l.user_id = $1
+          AND t.transaction_id LIKE 'smart-finance-demo-v1-%'
+        "#,
+    )
+    .bind(seeded.user_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(category_count, 8);
+
+    // Remove this temporary user and all related test data.
     cleanup(&pool, &email).await;
 }
