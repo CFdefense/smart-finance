@@ -44,7 +44,8 @@ Evals cost LLM calls and need Plaid credentials, so they are **not** part of CI.
 ### Write an eval
 
 Add an entry to a file in `evals/` (or create a new `*.yaml` file there; every file in the
-folder is picked up). Each entry is one test:
+folder is picked up). Name files `NN_<analyze|chat>_<testname>.yaml` (for example
+`02_analyze_bestbuy.yaml`), one test per file. Each entry is one test:
 
 ```yaml
 - description: Best Buy purchase breaks the $200 rule
