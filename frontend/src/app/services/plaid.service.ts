@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 
@@ -26,6 +26,36 @@ export interface PlaidAccount {
 /** Response from GET /api/plaid/accounts. */
 export interface PlaidAccountsResponse {
   accounts: PlaidAccount[];
+}
+
+/**
+ * A single transaction returned by our Rust API.
+ *
+ * Positive amounts represent money leaving the account.
+ * Negative amounts generally represent incoming money or credits.
+ */
+export interface PlaidTransaction {
+  transaction_id: string;
+  account_id: string;
+  name: string;
+  amount: number;
+  date: string;
+  pending: boolean;
+  category: string;
+}
+
+/**
+ * A paginated collection of transactions.
+ *
+ * total: All transactions matching the account filter.
+ * limit: Maximum number returned in this request.
+ * offset: Number of records skipped.
+ */
+export interface PlaidTransactionsResponse {
+  transactions: PlaidTransaction[];
+  total: number | null;
+  limit: number;
+  offset: number;
 }
 
 /** Response containing the temporary token used to open Plaid Link. */
@@ -63,6 +93,36 @@ export class PlaidService {
    */
   getAccounts(): Observable<PlaidAccountsResponse> {
     return this.http.get<PlaidAccountsResponse>(`${this.baseUrl}/accounts`, {
+      withCredentials: true,
+    });
+  }
+
+  /**
+   * Retrieve transactions for one account, or all accounts.
+   *
+   * The backend validates ownership, so the caller cannot
+   * retrieve another user's transactions by guessing an ID.
+   *
+   * Defaults:
+   * - 20 transactions per page.
+   * - First page (offset 0).
+   *
+   * We let HttpParams handle query-string encoding.
+   */
+  getTransactions(
+    accountId?: string,
+    limit = 20,
+    offset = 0,
+  ): Observable<PlaidTransactionsResponse> {
+    let params = new HttpParams().set('limit', limit).set('offset', offset);
+
+    // An omitted accountId requests transactions from all accounts.
+    if (accountId !== undefined) {
+      params = params.set('account_id', accountId);
+    }
+
+    return this.http.get<PlaidTransactionsResponse>(`${this.baseUrl}/transactions`, {
+      params,
       withCredentials: true,
     });
   }

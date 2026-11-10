@@ -473,9 +473,11 @@ pub async fn api_plaid_sync_transactions(
     summary = "Retrieves the user's synchronized transactions",
     description = "Returns previously synchronized transactions for the authenticated user's linked financial institutions. Supports filtering and pagination without making a new Plaid API request for every read.",
     params(
+        ("account_id" = Option<String>, Query, description = "Optional Plaid account ID"),
         ("limit" = Option<i64>, Query, description = "Maximum number of transactions to return"),
         ("offset" = Option<i64>, Query, description = "Number of transactions to skip")
     ),
+
     responses(
         (status = 200, description = "Transactions retrieved successfully", body = TransactionsResponse),
         (status = 401, description = "User is not authenticated"),
@@ -506,8 +508,16 @@ pub async fn api_plaid_get_transactions(
     // Cap the page size to protect the database.
     let limit = limit.min(200);
 
-    // Fetch one page of transactions, newest first. Ownership is enforced by
-    // joining transactions -> accounts -> links and filtering on the user id.
+    // Retrieve transactions belonging to the authenticated user.
+    //
+    // The account_id filter is optional:
+    // - None: Return transactions from all the user's accounts.
+    // - Some(id): Return transactions only from the selected account.
+    //
+    // IMPORTANT:
+    // We still join through plaid_links and verify user.id.
+    // Someone cannot access another user's transactions simply
+    // by passing a different account_id in the URL.
     let transactions = sqlx::query_as!(
         TransactionResponse,
         r#"
@@ -520,31 +530,42 @@ pub async fn api_plaid_get_transactions(
             t.pending,
             t.category
         FROM plaid_transactions t
-        JOIN plaid_accounts a ON a.account_id = t.account_id
-        JOIN plaid_links i ON i.item_id = a.item_id
+        JOIN plaid_accounts a
+            ON a.account_id = t.account_id
+        JOIN plaid_links i
+            ON i.item_id = a.item_id
         WHERE i.user_id = $1
+          AND ($4::TEXT IS NULL OR t.account_id = $4)
         ORDER BY t.date DESC, t.id DESC
         LIMIT $2 OFFSET $3
         "#,
         user.id,
         limit,
-        offset
+        offset,
+        params.account_id.as_deref()
     )
     .fetch_all(&pool)
     .await
     .map_err(AppError::from)?;
 
-    // Count all of the user's transactions (ignoring limit/offset) so clients
-    // can paginate.
+    // Count matching transactions before pagination.
+    //
+    // The same optional account filter must be applied here.
+    // Otherwise, the frontend could display the wrong number
+    // of pages when someone selects an individual account.
     let total: Option<i64> = sqlx::query_scalar!(
         r#"
         SELECT COUNT(*)
         FROM plaid_transactions t
-        JOIN plaid_accounts a ON a.account_id = t.account_id
-        JOIN plaid_links i ON i.item_id = a.item_id
+        JOIN plaid_accounts a
+            ON a.account_id = t.account_id
+        JOIN plaid_links i
+            ON i.item_id = a.item_id
         WHERE i.user_id = $1
+          AND ($2::TEXT IS NULL OR t.account_id = $2)
         "#,
-        user.id
+        user.id,
+        params.account_id.as_deref()
     )
     .fetch_one(&pool)
     .await

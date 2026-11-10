@@ -53,6 +53,157 @@
       </button>
     </div>
 
+    <!--
+  Connected financial accounts.
+
+  The selected account expands to show its transactions.
+  This section will eventually sit immediately below the
+  net-worth summary in our completed dashboard.
+-->
+    <section class="dashboard-accounts" aria-labelledby="accounts-heading">
+      <div class="accounts-heading">
+        <div>
+          <h2 id="accounts-heading">Connected Accounts</h2>
+          <p>Select an account to view its transactions.</p>
+        </div>
+
+        <span class="material-symbols-outlined" aria-hidden="true">account_balance</span>
+      </div>
+
+      <!-- Accounts have their own loading and error states. -->
+      @if (accountsLoading()) {
+        <p class="accounts-message">Loading connected accounts...</p>
+      } @else if (accountsError()) {
+        <div class="accounts-message" role="alert">
+          <p>Unable to retrieve connected accounts.</p>
+          <button type="button" (click)="loadAccounts()">Try Again</button>
+        </div>
+      } @else if (accounts().length === 0) {
+        <p class="accounts-message">
+          No bank accounts connected yet. Connect a bank through your Profile page to get started.
+        </p>
+      } @else {
+        <!-- One expandable card for every linked financial account. -->
+        <div class="account-list">
+          @for (account of accounts(); track account.account_id) {
+            <article class="account-card">
+              <!--
+            A real button makes the account selectable using
+            either a mouse or keyboard.
+          -->
+              <button
+                type="button"
+                class="account-select"
+                [attr.aria-expanded]="selectedAccountId() === account.account_id"
+                (click)="selectAccount(account.account_id)">
+                <div class="account-information">
+                  <strong>{{ account.name }}</strong>
+
+                  <span class="account-description">
+                    {{ account.institution_name || 'Connected bank' }}
+
+                    @if (account.mask) {
+                      ·•••• {{ account.mask }}
+                    }
+                  </span>
+                </div>
+
+                <div class="account-value">
+                  <!-- A null balance is not the same as $0. -->
+                  @if (account.current_balance !== null) {
+                    <strong>{{ account.current_balance | currency }}</strong>
+                  } @else {
+                    <strong>Unavailable</strong>
+                  }
+
+                  <span class="material-symbols-outlined" aria-hidden="true">
+                    {{ selectedAccountId() === account.account_id ? 'expand_less' : 'expand_more' }}
+                  </span>
+                </div>
+              </button>
+
+              <!-- Show transactions only for the expanded account. -->
+              @if (selectedAccountId() === account.account_id) {
+                <div class="account-transactions">
+                  <h3>Transactions</h3>
+
+                  @if (transactionsLoading()) {
+                    <p class="accounts-message">Loading transactions...</p>
+                  } @else if (transactionsError()) {
+                    <div role="alert" class="accounts-message">
+                      <p>Unable to load transactions for this account.</p>
+                      <button type="button" (click)="loadTransactions()">Retry</button>
+                    </div>
+                  } @else if (transactions().length === 0) {
+                    <p class="accounts-message">No transactions found for this account.</p>
+                  } @else {
+                    <!--
+                  Display the most useful transaction information.
+                  Positive Plaid amounts represent spending.
+                -->
+                    <div class="transaction-list">
+                      @for (transaction of transactions(); track transaction.transaction_id) {
+                        <div class="transaction-row">
+                          <div class="transaction-details">
+                            <strong>{{ transaction.name }}</strong>
+
+                            <span class="transaction-description">
+                              {{ transaction.date }}
+                              · {{ categoryLabel(transaction.category) }}
+
+                              @if (transaction.pending) {
+                                · Pending
+                              }
+                            </span>
+                          </div>
+
+                          <strong
+                            class="transaction-amount"
+                            [class.incoming]="transaction.amount < 0">
+                            @if (transaction.amount > 0) {
+                              -
+                            } @else if (transaction.amount < 0) {
+                              +
+                            }
+
+                            {{
+                              (transaction.amount < 0 ? -transaction.amount : transaction.amount)
+                                | currency
+                            }}
+                          </strong>
+                        </div>
+                      }
+                    </div>
+
+                    <!-- Pagination controls -->
+                    <div class="transaction-pagination">
+                      <span>Page {{ transactionPage() + 1 }} of {{ totalTransactionPages() }}</span>
+
+                      <div class="pagination-buttons">
+                        <button
+                          type="button"
+                          (click)="previousTransactionPage()"
+                          [disabled]="transactionsLoading() || transactionPage() === 0">
+                          Previous
+                        </button>
+
+                        <button
+                          type="button"
+                          (click)="nextTransactionPage()"
+                          [disabled]="transactionsLoading() || !hasNextTransactionPage()">
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  }
+                </div>
+              }
+            </article>
+          }
+        </div>
+      }
+    </section>
+
     <div class="totals-and-remaining">
       <div class="total-budget">
         <span class="material-symbols-outlined attach-money">attach_money</span>

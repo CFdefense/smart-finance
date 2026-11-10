@@ -544,3 +544,222 @@
 .logout-option:hover {
   background-color: #f3f4f6;
 }
+
+/*
+ * Dashboard connected accounts.
+ *
+ * Keep the section centered and responsive.
+ * These styles are scoped to the new account components,
+ * so existing budget and profile styles remain intact.
+ */
+.dashboard-accounts {
+  width: min(1100px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 24px;
+  box-sizing: border-box;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  box-shadow: 0 4px 18px rgba(15, 23, 42, 0.06);
+}
+
+.accounts-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 22px;
+}
+
+.accounts-heading h2 {
+  margin: 0 0 6px;
+  font-size: 1.35rem;
+  color: #1f2937;
+}
+
+.accounts-heading p {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+.accounts-heading > .material-symbols-outlined {
+  font-size: 30px;
+  color: #6284e2;
+}
+
+.account-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.account-card {
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.account-select {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 18px 20px;
+  gap: 16px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.account-select:hover {
+  background: #f8faff;
+}
+
+.account-select:focus-visible,
+.dashboard-accounts button:focus-visible {
+  outline: 3px solid #6284e2;
+  outline-offset: -3px;
+}
+
+.account-information,
+.transaction-details {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 5px;
+}
+
+.account-information strong,
+.transaction-details strong {
+  overflow-wrap: anywhere;
+  color: #1f2937;
+  font-size: 0.98rem;
+}
+
+.account-description,
+.transaction-description {
+  font-size: 0.84rem;
+  color: #64748b;
+}
+
+.account-value {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+  color: #1f2937;
+  white-space: nowrap;
+}
+
+.account-value .material-symbols-outlined {
+  color: #64748b;
+}
+
+/*
+ * Expanded transaction area.
+ */
+.account-transactions {
+  padding: 20px;
+  border-top: 1px solid #e2e8f0;
+  background: #fbfcff;
+}
+
+.account-transactions h3 {
+  margin: 0 0 15px;
+  font-size: 1rem;
+  color: #334155;
+}
+
+.transaction-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.transaction-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  padding: 13px 0;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.transaction-amount {
+  flex-shrink: 0;
+  color: #334155;
+  font-size: 0.95rem;
+}
+
+.transaction-amount.incoming {
+  color: #16805d;
+}
+
+.transaction-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 20px;
+  color: #64748b;
+  font-size: 0.875rem;
+}
+
+.pagination-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.pagination-buttons button,
+.accounts-message button {
+  padding: 8px 14px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  color: #334155;
+  cursor: pointer;
+}
+
+.pagination-buttons button:hover:not(:disabled),
+.accounts-message button:hover {
+  background: #eef2ff;
+}
+
+.pagination-buttons button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.accounts-message {
+  padding: 12px 0;
+  color: #64748b;
+}
+
+/*
+ * Keep account balances and transaction rows readable
+ * on phones and smaller browser windows.
+ */
+@media (max-width: 600px) {
+  .dashboard-accounts {
+    width: calc(100% - 24px);
+    padding: 16px;
+  }
+
+  .account-select {
+    padding: 14px;
+  }
+
+  .account-value {
+    gap: 6px;
+  }
+
+  .account-transactions {
+    padding: 14px;
+  }
+
+  .transaction-pagination {
+    flex-wrap: wrap;
+  }
+}

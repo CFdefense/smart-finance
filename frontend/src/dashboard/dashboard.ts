@@ -4,6 +4,13 @@ import { AuthService } from '../app/services/auth.service';
 import { ProfileService } from '../app/services/profile.service';
 import { BudgetService, type Budget } from '../app/services/budget.service';
 import { CurrencyPipe } from '@angular/common';
+import {
+  PlaidService,
+  type PlaidAccount,
+  type PlaidTransaction,
+} from '../app/services/plaid.service';
+import { Subscription } from 'rxjs';
+import type { OnDestroy } from '@angular/core';
 
 @Component({
   imports: [CurrencyPipe],
@@ -11,13 +18,51 @@ import { CurrencyPipe } from '@angular/common';
   styleUrl: './dashboard.css',
   templateUrl: './dashboard.html',
 })
-export class UserDashboard implements OnInit {
+export class UserDashboard implements OnInit, OnDestroy {
   protected readonly title = signal('dashboard');
   private readonly authService = inject(AuthService);
   private readonly router = inject(Router);
 
   private readonly profileService = inject(ProfileService);
   private readonly budgetService = inject(BudgetService);
+
+  // Reuse the Plaid service already used by the Profile page.
+  private readonly plaidService = inject(PlaidService);
+
+  // Keep track of an active transaction request so it can be
+  // cancelled when the user switches between accounts.
+  private transactionRequest?: Subscription;
+
+  // Connected financial accounts.
+  readonly accounts = signal<PlaidAccount[]>([]);
+  readonly accountsLoading = signal(true);
+  readonly accountsError = signal(false);
+
+  // The account whose transactions are currently expanded.
+  // null means no account is selected.
+  readonly selectedAccountId = signal<string | null>(null);
+
+  // Transactions for the selected account.
+  readonly transactions = signal<PlaidTransaction[]>([]);
+  readonly transactionsLoading = signal(false);
+  readonly transactionsError = signal(false);
+
+  // The Rust endpoint returns a total count so we can
+  // implement pagination without retrieving every transaction.
+  readonly transactionTotal = signal(0);
+
+  readonly transactionPage = signal(0);
+  readonly transactionPageSize = 20;
+
+  // Calculate the number of pages from the API's total.
+  readonly totalTransactionPages = computed(() =>
+    Math.ceil(this.transactionTotal() / this.transactionPageSize),
+  );
+
+  // Convenient value for disabling the Next button.
+  readonly hasNextTransactionPage = computed(
+    () => this.transactionPage() + 1 < this.totalTransactionPages(),
+  );
 
   /**
    * The name returned by the authenticated user's profile.
@@ -64,12 +109,145 @@ export class UserDashboard implements OnInit {
   readonly totalRemaining = computed(() => this.totalBudget() - this.totalSpent());
 
   /**
-   * Load the user's name and budget overview when
-   * Angular initializes the dashboard.
+   * Load all information needed for the dashboard.
+   *
+   * Each request has independent loading/error state.
+   * This means an account API failure does not prevent
+   * the profile or budget summary from rendering.
    */
   ngOnInit(): void {
     this.loadProfile();
     this.loadBudgetSummary();
+    this.loadAccounts();
+  }
+
+  /**
+   * Cancel pending transaction requests when leaving the page.
+   */
+  ngOnDestroy(): void {
+    this.transactionRequest?.unsubscribe();
+  }
+
+  /**
+   * Retrieve all connected accounts.
+   *
+   * We display real balances returned by Plaid rather than
+   * hardcoded demonstration data.
+   */
+  loadAccounts(): void {
+    this.accountsLoading.set(true);
+    this.accountsError.set(false);
+
+    this.plaidService.getAccounts().subscribe({
+      next: (response) => {
+        this.accounts.set(response.accounts);
+        this.accountsLoading.set(false);
+      },
+      error: () => {
+        this.accountsError.set(true);
+        this.accountsLoading.set(false);
+      },
+    });
+  }
+
+  /**
+   * Expand or collapse an account's transaction list.
+   *
+   * Selecting a different account resets pagination so
+   * the user always starts with its newest transactions.
+   */
+  selectAccount(accountId: string): void {
+    // Cancel any previous request before changing accounts.
+    this.transactionRequest?.unsubscribe();
+
+    // Clicking the already selected account closes it.
+    if (this.selectedAccountId() === accountId) {
+      this.selectedAccountId.set(null);
+      this.transactions.set([]);
+      this.transactionsLoading.set(false);
+      this.transactionsError.set(false);
+      this.transactionTotal.set(0);
+      this.transactionPage.set(0);
+      return;
+    }
+
+    this.selectedAccountId.set(accountId);
+    this.transactionPage.set(0);
+    this.transactions.set([]);
+    this.transactionTotal.set(0);
+
+    this.loadTransactions();
+  }
+
+  /**
+   * Load a single page of transactions for the selected account.
+   *
+   * Pagination is performed by Rust, not by downloading
+   * the user's entire transaction history into Angular.
+   */
+  loadTransactions(): void {
+    const accountId = this.selectedAccountId();
+
+    // Nothing to retrieve if the account is collapsed.
+    if (accountId === null) {
+      return;
+    }
+
+    this.transactionRequest?.unsubscribe();
+
+    this.transactionsLoading.set(true);
+    this.transactionsError.set(false);
+
+    const offset = this.transactionPage() * this.transactionPageSize;
+
+    this.transactionRequest = this.plaidService
+      .getTransactions(accountId, this.transactionPageSize, offset)
+      .subscribe({
+        next: (response) => {
+          this.transactions.set(response.transactions);
+          this.transactionTotal.set(response.total ?? response.transactions.length);
+          this.transactionsLoading.set(false);
+        },
+        error: () => {
+          this.transactionsError.set(true);
+          this.transactionsLoading.set(false);
+        },
+      });
+  }
+
+  /**
+   * Display the next page only when more transactions exist.
+   */
+  nextTransactionPage(): void {
+    if (this.transactionsLoading() || !this.hasNextTransactionPage()) {
+      return;
+    }
+
+    this.transactionPage.update((page) => page + 1);
+    this.loadTransactions();
+  }
+
+  /**
+   * Return to the preceding transaction page.
+   */
+  previousTransactionPage(): void {
+    if (this.transactionsLoading() || this.transactionPage() === 0) {
+      return;
+    }
+
+    this.transactionPage.update((page) => page - 1);
+    this.loadTransactions();
+  }
+
+  /**
+   * Convert a backend category such as FOOD_DINING into
+   * a more readable display label: "Food Dining".
+   */
+  categoryLabel(category: string): string {
+    return category
+      .split('_')
+      .map((word) => word.charAt(0) + word.slice(1).toLowerCase())
+      .join(' ');
   }
 
   /**

@@ -123,4 +123,71 @@ describe('PlaidService', () => {
 
     expect(completed).toBe(true);
   });
+
+  it('retrieves transactions for the selected account', () => {
+    let transactionCount = -1;
+
+    service.getTransactions('account-123', 20, 0).subscribe((response) => {
+      transactionCount = response.transactions.length;
+    });
+
+    // Verify the account ID and pagination are sent to Rust.
+    const request = httpMock.expectOne((req) => req.url === `${baseUrl}/transactions`);
+
+    expect(request.request.method).toBe('GET');
+    expect(request.request.withCredentials).toBe(true);
+    expect(request.request.params.get('account_id')).toBe('account-123');
+    expect(request.request.params.get('limit')).toBe('20');
+    expect(request.request.params.get('offset')).toBe('0');
+
+    request.flush({
+      transactions: [
+        {
+          transaction_id: 'tx-1',
+          account_id: 'account-123',
+          name: 'Grocery Store',
+          amount: 50,
+          date: '2026-11-10',
+          pending: false,
+          category: 'GROCERIES',
+        },
+      ],
+      total: 1,
+      limit: 20,
+      offset: 0,
+    });
+
+    expect(transactionCount).toBe(1);
+  });
+
+  it('supports transaction pagination', () => {
+    service.getTransactions('account-123', 20, 20).subscribe();
+
+    const request = httpMock.expectOne((req) => req.url === `${baseUrl}/transactions`);
+
+    expect(request.request.params.get('offset')).toBe('20');
+    expect(request.request.params.get('limit')).toBe('20');
+
+    request.flush({
+      transactions: [],
+      total: 20,
+      limit: 20,
+      offset: 20,
+    });
+  });
+
+  it('can request transactions across all accounts', () => {
+    service.getTransactions().subscribe();
+
+    const request = httpMock.expectOne((req) => req.url === `${baseUrl}/transactions`);
+
+    expect(request.request.params.has('account_id')).toBe(false);
+
+    request.flush({
+      transactions: [],
+      total: 0,
+      limit: 20,
+      offset: 0,
+    });
+  });
 });
