@@ -8,6 +8,7 @@ from agent.data_models import (
     ChatRequest,
     ChatResponse,
     Conversation,
+    HistoryMessage,
 )
 from agent.nodes.context import (
     MAX_TRANSACTIONS,
@@ -31,6 +32,7 @@ __all__ = [
     "ChatResponse",
     "ChatState",
     "Conversation",
+    "HistoryMessage",
     "format_financial_context",
     "load_financial_context",
 ]

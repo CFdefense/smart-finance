@@ -5,6 +5,7 @@
 //! it is a plain [`axum::Router`].
 
 pub mod budget;
+pub mod chat;
 pub mod goals;
 pub mod plaid;
 pub mod rules;
