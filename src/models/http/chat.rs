@@ -56,19 +56,10 @@ pub struct Message {
     pub created_at: DateTime<Utc>,
 }
 
-impl From<ChatMessage> for Message {
-    fn from(row: ChatMessage) -> Self {
-        Self {
-            id: row.id,
-            role: row.role,
-            content: row.content,
-            created_at: row.created_at,
-        }
-    }
-}
-
-impl From<&ChatMessage> for Message {
-    fn from(row: &ChatMessage) -> Self {
+impl Message {
+    /// Builds a response from a stored message row.
+    #[must_use]
+    pub fn new(row: &ChatMessage) -> Self {
         Self {
             id: row.id,
             role: row.role.clone(),
@@ -91,19 +82,10 @@ pub struct Session {
     pub updated_at: DateTime<Utc>,
 }
 
-impl From<ChatSession> for Session {
-    fn from(row: ChatSession) -> Self {
-        Self {
-            id: row.id,
-            title: row.title,
-            created_at: row.created_at,
-            updated_at: row.updated_at,
-        }
-    }
-}
-
-impl From<&ChatSession> for Session {
-    fn from(row: &ChatSession) -> Self {
+impl Session {
+    /// Builds a response from a session row.
+    #[must_use]
+    pub fn new(row: &ChatSession) -> Self {
         Self {
             id: row.id,
             title: row.title.clone(),
@@ -136,15 +118,15 @@ pub struct SessionWithMessages {
 }
 
 impl SessionWithMessages {
-    /// Constructs a [`SessionWithMessages`] from a [`ChatSession`] and a list of [`ChatMessage`]s.
+    /// Builds a response from a session row and its message rows (oldest first).
     #[must_use]
-    pub fn new(session: ChatSession, messages: Vec<ChatMessage>) -> Self {
+    pub fn new(session: &ChatSession, messages: &[ChatMessage]) -> Self {
         Self {
             id: session.id,
-            title: session.title,
+            title: session.title.clone(),
             created_at: session.created_at,
             updated_at: session.updated_at,
-            messages: messages.into_iter().map(Message::from).collect(),
+            messages: messages.iter().map(Message::new).collect(),
         }
     }
 }
@@ -217,16 +199,16 @@ mod tests {
             created_at: now,
         };
 
-        let session: Session = sql_session.clone().into();
+        let session = Session::new(&sql_session);
         assert_eq!(session.id, 1);
         assert_eq!(session.title.as_deref(), Some("My session"));
 
-        let message: Message = sql_message.clone().into();
+        let message = Message::new(&sql_message);
         assert_eq!(message.id, 10);
         assert_eq!(message.role, "user");
         assert_eq!(message.content, "Hello");
 
-        let session_with_messages = SessionWithMessages::new(sql_session, vec![sql_message]);
+        let session_with_messages = SessionWithMessages::new(&sql_session, &[sql_message]);
         assert_eq!(session_with_messages.messages.len(), 1);
         assert_eq!(session_with_messages.messages[0].id, 10);
     }

@@ -799,6 +799,57 @@ async fn send_message_passes_history_and_authenticated_user_id() {
     assert_eq!(get_status, StatusCode::OK);
     let messages = get_json["messages"].as_array().expect("messages array");
     assert_eq!(messages.len(), 4);
+    // The title comes from the first turn and is not overwritten by later ones.
+    assert_eq!(get_json["title"], "Question 1");
+
+    cleanup(&pool, &email).await;
+}
+
+#[tokio::test]
+async fn send_message_sends_only_the_last_20_messages_as_history() {
+    let recorded: Arc<Mutex<Vec<Value>>> = Arc::new(Mutex::new(Vec::new()));
+    let recorded_clone = Arc::clone(&recorded);
+    let mock_router = Router::new().route(
+        "/chat/stream",
+        post(move |Json(payload): Json<Value>| {
+            let recorded = Arc::clone(&recorded_clone);
+            async move {
+                recorded.lock().unwrap().push(payload);
+                let stream = futures_util::stream::iter(vec![Ok::<_, std::io::Error>(
+                    Bytes::from("{\"type\":\"done\",\"response\":\"ok\"}\n"),
+                )]);
+                Body::from_stream(stream).into_response()
+            }
+        }),
+    );
+    let app = test_app_with_ai(AiClient::with_base_url(spawn_mock_ai(mock_router))).await;
+    let pool = test_pool().await;
+    let email = unique_email("chat_limit");
+    let cookie = authenticated_cookie(app.clone(), &email).await;
+
+    let (_, session) = call(&app, "POST", "/api/chat/sessions", &cookie, None).await;
+    let session_id = i32::try_from(session["id"].as_i64().expect("session id")).unwrap();
+    for n in 1..=25 {
+        sqlx::query(
+            "INSERT INTO chat_messages (session_id, role, content) VALUES ($1, 'user', $2)",
+        )
+        .bind(session_id)
+        .bind(format!("old {n}"))
+        .execute(&pool)
+        .await
+        .expect("seed message");
+    }
+
+    let (status, _) = call_send_sse(&app, session_id, &cookie, "new").await;
+    assert_eq!(status, StatusCode::OK);
+
+    {
+        let recorded = recorded.lock().unwrap();
+        let history = recorded[0]["history"].as_array().expect("history array");
+        assert_eq!(history.len(), 20);
+        assert_eq!(history[0]["content"], "old 6");
+        assert_eq!(history[19]["content"], "old 25");
+    }
 
     cleanup(&pool, &email).await;
 }

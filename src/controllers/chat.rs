@@ -33,7 +33,7 @@ use crate::{
     middleware::{middleware_auth, AuthUser},
     models::{
         http::chat::{Message, SendMessageRequest, Session, SessionWithMessages, SessionsResponse},
-        sql::chat as chat_sql,
+        sql::chat::{ChatMessage, ChatSession},
     },
 };
 
@@ -83,6 +83,70 @@ impl Drop for InFlightGuard {
     }
 }
 
+/// Loads a session only if it belongs to the user; foreign or unknown IDs are `NotFound`.
+async fn owned_session(pool: &PgPool, user_id: i32, id: i32) -> ApiResult<ChatSession> {
+    sqlx::query_as!(
+        ChatSession,
+        r#"
+        SELECT id, user_id, title, created_at, updated_at
+        FROM chat_sessions
+        WHERE id = $1 AND user_id = $2
+        "#,
+        id,
+        user_id
+    )
+    .fetch_optional(pool)
+    .await
+    .map_err(AppError::from)?
+    .ok_or(AppError::NotFound)
+}
+
+/// Saves a whole turn (user message and reply) in one transaction and returns the reply row.
+///
+/// The first saved turn also sets the session title (first 60 characters, not bytes); every
+/// saved turn bumps `updated_at`.
+async fn save_turn(
+    pool: &PgPool,
+    session_id: i32,
+    user_text: &str,
+    reply: &str,
+) -> Result<ChatMessage, sqlx::Error> {
+    let mut tx = pool.begin().await?;
+
+    sqlx::query!(
+        "INSERT INTO chat_messages (session_id, role, content) VALUES ($1, 'user', $2)",
+        session_id,
+        user_text
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    let reply_row = sqlx::query_as!(
+        ChatMessage,
+        r#"
+        INSERT INTO chat_messages (session_id, role, content)
+        VALUES ($1, 'assistant', $2)
+        RETURNING id, session_id, role, content, created_at
+        "#,
+        session_id,
+        reply
+    )
+    .fetch_one(&mut *tx)
+    .await?;
+
+    let title: String = user_text.chars().take(60).collect();
+    sqlx::query!(
+        "UPDATE chat_sessions SET title = COALESCE(title, $2), updated_at = NOW() WHERE id = $1",
+        session_id,
+        title
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+    Ok(reply_row)
+}
+
 /// Builds a named SSE event with a JSON payload.
 fn sse_event(name: &str, data: &serde_json::Value) -> Event {
     Event::default().event(name).data(data.to_string())
@@ -108,13 +172,23 @@ pub async fn api_list_sessions(
 ) -> ApiResult<Json<SessionsResponse>> {
     debug!("HANDLER ->> GET /api/chat/sessions user_id={}", user.id);
 
-    let sessions = chat_sql::list_sessions(&pool, user.id)
-        .await?
-        .into_iter()
-        .map(Session::from)
-        .collect();
+    let rows = sqlx::query_as!(
+        ChatSession,
+        r#"
+        SELECT id, user_id, title, created_at, updated_at
+        FROM chat_sessions
+        WHERE user_id = $1
+        ORDER BY updated_at DESC, id DESC
+        "#,
+        user.id
+    )
+    .fetch_all(&pool)
+    .await
+    .map_err(AppError::from)?;
 
-    Ok(Json(SessionsResponse { sessions }))
+    Ok(Json(SessionsResponse {
+        sessions: rows.iter().map(Session::new).collect(),
+    }))
 }
 
 /// Start a new, empty chat session.
@@ -137,9 +211,20 @@ pub async fn api_create_session(
 ) -> ApiResult<(StatusCode, Json<Session>)> {
     debug!("HANDLER ->> POST /api/chat/sessions user_id={}", user.id);
 
-    let session = chat_sql::create_session(&pool, user.id).await?;
+    let row = sqlx::query_as!(
+        ChatSession,
+        r#"
+        INSERT INTO chat_sessions (user_id)
+        VALUES ($1)
+        RETURNING id, user_id, title, created_at, updated_at
+        "#,
+        user.id
+    )
+    .fetch_one(&pool)
+    .await
+    .map_err(AppError::from)?;
 
-    Ok((StatusCode::CREATED, Json(Session::from(session))))
+    Ok((StatusCode::CREATED, Json(Session::new(&row))))
 }
 
 /// Fetch one session with its messages, oldest first.
@@ -169,12 +254,23 @@ pub async fn api_get_session(
         user.id
     );
 
-    let session = chat_sql::get_session(&pool, user.id, id)
-        .await?
-        .ok_or(AppError::NotFound)?;
-    let messages = chat_sql::list_messages(&pool, session.id).await?;
+    let session = owned_session(&pool, user.id, id).await?;
 
-    Ok(Json(SessionWithMessages::new(session, messages)))
+    let messages = sqlx::query_as!(
+        ChatMessage,
+        r#"
+        SELECT id, session_id, role, content, created_at
+        FROM chat_messages
+        WHERE session_id = $1
+        ORDER BY created_at ASC, id ASC
+        "#,
+        session.id
+    )
+    .fetch_all(&pool)
+    .await
+    .map_err(AppError::from)?;
+
+    Ok(Json(SessionWithMessages::new(&session, &messages)))
 }
 
 /// State carried through the SSE stream for one reply.
@@ -194,9 +290,7 @@ async fn next_sse_event(mut state: ReplyState) -> Option<(Result<Event, Infallib
         AiEvent::Status { tool } => sse_event("status", &json!({ "tool": tool })),
         AiEvent::Token { text } => sse_event("token", &json!({ "text": text })),
         AiEvent::Done { response } => {
-            let saved =
-                chat_sql::save_turn(&state.pool, state.session_id, &state.user_text, &response)
-                    .await;
+            let saved = save_turn(&state.pool, state.session_id, &state.user_text, &response).await;
             state.guard = None;
             if let Ok(message) = saved {
                 info!(
@@ -204,7 +298,7 @@ async fn next_sse_event(mut state: ReplyState) -> Option<(Result<Event, Infallib
                     outcome = "done",
                     "chat reply saved"
                 );
-                sse_event("done", &json!({ "message": Message::from(message) }))
+                sse_event("done", &json!({ "message": Message::new(&message) }))
             } else {
                 warn!(
                     session_id = state.session_id,
@@ -275,17 +369,33 @@ pub async fn api_send_message(
 
     let text = payload.trimmed()?.to_string();
 
-    let session = chat_sql::get_session(&pool, user.id, id)
-        .await?
-        .ok_or(AppError::NotFound)?;
+    let session = owned_session(&pool, user.id, id).await?;
 
     let guard = InFlightGuard::acquire(&in_flight, session.id).ok_or_else(|| {
         AppError::Conflict("a reply is already streaming in this session".to_string())
     })?;
 
     // Read history before the stream starts, so it excludes the new message.
-    let history: Vec<HistoryItem> = chat_sql::recent_messages(&pool, session.id, HISTORY_LIMIT)
-        .await?
+    let recent = sqlx::query_as!(
+        ChatMessage,
+        r#"
+        SELECT id, session_id, role, content, created_at
+        FROM (
+            SELECT id, session_id, role, content, created_at
+            FROM chat_messages
+            WHERE session_id = $1
+            ORDER BY created_at DESC, id DESC
+            LIMIT $2
+        ) latest
+        ORDER BY created_at ASC, id ASC
+        "#,
+        session.id,
+        HISTORY_LIMIT
+    )
+    .fetch_all(&pool)
+    .await
+    .map_err(AppError::from)?;
+    let history: Vec<HistoryItem> = recent
         .into_iter()
         .map(|m| HistoryItem {
             role: m.role,
