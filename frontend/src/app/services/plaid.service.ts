@@ -80,6 +80,15 @@ export interface NetWorthSnapshot {
   amount: number;
   included_accounts: number;
   excluded_accounts: number;
+
+  /**
+   * Indicates whether this snapshot contains generated
+   * sandbox demonstration data.
+   *
+   * Optional for backward compatibility with existing
+   * test fixtures while we update them.
+   */
+  is_demo?: boolean;
 }
 
 /**

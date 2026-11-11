@@ -978,3 +978,49 @@
   color: #64748b;
   font-size: 0.78rem;
 }
+
+/*
+ * Historical net-worth range selector.
+ *
+ * Compact native select that remains usable with
+ * keyboard navigation and on mobile devices.
+ */
+.net-worth-range-label {
+  display: block;
+  margin-top: 14px;
+  margin-bottom: 5px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #475569;
+}
+
+.net-worth-range-select {
+  width: 100%;
+  max-width: 190px;
+  padding: 8px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: white;
+  color: #1f2937;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.net-worth-range-select:focus-visible {
+  outline: 2px solid #6284e2;
+  outline-offset: 2px;
+}
+
+/* Makes simulated history unmistakable. */
+.net-worth-demo-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0;
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.net-worth-demo-note .material-symbols-outlined {
+  font-size: 18px;
+}

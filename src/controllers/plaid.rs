@@ -374,19 +374,18 @@ pub async fn api_plaid_get_net_worth_history(
         user.id
     );
 
-    // Query only snapshots owned by the authenticated user.
+    // Retrieve only snapshots belonging to the signed-in user.
     //
-    // Binding the user ID prevents SQL injection, and the
-    // WHERE clause prevents access to other users' histories.
-    //
-    // Results are sorted oldest to newest for the line graph.
-    let rows: Vec<(chrono::NaiveDate, f64, i32, i32)> = sqlx::query_as(
+    // The is_demo flag allows Angular to distinguish
+    // simulated sandbox history from recorded balances.
+    let rows: Vec<(chrono::NaiveDate, f64, i32, i32, bool)> = sqlx::query_as(
         r#"
             SELECT
                 snapshot_date,
                 amount,
                 included_accounts,
-                excluded_accounts
+                excluded_accounts,
+                is_demo
             FROM net_worth_snapshots
             WHERE user_id = $1
             ORDER BY snapshot_date ASC
@@ -397,15 +396,18 @@ pub async fn api_plaid_get_net_worth_history(
     .await
     .map_err(AppError::from)?;
 
-    // Convert SQL rows into our typed HTTP response model.
+    // Map database tuples into our typed API objects.
     let snapshots = rows
         .into_iter()
         .map(
-            |(snapshot_date, amount, included_accounts, excluded_accounts)| NetWorthSnapshot {
-                snapshot_date,
-                amount,
-                included_accounts,
-                excluded_accounts,
+            |(snapshot_date, amount, included_accounts, excluded_accounts, is_demo)| {
+                NetWorthSnapshot {
+                    snapshot_date,
+                    amount,
+                    included_accounts,
+                    excluded_accounts,
+                    is_demo,
+                }
             },
         )
         .collect();

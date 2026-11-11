@@ -18,7 +18,10 @@ static SEEDER_TEST_LOCK: Mutex<()> = Mutex::const_new(());
 use crate::{
     models::http::user::SignupRequest,
     plaid::client::PlaidClient,
-    seeder::{hash_password, seed_demo_transactions, seed_tester_profile, TesterFixture},
+    seeder::{
+        hash_password, seed_demo_net_worth, seed_demo_transactions, seed_tester_profile,
+        TesterFixture,
+    },
 };
 
 #[test]
@@ -35,7 +38,11 @@ fn test_sandbox_fixtures_validity() {
     let fixtures: Vec<TesterFixture> =
         serde_json::from_str(&content).expect("fixtures must be valid JSON");
 
-    assert_eq!(fixtures.len(), 4, "expected 4 tester fixtures");
+    assert_eq!(
+        fixtures.len(),
+        5,
+        "expected 5 tester fixtures including Arthur"
+    );
 
     for tester in fixtures {
         assert!(
@@ -222,5 +229,117 @@ async fn test_demo_transactions_are_repeatable() {
     assert_eq!(category_count, 8);
 
     // Remove this temporary user and all related test data.
+    cleanup(&pool, &email).await;
+}
+
+/// Verify that synthetic net-worth history:
+/// - Requires an existing current-day snapshot.
+/// - Creates 120 historical monthly records.
+/// - Marks those records as demonstration data.
+/// - Never duplicates historical records.
+/// - Never changes the current-day snapshot.
+#[tokio::test]
+async fn test_demo_net_worth_history_is_repeatable() {
+    // This lock already exists in seeder.rs.
+    //
+    // It prevents our seeder tests from interfering
+    // with each other's mocked Plaid connections.
+    let _guard = SEEDER_TEST_LOCK.lock().await;
+
+    let pool = test_pool().await;
+    let plaid = PlaidClient::with_base_url(mock_plaid_url());
+
+    let email = unique_email("demo_net_worth");
+
+    let tester = TesterFixture {
+        email: email.clone(),
+        first_name: "History".to_string(),
+        last_name: "Tester".to_string(),
+        password: "Password123".to_string(),
+        institution_id: "ins_109508".to_string(),
+        sandbox_username: "custom_test".to_string(),
+        sandbox_password: "pass_good".to_string(),
+    };
+
+    // Create one isolated test user.
+    let seeded = seed_tester_profile(&pool, &plaid, &tester, false)
+        .await
+        .expect("Test user setup should succeed");
+
+    // No current-day snapshot exists yet.
+    //
+    // The generator must refuse to invent a starting
+    // value for the user's financial history.
+    let without_anchor = seed_demo_net_worth(&pool, seeded.user_id).await.unwrap();
+
+    assert_eq!(without_anchor, 0);
+
+    // Create a real current-day snapshot for the test.
+    //
+    // This is a controlled test fixture, not real user data.
+    sqlx::query(
+        r#"
+        INSERT INTO net_worth_snapshots (
+            user_id,
+            snapshot_date,
+            amount,
+            included_accounts,
+            excluded_accounts,
+            is_demo
+        )
+        VALUES ($1, CURRENT_DATE, 20000.0, 1, 0, FALSE)
+        "#,
+    )
+    .bind(seeded.user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // First generation should create exactly 120
+    // historical monthly snapshots.
+    let first_count = seed_demo_net_worth(&pool, seeded.user_id).await.unwrap();
+
+    assert_eq!(first_count, 120);
+
+    // Repeating generation should insert nothing.
+    let second_count = seed_demo_net_worth(&pool, seeded.user_id).await.unwrap();
+
+    assert_eq!(second_count, 0);
+
+    // Confirm the historical records are marked as demo.
+    let demo_count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT COUNT(*)
+        FROM net_worth_snapshots
+        WHERE user_id = $1
+          AND is_demo = TRUE
+        "#,
+    )
+    .bind(seeded.user_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(demo_count, 120);
+
+    // Today's real snapshot must still equal $20,000
+    // and must not have been marked as synthetic.
+    let (today_amount, today_is_demo): (f64, bool) = sqlx::query_as(
+        r#"
+            SELECT amount, is_demo
+            FROM net_worth_snapshots
+            WHERE user_id = $1
+              AND snapshot_date = CURRENT_DATE
+            "#,
+    )
+    .bind(seeded.user_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(today_amount, 20000.0);
+    assert!(!today_is_demo);
+
+    // Clean up all records, including the generated ones.
     cleanup(&pool, &email).await;
 }

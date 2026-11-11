@@ -466,3 +466,152 @@ pub async fn seed_demo_transactions(pool: &PgPool, user_id: i32) -> Result<usize
 
     Ok(inserted)
 }
+
+/// Generate ten years of synthetic monthly net-worth history.
+///
+/// This is for LOCAL SANDBOX DEMONSTRATIONS ONLY.
+///
+/// Unlike real snapshots, generated records have is_demo = TRUE.
+///
+/// Safety rules:
+/// - An existing snapshot for today is required as an anchor.
+/// - Today's snapshot is never changed.
+/// - Existing historical snapshots are never overwritten.
+/// - No Plaid API calls are made.
+/// - Repeated runs never duplicate history.
+/// - Each user receives a slightly different trajectory.
+///
+/// Returns the number of newly inserted snapshots.
+///
+/// # Errors
+///
+/// Returns an AppError if a database operation fails.
+pub async fn seed_demo_net_worth(pool: &PgPool, user_id: i32) -> Result<usize, AppError> {
+    // Find today's real net-worth snapshot.
+    //
+    // The dashboard records this when it successfully
+    // loads connected accounts.
+    //
+    // We require an existing snapshot so our generated
+    // history has a sensible ending value.
+    let today: Option<(f64, i32, i32)> = sqlx::query_as(
+        r#"
+        SELECT
+            amount,
+            included_accounts,
+            excluded_accounts
+        FROM net_worth_snapshots
+        WHERE user_id = $1
+          AND snapshot_date = CURRENT_DATE
+          AND is_demo = FALSE
+        "#,
+    )
+    .bind(user_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(AppError::from)?;
+
+    let Some((current_amount, included, excluded)) = today else {
+        tracing::warn!(
+            "Skipping demo net worth for user {user_id}: \
+             no real snapshot exists for today"
+        );
+
+        return Ok(0);
+    };
+
+    // The current value must be a valid finite number.
+    if !current_amount.is_finite() {
+        return Err(AppError::Internal(
+            "Cannot generate demo history from an invalid net worth".to_string(),
+        ));
+    }
+
+    let today_date = Utc::now().date_naive();
+
+    // Anchor all historical dates to the first day of
+    // their respective calendar months.
+    let current_month = NaiveDate::from_ymd_opt(today_date.year(), today_date.month(), 1)
+        .expect("Current month must be valid");
+
+    let mut inserted = 0_usize;
+
+    // Generate the 120 COMPLETE months before this month.
+    //
+    // We do not generate a synthetic record for today.
+    // Month 1 = previous month.
+    // Month 120 = ten years ago.
+    for months_ago in 1..=120_u32 {
+        let date = current_month
+            .checked_sub_months(Months::new(months_ago))
+            .expect("Historical demo date must be valid");
+
+        // 0.0 = oldest month
+        // 1.0 = newest historical month
+        //
+        // This produces an overall upward trajectory
+        // while allowing some monthly fluctuations.
+        let progress = (120 - months_ago) as f64 / 119.0;
+
+        // Start at approximately 35% of today's value,
+        // then gradually approach today's value.
+        let trend = current_amount * (0.35 + 0.65 * progress);
+
+        // Create a deterministic user-specific fluctuation.
+        //
+        // Sine waves create ups and downs without requiring
+        // random-number dependencies. Different user IDs
+        // produce different sequences.
+        let user_phase = user_id as f64 * 0.71;
+        let month_phase = months_ago as f64;
+
+        let fluctuation = (month_phase * 0.63 + user_phase).sin() * current_amount.abs() * 0.035
+            + (month_phase * 0.19 + user_phase).cos() * current_amount.abs() * 0.015;
+
+        // Round to normal currency precision.
+        let amount = ((trend + fluctuation) * 100.0).round() / 100.0;
+
+        // Never insert an invalid numeric value.
+        if !amount.is_finite() {
+            return Err(AppError::Internal(
+                "Generated net-worth amount is invalid".to_string(),
+            ));
+        }
+
+        // INSERT ... ON CONFLICT DO NOTHING means:
+        //
+        // 1. We never overwrite real historical data.
+        // 2. We never overwrite a previous demo snapshot.
+        // 3. Running this twice never creates duplicates.
+        //
+        // The new is_demo column explicitly identifies
+        // this record as synthetic test data.
+        let result = sqlx::query(
+            r#"
+            INSERT INTO net_worth_snapshots (
+                user_id,
+                snapshot_date,
+                amount,
+                included_accounts,
+                excluded_accounts,
+                is_demo
+            )
+            VALUES ($1, $2, $3, $4, $5, TRUE)
+            ON CONFLICT (user_id, snapshot_date)
+            DO NOTHING
+            "#,
+        )
+        .bind(user_id)
+        .bind(date)
+        .bind(amount)
+        .bind(included)
+        .bind(excluded)
+        .execute(pool)
+        .await
+        .map_err(AppError::from)?;
+
+        inserted += result.rows_affected() as usize;
+    }
+
+    Ok(inserted)
+}

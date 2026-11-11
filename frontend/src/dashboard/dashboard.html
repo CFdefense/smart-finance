@@ -243,6 +243,28 @@
           <div>
             <h2>Net Worth Over Time</h2>
             <p>Historical linked-account balances</p>
+
+            <!--
+  Select which period of historical net-worth
+  records should be displayed.
+
+  Changing this updates an Angular signal, causing
+  the graph to recalculate automatically.
+-->
+            <label class="net-worth-range-label" for="net-worth-range">Show history</label>
+
+            <select
+              id="net-worth-range"
+              class="net-worth-range-select"
+              [value]="netWorthRange()"
+              (change)="onNetWorthRangeChange($event)">
+              <option value="1M">Last 1 month</option>
+              <option value="3M">Last 3 months</option>
+              <option value="6M">Last 6 months</option>
+              <option value="1Y">Last 1 year</option>
+              <option value="5Y">Last 5 years</option>
+              <option value="10Y">Last 10 years</option>
+            </select>
           </div>
 
           <span class="material-symbols-outlined" aria-hidden="true">show_chart</span>
@@ -255,12 +277,20 @@
             <p>Unable to load net-worth history.</p>
             <button type="button" (click)="loadNetWorthHistory()">Try Again</button>
           </div>
-        } @else if (netWorthHistory().length === 0) {
+        } @else if (visibleNetWorthHistory().length === 0) {
           <p class="chart-message">
             No historical data yet. Your history will appear after your connected accounts have been
             recorded.
           </p>
         } @else {
+          @if (visibleNetWorthIncludesDemo()) {
+            <!-- Clearly identify generated sandbox values. -->
+            <p class="net-worth-demo-note">
+              <span class="material-symbols-outlined" aria-hidden="true">science</span>
+              Demo history — includes simulated financial values
+            </p>
+          }
+
           <!--
         A responsive SVG chart.
 
@@ -287,7 +317,7 @@
             </text>
 
             <!-- Connect the historical data points. -->
-            @if (netWorthHistory().length > 1) {
+            @if (visibleNetWorthHistory().length > 1) {
               <polyline class="chart-line" [attr.points]="netWorthChart().points" />
             }
 
@@ -312,7 +342,7 @@
             </text>
           </svg>
 
-          @if (netWorthHistory().length === 1) {
+          @if (visibleNetWorthHistory().length === 1) {
             <p class="chart-message chart-hint">
               Only one day of history is available so far. More points will appear as new snapshots
               are recorded.

@@ -67,6 +67,12 @@ pub struct NetWorthSnapshot {
     /// Accounts skipped due to unsupported type, currency,
     /// or unavailable balance.
     pub excluded_accounts: i32,
+
+    /// True when this is a synthetic sandbox history point.
+    ///
+    /// The dashboard uses this to clearly identify
+    /// demonstration history rather than genuine records.
+    pub is_demo: bool,
 }
 
 /// Response containing the authenticated user's history.

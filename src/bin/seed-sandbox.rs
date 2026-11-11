@@ -10,7 +10,7 @@ use std::path::Path;
 use smart_finance::{
     db,
     plaid::client::PlaidClient,
-    seeder::{seed_demo_transactions, seed_tester_profile, TesterFixture},
+    seeder::{seed_demo_net_worth, seed_demo_transactions, seed_tester_profile, TesterFixture},
 };
 
 #[tokio::main]
@@ -27,6 +27,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Unlike --reset, this adds test transactions without
     // deleting existing accounts, users, or transactions.
     let demo_transactions = args.iter().any(|arg| arg == "--demo-transactions");
+
+    // Enable synthetic net-worth history generation.
+    //
+    // This is separate from --demo-transactions so either
+    // test dataset can be generated independently.
+    let demo_net_worth = args.iter().any(|arg| arg == "--demo-net-worth");
 
     let fixtures_path = args
         .windows(2)
@@ -80,6 +86,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::process::exit(1);
     }
 
+    // ------------------------------------------------------------
+    // SAFETY CHECKS FOR SYNTHETIC NET-WORTH HISTORY
+    // ------------------------------------------------------------
+
+    // Never insert demo history outside Plaid's sandbox mode,
+    // including when the --force argument was supplied.
+    if demo_net_worth && plaid_env != "sandbox" {
+        eprintln!("Safety error: demo net-worth history requires PLAID_ENV=sandbox.");
+        std::process::exit(1);
+    }
+
+    // Generating history must not reset or delete existing
+    // sandbox users and their financial information.
+    if demo_net_worth && reset {
+        eprintln!("Safety error: do not combine --demo-net-worth with --reset.");
+        std::process::exit(1);
+    }
+
     // 3. Load tester definitions from JSON fixtures file
     if !Path::new(fixtures_path).exists() {
         eprintln!("Error: Fixtures file '{fixtures_path}' not found.");
@@ -101,6 +125,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "Processing tester: {} ({})",
             tester.email, tester.sandbox_username
         );
+
+        // Demo flags are deliberately scoped to Arthur. Never reseed the
+        // four original team test accounts as a side effect of demo runs.
+        if (demo_transactions || demo_net_worth) && tester.email != "arthur@test.com" {
+            println!("  Original tester preserved; demo data is Arthur-only.");
+            continue;
+        }
 
         let res = seed_tester_profile(&pool, &plaid, tester, reset).await?;
 
@@ -132,10 +163,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         //
         // We want to add more transactions WITHOUT resetting
         // existing tester accounts.
-        if demo_transactions {
+        if demo_transactions && tester.email == "arthur@test.com" {
             let count = seed_demo_transactions(&pool, res.user_id).await?;
 
             println!("  Added {count} synthetic transactions for dashboard testing.");
+        }
+
+        // Add synthetic historical net-worth snapshots.
+        //
+        // This works for already-seeded users, because res.user_id
+        // is still available when seed_tester_profile() skips them.
+        //
+        // A valid snapshot for today must already exist.
+        if demo_net_worth && tester.email == "arthur@test.com" {
+            let count = seed_demo_net_worth(&pool, res.user_id).await?;
+
+            println!("  Added {count} synthetic monthly net-worth snapshots.");
+
+            if count == 0 {
+                println!(
+                    "  No new snapshots inserted. History may already \
+             exist, or today's snapshot may be missing."
+                );
+            }
         }
     }
 

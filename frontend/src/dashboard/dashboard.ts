@@ -105,6 +105,90 @@ export class UserDashboard implements OnInit, OnDestroy {
   readonly netWorthHistoryError = signal(false);
 
   /**
+   * Allowed ranges for the historical net-worth graph.
+   *
+   * The default is 10 years, making the complete demo
+   * history visible when the user first opens the page.
+   */
+  readonly netWorthRange = signal<'1M' | '3M' | '6M' | '1Y' | '5Y' | '10Y'>('10Y');
+
+  /**
+   * Filter existing historical records by the selected
+   * number of calendar months.
+   *
+   * IMPORTANT:
+   * - We never create missing historical values.
+   * - We filter using dates, not array indexes.
+   * - The first day of the starting month is included.
+   *
+   * Example:
+   * If today is November 10, 2026, choosing 1Y starts
+   * at November 1, 2025.
+   */
+  readonly visibleNetWorthHistory = computed(() => {
+    const monthsByRange = {
+      '1M': 1,
+      '3M': 3,
+      '6M': 6,
+      '1Y': 12,
+      '5Y': 60,
+      '10Y': 120,
+    } as const;
+
+    const months = monthsByRange[this.netWorthRange()];
+
+    // Use the current calendar date as the upper boundary.
+    const now = new Date();
+
+    // Start on the first day of the earliest month.
+    // Subtracting 120 months for 10Y includes Nov 2016
+    // when the current month is November 2026.
+    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - months, 1));
+
+    const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+
+    // Backend dates have YYYY-MM-DD format, so comparing
+    // ISO dates lexicographically is safe here.
+    const earliestDate = start.toISOString().slice(0, 10);
+    const latestDate = today.toISOString().slice(0, 10);
+
+    return this.netWorthHistory()
+      .filter(
+        (snapshot) =>
+          snapshot.snapshot_date >= earliestDate && snapshot.snapshot_date <= latestDate,
+      )
+      .sort((a, b) => a.snapshot_date.localeCompare(b.snapshot_date));
+  });
+
+  /**
+   * Whether any of the currently displayed snapshots
+   * are synthetic demonstration values.
+   */
+  readonly visibleNetWorthIncludesDemo = computed(() =>
+    this.visibleNetWorthHistory().some((snapshot) => snapshot.is_demo === true),
+  );
+
+  /**
+   * Handle the dropdown's native change event.
+   *
+   * Only supported values can update the range signal.
+   */
+  onNetWorthRangeChange(event: Event): void {
+    const value = (event.target as HTMLSelectElement).value;
+
+    if (
+      value === '1M' ||
+      value === '3M' ||
+      value === '6M' ||
+      value === '1Y' ||
+      value === '5Y' ||
+      value === '10Y'
+    ) {
+      this.netWorthRange.set(value);
+    }
+  }
+
+  /**
    * Convert historical financial values into SVG coordinates.
    *
    * Our SVG uses a fixed logical coordinate system:
@@ -118,9 +202,9 @@ export class UserDashboard implements OnInit, OnDestroy {
    * themselves come directly from the Rust API.
    */
   readonly netWorthChart = computed(() => {
-    const history = [...this.netWorthHistory()].sort((a, b) =>
-      a.snapshot_date.localeCompare(b.snapshot_date),
-    );
+    // Calculate chart coordinates from the selected date
+    // window, not the full historical database response.
+    const history = this.visibleNetWorthHistory();
 
     if (history.length === 0) {
       return {

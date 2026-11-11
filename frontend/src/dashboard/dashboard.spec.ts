@@ -10,6 +10,27 @@ import { BudgetService, type Budget } from '../app/services/budget.service';
 import { PlaidService, type PlaidAccount } from '../app/services/plaid.service';
 
 describe('UserDashboard', () => {
+  /**
+   * Returns a date a specified number of days before today.
+   *
+   * This prevents historical chart tests from breaking
+   * whenever the calendar date changes.
+   *
+   * Examples:
+   * daysAgo(0) = today
+   * daysAgo(1) = yesterday
+   * daysAgo(10) = ten days ago
+   */
+  const daysAgo = (days: number): string => {
+    const date = new Date();
+
+    // Use UTC consistently with YYYY-MM-DD snapshot strings.
+    date.setUTCHours(12, 0, 0, 0);
+    date.setUTCDate(date.getUTCDate() - days);
+
+    return date.toISOString().slice(0, 10);
+  };
+
   let component: UserDashboard;
   let router: Router;
 
@@ -365,14 +386,16 @@ describe('UserDashboard', () => {
   it('plots multiple historical snapshots in date order', () => {
     component.netWorthHistory.set([
       {
-        snapshot_date: '2026-11-12',
-        amount: 1500,
+        // Two days ago, net worth was $1,000.
+        snapshot_date: daysAgo(2),
+        amount: 1000,
         included_accounts: 1,
         excluded_accounts: 0,
       },
       {
-        snapshot_date: '2026-11-10',
-        amount: 1000,
+        // Today, net worth increased to $1,500.
+        snapshot_date: daysAgo(0),
+        amount: 1500,
         included_accounts: 1,
         excluded_accounts: 0,
       },
@@ -380,11 +403,13 @@ describe('UserDashboard', () => {
 
     const chart = component.netWorthChart();
 
+    // Both snapshots should appear in chronological order.
     expect(chart.markers).toHaveLength(2);
-    expect(chart.firstDate).toBe('2026-11-10');
-    expect(chart.lastDate).toBe('2026-11-12');
+    expect(chart.firstDate).toBe(daysAgo(2));
+    expect(chart.lastDate).toBe(daysAgo(0));
 
-    // The higher net worth should appear higher in SVG.
+    // SVG coordinates increase downward.
+    // A higher net worth must therefore have a smaller Y value.
     expect(chart.markers[1].y).toBeLessThan(chart.markers[0].y);
   });
 
@@ -442,19 +467,22 @@ describe('UserDashboard', () => {
   it('spaces historical points according to actual dates', () => {
     component.netWorthHistory.set([
       {
-        snapshot_date: '2026-11-10',
+        // First snapshot: 20 days ago
+        snapshot_date: daysAgo(20),
         amount: 1000,
         included_accounts: 1,
         excluded_accounts: 0,
       },
       {
-        snapshot_date: '2026-11-11',
+        // Second snapshot: 10 days ago
+        snapshot_date: daysAgo(10),
         amount: 1200,
         included_accounts: 1,
         excluded_accounts: 0,
       },
       {
-        snapshot_date: '2026-11-20',
+        // Third snapshot: today
+        snapshot_date: daysAgo(0),
         amount: 1500,
         included_accounts: 1,
         excluded_accounts: 0,
@@ -467,8 +495,12 @@ describe('UserDashboard', () => {
     expect(markers[0].x).toBe(50);
     expect(markers[2].x).toBe(590);
 
-    // November 11 is 10% of the way through the date range.
-    expect(markers[1].x).toBeCloseTo(104);
+    // The middle date is exactly halfway between
+    // the earliest and latest dates.
+    //
+    // Chart boundaries: x = 50 and x = 590.
+    // Their midpoint is 320.
+    expect(markers[1].x).toBeCloseTo(320);
   });
 
   /**
@@ -687,5 +719,84 @@ describe('UserDashboard', () => {
 
     expect(chart.segments).toHaveLength(1);
     expect(chart.segments[0].category).toBe('GROCERIES');
+  });
+
+  /**
+   * A 10-year range should include our synthetic
+   * 2016 data, while a shorter range excludes it.
+   */
+  it('filters net-worth snapshots by selected time range', () => {
+    // Use relative dates so this test works in future years.
+    const now = new Date();
+    const recentDate = now.toISOString().slice(0, 10);
+    const oldDate = new Date(Date.UTC(now.getUTCFullYear() - 8, now.getUTCMonth(), 1))
+      .toISOString()
+      .slice(0, 10);
+
+    component.netWorthHistory.set([
+      {
+        snapshot_date: oldDate,
+        amount: 800,
+        included_accounts: 1,
+        excluded_accounts: 0,
+        is_demo: true,
+      },
+      {
+        snapshot_date: recentDate,
+        amount: 2100,
+        included_accounts: 1,
+        excluded_accounts: 0,
+        is_demo: false,
+      },
+    ]);
+
+    // The default range includes both dates.
+    component.netWorthRange.set('10Y');
+
+    expect(component.visibleNetWorthHistory()).toHaveLength(2);
+    expect(component.netWorthChart().markers).toHaveLength(2);
+
+    // A one-year range excludes the older snapshot.
+    component.netWorthRange.set('1Y');
+
+    expect(component.visibleNetWorthHistory()).toHaveLength(1);
+    expect(component.netWorthChart().markers).toHaveLength(1);
+    expect(component.netWorthChart().markers[0].amount).toBe(2100);
+  });
+
+  /**
+   * The chart should expose whether its visible data
+   * includes simulated sandbox history.
+   */
+  it('identifies demo history in the selected range', () => {
+    const now = new Date();
+
+    const recentDate = now.toISOString().slice(0, 10);
+    const oldDate = new Date(Date.UTC(now.getUTCFullYear() - 8, now.getUTCMonth(), 1))
+      .toISOString()
+      .slice(0, 10);
+
+    component.netWorthHistory.set([
+      {
+        snapshot_date: oldDate,
+        amount: 800,
+        included_accounts: 1,
+        excluded_accounts: 0,
+        is_demo: true,
+      },
+      {
+        snapshot_date: recentDate,
+        amount: 2100,
+        included_accounts: 1,
+        excluded_accounts: 0,
+        is_demo: false,
+      },
+    ]);
+
+    component.netWorthRange.set('10Y');
+    expect(component.visibleNetWorthIncludesDemo()).toBe(true);
+
+    component.netWorthRange.set('1Y');
+    expect(component.visibleNetWorthIncludesDemo()).toBe(false);
   });
 });
