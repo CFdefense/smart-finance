@@ -11,7 +11,7 @@ from agent.tools import web_search
 
 # Each graph is built without models: they are only called at run time.
 GRAPHS = {
-    "analyzer": lambda: build_analyzer_graph(None, None),
+    "analyzer": lambda: build_analyzer_graph(None, None, None),
     "chat": lambda: build_chat_graph(None, [web_search]),
 }
 
