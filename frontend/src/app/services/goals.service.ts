@@ -1,6 +1,7 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
+import { API_BASE_URL } from '../api-config';
 
 /** A goal's status, computed by the Rust backend from the linked account balance. */
 export type GoalStatus = 'ACTIVE' | 'COMPLETED' | 'ARCHIVED';
@@ -59,7 +60,7 @@ export interface UpdateGoalRequest {
 @Injectable({ providedIn: 'root' })
 export class GoalsService {
   private readonly http = inject(HttpClient);
-  private readonly baseUrl = 'http://localhost:3001/api/goals';
+  private readonly baseUrl = `${API_BASE_URL}/goals`;
   private readonly options = { withCredentials: true };
 
   /** Fetch goals, optionally filtered by their computed status. */
