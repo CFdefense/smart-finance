@@ -2,39 +2,17 @@ import { inject, Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 
-/**
- * Represents the user's profile information and notification preferences.
- */
-export interface UserProfile {
-  first_name: string;
-  last_name: string;
-  email: string;
-  email_notifications: boolean;
-  phone_number: string | null;
-  sms_notifications: boolean;
-  sms_carrier_gateway: string | null;
-}
+import type {
+  UserProfile,
+  UpdateProfileRequest,
+  ChangePasswordRequest,
+} from '../models/profile.models';
 
-/**
- * Defines the optional fields that can be changed in a user's profile.
- */
-export interface UpdateProfileRequest {
-  first_name?: string;
-  last_name?: string;
-  email?: string;
-  email_notifications?: boolean;
-  phone_number?: string;
-  sms_notifications?: boolean;
-  sms_carrier_gateway?: string;
-}
-
-/**
- * Contains the current and new passwords for a password change request.
- */
-export interface ChangePasswordRequest {
-  current_password: string;
-  new_password: string;
-}
+export type {
+  UserProfile,
+  UpdateProfileRequest,
+  ChangePasswordRequest,
+} from '../models/profile.models';
 
 /**
  * Handles HTTP requests for profile management and password changes.

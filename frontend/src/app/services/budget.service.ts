@@ -3,89 +3,34 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 
 /**
- * Spending categories supported by the Rust backend.
+ * Import shared budget data models.
  *
- * These values must match the Category enum in src/models/category.rs.
+ * The service handles API requests while the models
+ * describe the data sent and received.
  */
-export type BudgetCategory =
-  | 'SHOPPING'
-  | 'ENTERTAINMENT'
-  | 'UTILITIES'
-  | 'HEALTHCARE'
-  | 'FOOD_DINING'
-  | 'GROCERIES'
-  | 'TRANSPORTATION'
-  | 'OTHER';
+import type {
+  Budget,
+  BudgetsResponse,
+  CategorySpendingResponse,
+  CreateBudgetRequest,
+  UpdateBudgetRequest,
+} from '../models/budget.models';
 
 /**
- * Information required to create a recurring monthly budget.
- */
-export interface CreateBudgetRequest {
-  name: string;
-  category: BudgetCategory;
-  monthly_limit: number;
-  active?: boolean;
-}
-
-/**
- * Fields the user can change after creating a budget.
+ * Preserve existing imports elsewhere in the frontend.
  *
- * The category is intentionally excluded because the backend
- * does not allow changing it after creation.
+ * Components and tests that currently import these
+ * types from budget.service.ts will continue working.
  */
-export interface UpdateBudgetRequest {
-  name?: string;
-  monthly_limit?: number;
-  active?: boolean;
-}
-
-/**
- * Budget data returned by the backend, including spending
- * calculated from synced Plaid transactions.
- */
-export interface Budget {
-  id: number;
-  name: string;
-  category: BudgetCategory;
-  monthly_limit: number;
-  active: boolean;
-  month: string;
-  spent: number;
-  remaining: number;
-  percent_used: number;
-  over_budget: boolean;
-}
-
-/**
- * Response from GET /api/budgets.
- */
-export interface BudgetsResponse {
-  month: string;
-  budgets: Budget[];
-}
-
-/**
- * Spending for one category during a calendar month.
- *
- * These values are calculated by Rust from synced
- * Plaid transactions, not from the user's budget limits.
- */
-export interface CategorySpending {
-  category: BudgetCategory;
-  amount: number;
-}
-
-/**
- * Response from GET /api/budgets/spending-by-category.
- *
- * The API includes spending even in categories without
- * a corresponding monthly budget.
- */
-export interface CategorySpendingResponse {
-  month: string;
-  total: number;
-  categories: CategorySpending[];
-}
+export type {
+  BudgetCategory,
+  CreateBudgetRequest,
+  UpdateBudgetRequest,
+  Budget,
+  BudgetsResponse,
+  CategorySpending,
+  CategorySpendingResponse,
+} from '../models/budget.models';
 
 /**
  * Communicates with the Rust budget endpoints.

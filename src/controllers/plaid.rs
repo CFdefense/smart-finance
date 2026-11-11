@@ -17,9 +17,8 @@ use crate::{
     models::{
         http::plaid::{
             AccountResponse, AccountsResponse, ExchangeTokenRequest, ExchangeTokenResponse,
-            LinkTokenResponse, NetWorthHistoryResponse, NetWorthSnapshot, TransactionResponse,
-            TransactionSyncResponse, TransactionsQuery, TransactionsResponse,
-            UpdateCategoryRequest,
+            LinkTokenResponse, TransactionResponse, TransactionSyncResponse, TransactionsQuery,
+            TransactionsResponse, UpdateCategoryRequest,
         },
         sql::plaid::{PlaidLinkRow, PlaidSyncCursorRow},
     },
@@ -140,108 +139,6 @@ pub async fn api_plaid_exchange_token(
     Ok(Json(exchanged))
 }
 
-/// Record today's linked-account net worth for one authenticated user.
-///
-/// This helper is called only after accounts have been
-/// successfully retrieved from Plaid.
-///
-/// Calculation rules:
-/// - Depository and investment balances count as assets.
-/// - Credit and loan balances count as liabilities.
-/// - Missing balances, unsupported types, and non-USD
-///   accounts are excluded rather than guessed.
-///
-/// We use the same rules as the Angular net-worth overview.
-///
-/// Every dashboard refresh updates the current day's row.
-/// Older dates remain unchanged so they can form a graph.
-async fn record_net_worth_snapshot(
-    pool: &PgPool,
-    user_id: i32,
-    accounts: &[AccountResponse],
-) -> ApiResult<()> {
-    let mut assets = 0.0_f64;
-    let mut liabilities = 0.0_f64;
-    let mut included = 0_i32;
-    let mut excluded = 0_i32;
-
-    // Calculate the current linked-account totals.
-    for account in accounts {
-        let Some(balance) = account.current_balance else {
-            excluded += 1;
-            continue;
-        };
-
-        // Reject invalid numeric values.
-        if !balance.is_finite() {
-            excluded += 1;
-            continue;
-        }
-
-        // Net-worth snapshots currently use USD only.
-        if account.currency_code.as_deref() != Some("USD") {
-            excluded += 1;
-            continue;
-        }
-
-        match account.account_type.to_lowercase().as_str() {
-            "depository" | "investment" => {
-                assets += balance;
-                included += 1;
-            }
-            "credit" | "loan" => {
-                liabilities += balance;
-                included += 1;
-            }
-            _ => {
-                excluded += 1;
-            }
-        }
-    }
-
-    // Do not record a fake zero if there are no valid balances.
-    if included == 0 {
-        return Ok(());
-    }
-
-    let net_worth = assets - liabilities;
-
-    // Protect the database against numeric overflow.
-    if !net_worth.is_finite() {
-        return Err(AppError::Validation(
-            "Calculated net worth is not finite".to_string(),
-        ));
-    }
-
-    // Insert today's snapshot or update it if one already exists.
-    //
-    // CURRENT_DATE uses the database server's calendar date.
-    // No fabricated historical values are inserted.
-    sqlx::query(
-        r"
-        INSERT INTO net_worth_snapshots
-            (user_id, snapshot_date, amount,
-             included_accounts, excluded_accounts)
-        VALUES ($1, CURRENT_DATE, $2, $3, $4)
-        ON CONFLICT (user_id, snapshot_date)
-        DO UPDATE SET
-            amount = EXCLUDED.amount,
-            included_accounts = EXCLUDED.included_accounts,
-            excluded_accounts = EXCLUDED.excluded_accounts,
-            updated_at = NOW()
-        ",
-    )
-    .bind(user_id)
-    .bind(net_worth)
-    .bind(included)
-    .bind(excluded)
-    .execute(pool)
-    .await
-    .map_err(AppError::from)?;
-
-    Ok(())
-}
-
 /// Retrieve financial accounts for the authenticated user.
 ///
 /// Fetches account information from Plaid for the user's linked financial
@@ -340,79 +237,11 @@ pub async fn api_plaid_get_accounts(
     //
     // This also updates today's snapshot if the user
     // refreshes the dashboard later.
-    record_net_worth_snapshot(&pool, user.id, &accounts).await?;
+    crate::controllers::account::record_net_worth_snapshot(&pool, user.id, &accounts).await?;
 
     // Preserve the existing API response so the Angular
     // dashboard and Profile page continue working unchanged.
     Ok(Json(AccountsResponse { accounts }))
-}
-
-/// Retrieve historical net-worth snapshots for the signed-in user.
-///
-/// Only previously recorded daily values are returned.
-/// This endpoint never guesses past account balances.
-///
-/// GET /api/plaid/net-worth/history
-#[utoipa::path(
-    get,
-    path = "/net-worth/history",
-    summary = "Retrieves the user's recorded net-worth history",
-    description = "Returns daily linked-account net-worth snapshots in chronological order.",
-    responses(
-        (status = 200, description = "Net-worth history retrieved", body = NetWorthHistoryResponse),
-        (status = 401, description = "User is not authenticated"),
-        (status = 500, description = "Failed to retrieve net-worth history")
-    ),
-    tag = "Plaid"
-)]
-pub async fn api_plaid_get_net_worth_history(
-    Extension(user): Extension<AuthUser>,
-    Extension(pool): Extension<PgPool>,
-) -> ApiResult<Json<NetWorthHistoryResponse>> {
-    debug!(
-        "HANDLER ->> GET /api/plaid/net-worth/history user_id={}",
-        user.id
-    );
-
-    // Retrieve only snapshots belonging to the signed-in user.
-    //
-    // The is_demo flag allows Angular to distinguish
-    // simulated sandbox history from recorded balances.
-    let rows: Vec<(chrono::NaiveDate, f64, i32, i32, bool)> = sqlx::query_as(
-        r"
-            SELECT
-                snapshot_date,
-                amount,
-                included_accounts,
-                excluded_accounts,
-                is_demo
-            FROM net_worth_snapshots
-            WHERE user_id = $1
-            ORDER BY snapshot_date ASC
-            ",
-    )
-    .bind(user.id)
-    .fetch_all(&pool)
-    .await
-    .map_err(AppError::from)?;
-
-    // Map database tuples into our typed API objects.
-    let snapshots = rows
-        .into_iter()
-        .map(
-            |(snapshot_date, amount, included_accounts, excluded_accounts, is_demo)| {
-                NetWorthSnapshot {
-                    snapshot_date,
-                    amount,
-                    included_accounts,
-                    excluded_accounts,
-                    is_demo,
-                }
-            },
-        )
-        .collect();
-
-    Ok(Json(NetWorthHistoryResponse { snapshots }))
 }
 
 /// Synchronize transactions for the authenticated user's linked financial
@@ -911,7 +740,6 @@ pub async fn api_plaid_remove_item(
         api_plaid_get_transactions,
         api_plaid_update_transaction_category,
         api_plaid_remove_item,
-        api_plaid_get_net_worth_history,
     ),
     components(schemas(UpdateCategoryRequest)),
     info(title = "Plaid Routes", description = "Plaid financial service endpoints."),
@@ -929,7 +757,6 @@ pub fn plaid_routes() -> AxumRouter {
         .route("/link-token", post(api_plaid_link_token))
         .route("/exchange-token", post(api_plaid_exchange_token))
         .route("/accounts", get(api_plaid_get_accounts))
-        .route("/net-worth/history", get(api_plaid_get_net_worth_history))
         .route("/items/{item_id}", delete(api_plaid_remove_item))
         .route("/transactions/sync", post(api_plaid_sync_transactions))
         .route("/transactions", get(api_plaid_get_transactions))

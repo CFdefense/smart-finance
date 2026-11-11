@@ -198,7 +198,11 @@ describe('PlaidService', () => {
       snapshotCount = response.snapshots.length;
     });
 
-    const request = httpMock.expectOne(`${baseUrl}/net-worth/history`);
+    /**
+     * Net-worth history now belongs to the account API,
+     * rather than the Plaid integration API.
+     */
+    const request = httpMock.expectOne('http://localhost:3001/api/accounts/net-worth/history');
 
     expect(request.request.method).toBe('GET');
     expect(request.request.withCredentials).toBe(true);

@@ -425,8 +425,14 @@ async fn net_worth_history_records_daily_snapshots() {
     assert_eq!(status, StatusCode::OK);
 
     // Before loading accounts, there should be no history.
-    let (status, history) =
-        call(&app, "GET", "/api/plaid/net-worth/history", &cookie_a, None).await;
+    let (status, history) = call(
+        &app,
+        "GET",
+        "/api/accounts/net-worth/history",
+        &cookie_a,
+        None,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(history["snapshots"].as_array().unwrap().len(), 0);
@@ -437,8 +443,14 @@ async fn net_worth_history_records_daily_snapshots() {
 
     assert_eq!(status, StatusCode::OK);
 
-    let (status, history) =
-        call(&app, "GET", "/api/plaid/net-worth/history", &cookie_a, None).await;
+    let (status, history) = call(
+        &app,
+        "GET",
+        "/api/accounts/net-worth/history",
+        &cookie_a,
+        None,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(history["snapshots"].as_array().unwrap().len(), 1);
@@ -451,15 +463,27 @@ async fn net_worth_history_records_daily_snapshots() {
 
     assert_eq!(status, StatusCode::OK);
 
-    let (status, history) =
-        call(&app, "GET", "/api/plaid/net-worth/history", &cookie_a, None).await;
+    let (status, history) = call(
+        &app,
+        "GET",
+        "/api/accounts/net-worth/history",
+        &cookie_a,
+        None,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(history["snapshots"].as_array().unwrap().len(), 1);
 
     // User B must not have access to User A's history.
-    let (status, other_history) =
-        call(&app, "GET", "/api/plaid/net-worth/history", &cookie_b, None).await;
+    let (status, other_history) = call(
+        &app,
+        "GET",
+        "/api/accounts/net-worth/history",
+        &cookie_b,
+        None,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(other_history["snapshots"].as_array().unwrap().len(), 0);
