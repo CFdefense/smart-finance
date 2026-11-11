@@ -1,10 +1,13 @@
+import json
 import logging
 import os
+from collections.abc import Iterator
 from contextlib import asynccontextmanager
 
 import psycopg
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
 
 from agent import (
     AnalysisResult,
@@ -66,6 +69,20 @@ def chat(request: ChatRequest) -> ChatResponse:
     if app.state.chat_agent is None:
         raise HTTPException(status_code=503, detail="AI assistant is not available.")
     return app.state.chat_agent.generate_answer(request)
+
+
+@app.post("/chat/stream")
+def chat_stream(request: ChatRequest) -> StreamingResponse:
+    """Stream a chat reply as newline-delimited JSON events."""
+    if app.state.chat_agent is None:
+        raise HTTPException(status_code=503, detail="AI assistant is not available.")
+    events = app.state.chat_agent.generate_stream(request)
+
+    def lines() -> Iterator[str]:
+        for event in events:
+            yield json.dumps(event) + "\n"
+
+    return StreamingResponse(lines(), media_type="application/x-ndjson")
 
 
 @app.post("/analyze")

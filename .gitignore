@@ -42,3 +42,6 @@ __pycache__/
 
 # All logs (the AI service's analyzer.log and log_<txid>.txt hold payment data)
 logs/
+
+# Node modules
+**/node_modules/

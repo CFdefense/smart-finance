@@ -1,6 +1,7 @@
 //! Integration tests.
 
 pub mod budgets;
+pub mod chat;
 pub mod fixtures;
 pub mod goals;
 pub mod plaid;
