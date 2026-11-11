@@ -238,7 +238,7 @@ async fn sync_transactions_authenticated_no_items() {
  * 1. Filtering by Account A excludes Account B's transactions.
  * 2. Filtering by Account B excludes Account A's transactions.
  * 3. Pagination and total counts are correct.
- * 4. Omitting account_id returns transactions from both accounts.
+ * 4. Omitting `account_id` returns transactions from both accounts.
  *
  * All records belong to a temporary test user and are
  * deleted automatically through cascading foreign keys.
@@ -472,6 +472,8 @@ async fn net_worth_history_records_daily_snapshots() {
 // ─── Data-isolation test ──────────────────────────────────────────────────────
 
 #[tokio::test]
+// The two user IDs are intentionally named symmetrically.
+#[allow(clippy::similar_names, clippy::too_many_lines)]
 async fn get_transactions_data_isolation() {
     let app = test_app().await;
     let pool = test_pool().await;

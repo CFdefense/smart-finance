@@ -186,7 +186,7 @@ pub async fn seed_tester_profile(
 
     for a in &accounts {
         sqlx::query!(
-            r#"
+            r"
             INSERT INTO plaid_accounts
                 (account_id, item_id, name, official_name, account_type, account_subtype,
                  mask, current_balance, available_balance, currency_code, updated_at)
@@ -201,7 +201,7 @@ pub async fn seed_tester_profile(
                 available_balance = EXCLUDED.available_balance,
                 currency_code     = EXCLUDED.currency_code,
                 updated_at        = NOW()
-            "#,
+            ",
             a.account_id,
             a.item_id,
             a.name,
@@ -252,7 +252,7 @@ pub async fn seed_tester_profile(
 
             for tx in &page.added {
                 sqlx::query!(
-                    r#"
+                    r"
                     INSERT INTO plaid_transactions
                         (transaction_id, account_id, name, amount, date, pending, updated_at)
                     VALUES ($1, $2, $3, $4, $5, $6, NOW())
@@ -262,7 +262,7 @@ pub async fn seed_tester_profile(
                         date       = EXCLUDED.date,
                         pending    = EXCLUDED.pending,
                         updated_at = NOW()
-                    "#,
+                    ",
                     tx.transaction_id,
                     tx.account_id,
                     tx.name,
@@ -276,14 +276,14 @@ pub async fn seed_tester_profile(
             }
 
             sqlx::query!(
-                r#"
+                r"
                 INSERT INTO plaid_sync_cursors (item_id, cursor, has_more, updated_at)
                 VALUES ($1, $2, $3, NOW())
                 ON CONFLICT (item_id) DO UPDATE SET
                     cursor     = EXCLUDED.cursor,
                     has_more   = EXCLUDED.has_more,
                     updated_at = NOW()
-                "#,
+                ",
                 exchange.item_id,
                 page.next_cursor,
                 page.has_more
@@ -337,7 +337,7 @@ pub async fn seed_tester_profile(
 ///
 /// # Errors
 ///
-/// Returns an AppError if a database operation fails.
+/// Returns an `AppError` if a database operation fails.
 pub async fn seed_demo_transactions(pool: &PgPool, user_id: i32) -> Result<usize, AppError> {
     // Find one existing checking/depository account for this
     // specific user. We don't create fake Plaid connections.
@@ -345,7 +345,7 @@ pub async fn seed_demo_transactions(pool: &PgPool, user_id: i32) -> Result<usize
     // We deliberately avoid credit and loan accounts to
     // prevent the demo expenses from being counted twice.
     let account_id: Option<String> = sqlx::query_scalar(
-        r#"
+        r"
         SELECT a.account_id
         FROM plaid_accounts a
         JOIN plaid_links l ON l.item_id = a.item_id
@@ -353,7 +353,7 @@ pub async fn seed_demo_transactions(pool: &PgPool, user_id: i32) -> Result<usize
           AND a.account_type = 'depository'
         ORDER BY a.id
         LIMIT 1
-        "#,
+        ",
     )
     .bind(user_id)
     .fetch_optional(pool)
@@ -397,7 +397,7 @@ pub async fn seed_demo_transactions(pool: &PgPool, user_id: i32) -> Result<usize
     // This avoids issues when subtracting months from dates
     // like January 31 or March 31.
     let current_month = NaiveDate::from_ymd_opt(today.year(), today.month(), 1)
-        .expect("Current calendar month must be valid");
+        .ok_or_else(|| AppError::Internal("Invalid current calendar month".to_string()))?;
 
     let mut inserted = 0_usize;
 
@@ -406,7 +406,7 @@ pub async fn seed_demo_transactions(pool: &PgPool, user_id: i32) -> Result<usize
     for month_offset in 0..12_u32 {
         let month = current_month
             .checked_sub_months(Months::new(month_offset))
-            .expect("Demo month must be valid");
+            .ok_or_else(|| AppError::Internal("Invalid demo month".to_string()))?;
 
         // Generate 32 transactions per complete month.
         //
@@ -417,10 +417,11 @@ pub async fn seed_demo_transactions(pool: &PgPool, user_id: i32) -> Result<usize
 
             // Restrict generated dates to days 1 through 28.
             // Those days exist in every calendar month.
-            let day = (index % 28 + 1) as u32;
+            let day = u32::try_from(index % 28 + 1)
+                .map_err(|_| AppError::Internal("Invalid transaction day".to_string()))?;
 
             let date = NaiveDate::from_ymd_opt(month.year(), month.month(), day)
-                .expect("Day 1 through 28 must be valid");
+                .ok_or_else(|| AppError::Internal("Invalid demo transaction date".to_string()))?;
 
             // Don't create transactions dated in the future.
             if date > today {
@@ -430,7 +431,12 @@ pub async fn seed_demo_transactions(pool: &PgPool, user_id: i32) -> Result<usize
             // Deterministic variation makes consecutive
             // transactions more realistic and makes repeat
             // runs reproducible.
-            let variation = 1.0 + ((index * 7 + month_offset as usize) % 11) as f64 / 100.0;
+            let variation = 1.0
+                + f64::from(
+                    u32::try_from((index * 7 + month_offset as usize) % 11).map_err(|_| {
+                        AppError::Internal("Invalid transaction multiplier".to_string())
+                    })?,
+                ) / 100.0;
 
             let amount = (base_amount * variation * 100.0).round() / 100.0;
 
@@ -451,7 +457,7 @@ pub async fn seed_demo_transactions(pool: &PgPool, user_id: i32) -> Result<usize
             // category synchronization logic from replacing
             // these intentional demonstration categories.
             let result = sqlx::query(
-                r#"
+                r"
                 INSERT INTO plaid_transactions
                     (
                         transaction_id,
@@ -465,7 +471,7 @@ pub async fn seed_demo_transactions(pool: &PgPool, user_id: i32) -> Result<usize
                     )
                 VALUES ($1, $2, $3, $4, $5, FALSE, $6, TRUE)
                 ON CONFLICT (transaction_id) DO NOTHING
-                "#,
+                ",
             )
             .bind(transaction_id)
             .bind(&account_id)
@@ -479,7 +485,8 @@ pub async fn seed_demo_transactions(pool: &PgPool, user_id: i32) -> Result<usize
 
             // rows_affected() is 1 for a new insertion and
             // 0 when this transaction already exists.
-            inserted += result.rows_affected() as usize;
+            inserted += usize::try_from(result.rows_affected())
+                .map_err(|_| AppError::Internal("Inserted row count exceeds usize".to_string()))?;
         }
     }
 
@@ -490,7 +497,7 @@ pub async fn seed_demo_transactions(pool: &PgPool, user_id: i32) -> Result<usize
 ///
 /// This is for LOCAL SANDBOX DEMONSTRATIONS ONLY.
 ///
-/// Unlike real snapshots, generated records have is_demo = TRUE.
+/// Unlike real snapshots, generated records have `is_demo` = TRUE.
 ///
 /// Safety rules:
 /// - An existing snapshot for today is required as an anchor.
@@ -504,7 +511,7 @@ pub async fn seed_demo_transactions(pool: &PgPool, user_id: i32) -> Result<usize
 ///
 /// # Errors
 ///
-/// Returns an AppError if a database operation fails.
+/// Returns an `AppError` if a database operation fails.
 pub async fn seed_demo_net_worth(pool: &PgPool, user_id: i32) -> Result<usize, AppError> {
     // Find today's real net-worth snapshot.
     //
@@ -514,7 +521,7 @@ pub async fn seed_demo_net_worth(pool: &PgPool, user_id: i32) -> Result<usize, A
     // We require an existing snapshot so our generated
     // history has a sensible ending value.
     let today: Option<(f64, i32, i32)> = sqlx::query_as(
-        r#"
+        r"
         SELECT
             amount,
             included_accounts,
@@ -523,7 +530,7 @@ pub async fn seed_demo_net_worth(pool: &PgPool, user_id: i32) -> Result<usize, A
         WHERE user_id = $1
           AND snapshot_date = CURRENT_DATE
           AND is_demo = FALSE
-        "#,
+        ",
     )
     .bind(user_id)
     .fetch_optional(pool)
@@ -551,7 +558,7 @@ pub async fn seed_demo_net_worth(pool: &PgPool, user_id: i32) -> Result<usize, A
     // Anchor all historical dates to the first day of
     // their respective calendar months.
     let current_month = NaiveDate::from_ymd_opt(today_date.year(), today_date.month(), 1)
-        .expect("Current month must be valid");
+        .ok_or_else(|| AppError::Internal("Invalid current month".to_string()))?;
 
     let mut inserted = 0_usize;
 
@@ -563,14 +570,14 @@ pub async fn seed_demo_net_worth(pool: &PgPool, user_id: i32) -> Result<usize, A
     for months_ago in 1..=120_u32 {
         let date = current_month
             .checked_sub_months(Months::new(months_ago))
-            .expect("Historical demo date must be valid");
+            .ok_or_else(|| AppError::Internal("Invalid historical demo date".to_string()))?;
 
         // 0.0 = oldest month
         // 1.0 = newest historical month
         //
         // This produces an overall upward trajectory
         // while allowing some monthly fluctuations.
-        let progress = (120 - months_ago) as f64 / 119.0;
+        let progress = f64::from(120 - months_ago) / 119.0;
 
         // Start at approximately 35% of today's value,
         // then gradually approach today's value.
@@ -581,8 +588,8 @@ pub async fn seed_demo_net_worth(pool: &PgPool, user_id: i32) -> Result<usize, A
         // Sine waves create ups and downs without requiring
         // random-number dependencies. Different user IDs
         // produce different sequences.
-        let user_phase = user_id as f64 * 0.71;
-        let month_phase = months_ago as f64;
+        let user_phase = f64::from(user_id) * 0.71;
+        let month_phase = f64::from(months_ago);
 
         let fluctuation = (month_phase * 0.63 + user_phase).sin() * current_amount.abs() * 0.035
             + (month_phase * 0.19 + user_phase).cos() * current_amount.abs() * 0.015;
@@ -606,7 +613,7 @@ pub async fn seed_demo_net_worth(pool: &PgPool, user_id: i32) -> Result<usize, A
         // The new is_demo column explicitly identifies
         // this record as synthetic test data.
         let result = sqlx::query(
-            r#"
+            r"
             INSERT INTO net_worth_snapshots (
                 user_id,
                 snapshot_date,
@@ -618,7 +625,7 @@ pub async fn seed_demo_net_worth(pool: &PgPool, user_id: i32) -> Result<usize, A
             VALUES ($1, $2, $3, $4, $5, TRUE)
             ON CONFLICT (user_id, snapshot_date)
             DO NOTHING
-            "#,
+            ",
         )
         .bind(user_id)
         .bind(date)
@@ -629,7 +636,8 @@ pub async fn seed_demo_net_worth(pool: &PgPool, user_id: i32) -> Result<usize, A
         .await
         .map_err(AppError::from)?;
 
-        inserted += result.rows_affected() as usize;
+        inserted += usize::try_from(result.rows_affected())
+            .map_err(|_| AppError::Internal("Inserted row count exceeds usize".to_string()))?;
     }
 
     Ok(inserted)

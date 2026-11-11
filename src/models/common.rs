@@ -92,6 +92,8 @@ mod test {
     #[derive(Deserialize)]
     struct Patch {
         #[serde(default, deserialize_with = "double_option")]
+        // Three states are required: absent, explicit null, or a value.
+        #[allow(clippy::option_option)]
         value: Option<Option<String>>,
     }
 

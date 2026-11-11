@@ -212,14 +212,14 @@ async fn test_demo_transactions_are_repeatable() {
     // Verify all eight supported spending categories
     // are represented in the generated transactions.
     let category_count = sqlx::query_scalar::<_, i64>(
-        r#"
+        r"
         SELECT COUNT(DISTINCT t.category)
         FROM plaid_transactions t
         JOIN plaid_accounts a ON a.account_id = t.account_id
         JOIN plaid_links l ON l.item_id = a.item_id
         WHERE l.user_id = $1
           AND t.transaction_id LIKE 'smart-finance-demo-v1-%'
-        "#,
+        ",
     )
     .bind(seeded.user_id)
     .fetch_one(&pool)
@@ -278,7 +278,7 @@ async fn test_demo_net_worth_history_is_repeatable() {
     //
     // This is a controlled test fixture, not real user data.
     sqlx::query(
-        r#"
+        r"
         INSERT INTO net_worth_snapshots (
             user_id,
             snapshot_date,
@@ -288,7 +288,7 @@ async fn test_demo_net_worth_history_is_repeatable() {
             is_demo
         )
         VALUES ($1, CURRENT_DATE, 20000.0, 1, 0, FALSE)
-        "#,
+        ",
     )
     .bind(seeded.user_id)
     .execute(&pool)
@@ -308,12 +308,12 @@ async fn test_demo_net_worth_history_is_repeatable() {
 
     // Confirm the historical records are marked as demo.
     let demo_count: i64 = sqlx::query_scalar(
-        r#"
+        r"
         SELECT COUNT(*)
         FROM net_worth_snapshots
         WHERE user_id = $1
           AND is_demo = TRUE
-        "#,
+        ",
     )
     .bind(seeded.user_id)
     .fetch_one(&pool)
@@ -325,12 +325,12 @@ async fn test_demo_net_worth_history_is_repeatable() {
     // Today's real snapshot must still equal $20,000
     // and must not have been marked as synthetic.
     let (today_amount, today_is_demo): (f64, bool) = sqlx::query_as(
-        r#"
+        r"
             SELECT amount, is_demo
             FROM net_worth_snapshots
             WHERE user_id = $1
               AND snapshot_date = CURRENT_DATE
-            "#,
+            ",
     )
     .bind(seeded.user_id)
     .fetch_one(&pool)

@@ -206,11 +206,11 @@ pub struct PlaidPersonalFinanceCategory {
 /// Optional filters and pagination for transaction retrieval.
 ///
 /// All fields are optional:
-/// - account_id: Show only transactions from one financial account.
+/// - `account_id`: Show only transactions from one financial account.
 /// - limit: Maximum transactions returned per request.
 /// - offset: Number of transactions to skip.
 ///
-/// When account_id is omitted, the API returns transactions
+/// When `account_id` is omitted, the API returns transactions
 /// across all accounts belonging to the authenticated user.
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct TransactionsQuery {

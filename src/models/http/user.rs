@@ -342,7 +342,7 @@ mod tests {
     #[test]
     fn validate_empty_first_name() {
         let mut request = req("alice@example.com", "Secret_123");
-        request.first_name = "".to_string();
+        request.first_name = String::new();
 
         assert!(request.validate().is_err());
     }
@@ -350,7 +350,7 @@ mod tests {
     #[test]
     fn validate_empty_last_name() {
         let mut request = req("alice@example.com", "Secret_123");
-        request.last_name = "".to_string();
+        request.last_name = String::new();
 
         assert!(request.validate().is_err());
     }

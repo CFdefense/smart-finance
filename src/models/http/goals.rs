@@ -367,6 +367,8 @@ mod test {
         let today = d(2024, 2, 20);
         let total = (d(2024, 4, 10) - created).num_days();
         let elapsed = (today - created).num_days();
+        // Date intervals in this test are small; precision loss is not material.
+        #[allow(clippy::cast_precision_loss)]
         let expected = 100.0 * elapsed as f64 / total as f64;
         assert_eq!(
             compute_on_track(expected + 1.0, 100.0, created, target, today),

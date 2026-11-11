@@ -218,7 +218,7 @@ async fn record_net_worth_snapshot(
     // CURRENT_DATE uses the database server's calendar date.
     // No fabricated historical values are inserted.
     sqlx::query(
-        r#"
+        r"
         INSERT INTO net_worth_snapshots
             (user_id, snapshot_date, amount,
              included_accounts, excluded_accounts)
@@ -229,7 +229,7 @@ async fn record_net_worth_snapshot(
             included_accounts = EXCLUDED.included_accounts,
             excluded_accounts = EXCLUDED.excluded_accounts,
             updated_at = NOW()
-        "#,
+        ",
     )
     .bind(user_id)
     .bind(net_worth)
@@ -299,7 +299,7 @@ pub async fn api_plaid_get_accounts(
         // balances stay current.
         for a in &plaid_accounts {
             sqlx::query!(
-                r#"
+                r"
                 INSERT INTO plaid_accounts
                     (account_id, item_id, name, official_name, account_type, account_subtype,
                      mask, current_balance, available_balance, currency_code, updated_at)
@@ -314,7 +314,7 @@ pub async fn api_plaid_get_accounts(
                     available_balance = EXCLUDED.available_balance,
                     currency_code     = EXCLUDED.currency_code,
                     updated_at        = NOW()
-                "#,
+                ",
                 a.account_id,
                 a.item_id,
                 a.name,
@@ -379,7 +379,7 @@ pub async fn api_plaid_get_net_worth_history(
     // The is_demo flag allows Angular to distinguish
     // simulated sandbox history from recorded balances.
     let rows: Vec<(chrono::NaiveDate, f64, i32, i32, bool)> = sqlx::query_as(
-        r#"
+        r"
             SELECT
                 snapshot_date,
                 amount,
@@ -389,7 +389,7 @@ pub async fn api_plaid_get_net_worth_history(
             FROM net_worth_snapshots
             WHERE user_id = $1
             ORDER BY snapshot_date ASC
-            "#,
+            ",
     )
     .bind(user.id)
     .fetch_all(&pool)
@@ -468,7 +468,7 @@ pub async fn api_plaid_sync_transactions(
         for a in &plaid_accounts {
             // Upsert the account so the local copy stays current.
             sqlx::query!(
-                r#"
+                r"
                 INSERT INTO plaid_accounts
                     (account_id, item_id, name, official_name, account_type, account_subtype,
                      mask, current_balance, available_balance, currency_code, updated_at)
@@ -483,7 +483,7 @@ pub async fn api_plaid_sync_transactions(
                     available_balance = EXCLUDED.available_balance,
                     currency_code     = EXCLUDED.currency_code,
                     updated_at        = NOW()
-                "#,
+                ",
                 a.account_id,
                 a.item_id,
                 a.name,
@@ -529,7 +529,7 @@ pub async fn api_plaid_sync_transactions(
             // page is replayed.
             for tx in &page.added {
                 sqlx::query!(
-                    r#"
+                    r"
                     INSERT INTO plaid_transactions
                         (transaction_id, account_id, name, amount, date, pending, category, updated_at)
                     VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
@@ -544,7 +544,7 @@ pub async fn api_plaid_sync_transactions(
                                          ELSE EXCLUDED.category
                                      END,
                         updated_at = NOW()
-                    "#,
+                    ",
                     tx.transaction_id,
                     tx.account_id,
                     tx.name,
@@ -561,7 +561,7 @@ pub async fn api_plaid_sync_transactions(
             // Upsert modified transactions the same way.
             for tx in &page.modified {
                 sqlx::query!(
-                    r#"
+                    r"
                     INSERT INTO plaid_transactions
                         (transaction_id, account_id, name, amount, date, pending, category, updated_at)
                     VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
@@ -576,7 +576,7 @@ pub async fn api_plaid_sync_transactions(
                                          ELSE EXCLUDED.category
                                      END,
                         updated_at = NOW()
-                    "#,
+                    ",
                     tx.transaction_id,
                     tx.account_id,
                     tx.name,
@@ -604,14 +604,14 @@ pub async fn api_plaid_sync_transactions(
             // Persist the new cursor after every page so a later sync resumes
             // incrementally instead of starting over.
             sqlx::query!(
-                r#"
+                r"
                 INSERT INTO plaid_sync_cursors (item_id, cursor, has_more, updated_at)
                 VALUES ($1, $2, $3, NOW())
                 ON CONFLICT (item_id) DO UPDATE SET
                     cursor     = EXCLUDED.cursor,
                     has_more   = EXCLUDED.has_more,
                     updated_at = NOW()
-                "#,
+                ",
                 item.item_id,
                 page.next_cursor,
                 page.has_more
@@ -699,7 +699,7 @@ pub async fn api_plaid_get_transactions(
     // by passing a different account_id in the URL.
     let transactions = sqlx::query_as!(
         TransactionResponse,
-        r#"
+        r"
         SELECT
             t.transaction_id,
             t.account_id,
@@ -717,7 +717,7 @@ pub async fn api_plaid_get_transactions(
           AND ($4::TEXT IS NULL OR t.account_id = $4)
         ORDER BY t.date DESC, t.id DESC
         LIMIT $2 OFFSET $3
-        "#,
+        ",
         user.id,
         limit,
         offset,
@@ -733,7 +733,7 @@ pub async fn api_plaid_get_transactions(
     // Otherwise, the frontend could display the wrong number
     // of pages when someone selects an individual account.
     let total: Option<i64> = sqlx::query_scalar!(
-        r#"
+        r"
         SELECT COUNT(*)
         FROM plaid_transactions t
         JOIN plaid_accounts a
@@ -742,7 +742,7 @@ pub async fn api_plaid_get_transactions(
             ON i.item_id = a.item_id
         WHERE i.user_id = $1
           AND ($2::TEXT IS NULL OR t.account_id = $2)
-        "#,
+        ",
         user.id,
         params.account_id.as_deref()
     )
@@ -796,7 +796,7 @@ pub async fn api_plaid_update_transaction_category(
     // Ownership is enforced by joining transactions -> accounts -> links.
     let updated = sqlx::query_as!(
         TransactionResponse,
-        r#"
+        r"
         UPDATE plaid_transactions t
         SET category = $3, category_overridden = TRUE, updated_at = NOW()
         FROM plaid_accounts a
@@ -805,7 +805,7 @@ pub async fn api_plaid_update_transaction_category(
           AND a.account_id = t.account_id
           AND i.user_id = $2
         RETURNING t.transaction_id, t.account_id, t.name, t.amount, t.date, t.pending, t.category
-        "#,
+        ",
         transaction_id,
         user.id,
         payload.category.as_str()

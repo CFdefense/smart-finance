@@ -590,6 +590,8 @@ async fn spending_by_category_rejects_invalid_month() {
 /// Also verify that only the signed-in user's transactions
 /// are included in their spending totals.
 #[tokio::test]
+// Integration test keeps the complete scenario together.
+#[allow(clippy::too_many_lines)]
 async fn spending_by_category_aggregates_transactions() {
     let app = test_app().await;
     let pool = test_pool().await;
