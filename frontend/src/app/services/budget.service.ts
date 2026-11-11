@@ -3,66 +3,34 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 
 /**
- * Spending categories supported by the Rust backend.
+ * Import shared budget data models.
  *
- * These values must match the Category enum in src/models/category.rs.
+ * The service handles API requests while the models
+ * describe the data sent and received.
  */
-export type BudgetCategory =
-  | 'SHOPPING'
-  | 'ENTERTAINMENT'
-  | 'UTILITIES'
-  | 'HEALTHCARE'
-  | 'FOOD_DINING'
-  | 'GROCERIES'
-  | 'TRANSPORTATION'
-  | 'OTHER';
+import type {
+  Budget,
+  BudgetsResponse,
+  CategorySpendingResponse,
+  CreateBudgetRequest,
+  UpdateBudgetRequest,
+} from '../models/budget.models';
 
 /**
- * Information required to create a recurring monthly budget.
- */
-export interface CreateBudgetRequest {
-  name: string;
-  category: BudgetCategory;
-  monthly_limit: number;
-  active?: boolean;
-}
-
-/**
- * Fields the user can change after creating a budget.
+ * Preserve existing imports elsewhere in the frontend.
  *
- * The category is intentionally excluded because the backend
- * does not allow changing it after creation.
+ * Components and tests that currently import these
+ * types from budget.service.ts will continue working.
  */
-export interface UpdateBudgetRequest {
-  name?: string;
-  monthly_limit?: number;
-  active?: boolean;
-}
-
-/**
- * Budget data returned by the backend, including spending
- * calculated from synced Plaid transactions.
- */
-export interface Budget {
-  id: number;
-  name: string;
-  category: BudgetCategory;
-  monthly_limit: number;
-  active: boolean;
-  month: string;
-  spent: number;
-  remaining: number;
-  percent_used: number;
-  over_budget: boolean;
-}
-
-/**
- * Response from GET /api/budgets.
- */
-export interface BudgetsResponse {
-  month: string;
-  budgets: Budget[];
-}
+export type {
+  BudgetCategory,
+  CreateBudgetRequest,
+  UpdateBudgetRequest,
+  Budget,
+  BudgetsResponse,
+  CategorySpending,
+  CategorySpendingResponse,
+} from '../models/budget.models';
 
 /**
  * Communicates with the Rust budget endpoints.
@@ -87,6 +55,23 @@ export class BudgetService {
     const params = month ? new HttpParams().set('month', month) : new HttpParams();
 
     return this.http.get<BudgetsResponse>(this.baseUrl, {
+      params,
+      withCredentials: true,
+    });
+  }
+
+  /**
+   * Fetch monthly spending grouped by category.
+   *
+   * This uses the dedicated Rust endpoint rather than
+   * trying to reconstruct spending from the budgets list.
+   *
+   * When month is omitted, Rust uses the current UTC month.
+   */
+  getSpendingByCategory(month?: string): Observable<CategorySpendingResponse> {
+    const params = month ? new HttpParams().set('month', month) : new HttpParams();
+
+    return this.http.get<CategorySpendingResponse>(`${this.baseUrl}/spending-by-category`, {
       params,
       withCredentials: true,
     });

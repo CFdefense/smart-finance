@@ -34,5 +34,14 @@
     "institution_id": "ins_109508",
     "sandbox_username": "custom_cfarrell",
     "sandbox_password": "pass_good"
+  },
+  {
+    "email": "arthur@test.com",
+    "first_name": "Arthur",
+    "last_name": "Morgan",
+    "password": "Password123",
+    "institution_id": "ins_109508",
+    "sandbox_username": "user_custom",
+    "sandbox_password": "@file:fixtures/arthur-accounts.json"
   }
 ]

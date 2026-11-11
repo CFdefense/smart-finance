@@ -170,12 +170,24 @@ pub struct PlaidPersonalFinanceCategory {
     pub detailed: Option<String>,
 }
 
-/// Query parameters for `GET /api/plaid/transactions`.
+/// Optional filters and pagination for transaction retrieval.
+///
+/// All fields are optional:
+/// - `account_id`: Show only transactions from one financial account.
+/// - limit: Maximum transactions returned per request.
+/// - offset: Number of transactions to skip.
+///
+/// When `account_id` is omitted, the API returns transactions
+/// across all accounts belonging to the authenticated user.
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct TransactionsQuery {
-    /// Maximum number of transactions to return. Defaults to 50.
+    /// Filter transactions to a specific Plaid account.
+    pub account_id: Option<String>,
+
+    /// Maximum transactions returned (defaults to 50).
     pub limit: Option<i64>,
-    /// Number of transactions to skip. Defaults to 0.
+
+    /// Number of transactions to skip (defaults to 0).
     pub offset: Option<i64>,
 }
 

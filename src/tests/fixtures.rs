@@ -88,6 +88,8 @@ fn suffix(token: &str) -> &str {
 /// A fake Plaid API with isolated or fixed IDs.
 ///
 /// Failure cases are triggered by the token sent in the request; see `MOCK_FAIL_*`.
+// Route definitions remain together for the test mock server.
+#[allow(clippy::too_many_lines)]
 fn mock_plaid_router() -> Router {
     Router::new()
         .route(

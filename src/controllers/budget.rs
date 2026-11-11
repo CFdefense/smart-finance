@@ -20,8 +20,8 @@ use crate::{
     models::{
         category::Category,
         http::budgets::{
-            parse_month, BudgetQuery, BudgetResponse, BudgetsResponse, CreateBudgetRequest,
-            MonthWindow, UpdateBudgetRequest,
+            parse_month, BudgetQuery, BudgetResponse, BudgetsResponse, CategorySpending,
+            CategorySpendingResponse, CreateBudgetRequest, MonthWindow, UpdateBudgetRequest,
         },
         sql::budgets::BudgetRow,
     },
@@ -63,6 +63,97 @@ async fn spent_by_category(
             Ok((category, r.spent))
         })
         .collect()
+}
+
+/// Return the user's monthly expenses grouped by category.
+///
+/// GET /api/budgets/spending-by-category
+///
+/// Reuses the same spending aggregation as the budget
+/// endpoints, so category totals stay consistent.
+///
+/// No budget needs to exist for a category to appear.
+#[utoipa::path(
+    get,
+    path = "/spending-by-category",
+    summary = "Get monthly spending grouped by category",
+    params(
+        ("month" = Option<String>, Query, description = "Month as YYYY-MM; defaults to current UTC month")
+    ),
+    responses(
+        (status = 200, description = "Category spending returned", body = CategorySpendingResponse),
+        (status = 400, description = "Invalid month"),
+        (status = 401, description = "Not authenticated"),
+        (status = 500, description = "Failed to retrieve spending")
+    ),
+    security(("auth-token" = [])),
+    tag = "Budgets"
+)]
+pub async fn api_spending_by_category(
+    Extension(user): Extension<AuthUser>,
+    Extension(pool): Extension<PgPool>,
+    Query(query): Query<BudgetQuery>,
+) -> ApiResult<Json<CategorySpendingResponse>> {
+    debug!(
+        "HANDLER ->> GET /api/budgets/spending-by-category user_id={}",
+        user.id
+    );
+
+    // Use the existing month parser.
+    // If no month is provided, it defaults to the current
+    // UTC month, just like the budget endpoints.
+    let window = parse_month(query.month.as_deref(), Utc::now().date_naive())
+        .map_err(AppError::Validation)?;
+
+    // Reuse the existing SQL aggregation.
+    //
+    // This already:
+    // - Filters by the authenticated user's linked accounts.
+    // - Includes only positive transaction amounts.
+    // - Restricts transactions to the selected month.
+    // - Groups transactions by their stored category.
+    let spending = spent_by_category(&pool, user.id, &window).await?;
+
+    // Keep a stable category ordering in the response.
+    //
+    // Categories without any spending are omitted.
+    // The frontend can still show a proper empty state.
+    let all_categories = [
+        Category::Groceries,
+        Category::FoodDining,
+        Category::Shopping,
+        Category::Transportation,
+        Category::Entertainment,
+        Category::Utilities,
+        Category::Healthcare,
+        Category::Other,
+    ];
+
+    let categories: Vec<CategorySpending> = all_categories
+        .iter()
+        .filter_map(|category| {
+            let amount = spending.get(category).copied().unwrap_or(0.0);
+
+            if amount > 0.0 {
+                Some(CategorySpending {
+                    category: *category,
+                    amount: (amount * 100.0).round() / 100.0,
+                })
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    // The total must represent exactly the same values
+    // returned in the category breakdown.
+    let total = categories.iter().map(|item| item.amount).sum();
+
+    Ok(Json(CategorySpendingResponse {
+        month: window.label(),
+        total,
+        categories,
+    }))
 }
 
 /// Create a monthly budget for a category.
@@ -369,7 +460,8 @@ pub async fn api_delete_budget(
         api_list_budgets,
         api_get_budget,
         api_update_budget,
-        api_delete_budget
+        api_delete_budget,
+        api_spending_by_category,
     ),
     components(schemas(
         CreateBudgetRequest,
@@ -388,6 +480,7 @@ pub struct BudgetApiDoc;
 pub fn budget_routes() -> AxumRouter {
     AxumRouter::new()
         .route("/", get(api_list_budgets).post(api_create_budget))
+        .route("/spending-by-category", get(api_spending_by_category))
         .route(
             "/{id}",
             get(api_get_budget)

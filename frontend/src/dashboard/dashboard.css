@@ -4,22 +4,27 @@
  * Keeps the greeting on the left and the
  * profile dropdown on the right.
  */
+
+/*
+ * Align the welcome message with the dashboard cards.
+ * Keep the profile menu on the right.
+ */
 .header {
+  box-sizing: border-box;
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
   gap: 24px;
 
-  width: 100%;
-  box-sizing: border-box;
-
-  padding: 32px 48px;
+  width: min(1100px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 28px 0 24px;
 }
 
 /* Adapt the header for narrower screens. */
 @media (max-width: 700px) {
   .header {
-    padding: 24px 16px;
+    padding: 20px 0;
     gap: 12px;
   }
 }
@@ -97,13 +102,6 @@
   align-items: center;
 }
 
-.edit_budget {
-  color: white;
-  font-size: 35px;
-  position: relative;
-  align-items: center;
-}
-
 .profile-option {
   display: flex;
   align-items: center;
@@ -119,10 +117,6 @@
   position: relative;
   display: inline-block;
   align-content: center;
-}
-
-.profile-dropdown:hover .dropbtn {
-  background-color: #2980b9;
 }
 
 .profile-dropdown-content {
@@ -156,17 +150,28 @@
   display: block;
 }
 
+/*
+ * ONE shared layout for the entire dashboard.
+ *
+ * Every major section now inherits the same available
+ * width instead of calculating its own margins.
+ */
 .parent {
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  row-gap: 50px;
+  gap: 24px;
+
+  width: min(1100px, calc(100% - 32px));
+  margin: 0 auto 48px;
 }
 
 .budget-buttons {
   display: flex;
   align-items: center;
-  gap: 30px;
-  padding-left: 60px;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 0;
 }
 
 .create-budget {
@@ -199,83 +204,20 @@
   background: #7c9fff;
 }
 
-.edit-budget {
-  background: white;
-  /* color: #0077f6; */
-  color: #6284e2;
-  padding: 25px 35px;
-  /* border: 1px solid #0077f6; */
-  border: 1px solid #7c9fff;
-  border-radius: 10px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  font-family:
-    'Inter Tight',
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    Roboto,
-    Helvetica,
-    Arial,
-    sans-serif,
-    'Apple Color Emoji',
-    'Segoe UI Emoji',
-    'Segoe UI Symbol';
-  font-size: 1.75rem;
-}
-
-.edit-budget:hover {
-  /* color: #0f65c0; */
-  color: #6284e2;
-  border: 1px solid #0f65c0;
-}
-
-.set-goals {
-  background: white;
-  /* color: #0077f6; */
-  color: #6284e2;
-  padding: 25px 35px;
-  /* border: 1px solid #0077f6; */
-  border: 1px solid #7c9fff;
-  border-radius: 10px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  font-family:
-    'Inter Tight',
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    Roboto,
-    Helvetica,
-    Arial,
-    sans-serif,
-    'Apple Color Emoji',
-    'Segoe UI Emoji',
-    'Segoe UI Symbol';
-  font-size: 1.75rem;
-}
-
-.set-goals:hover {
-  /* color: #0f65c0; */
-  color: #6284e2;
-  border: 1px solid #0f65c0;
-}
-
 .totals-and-remaining {
-  display: flex;
-  align-items: center;
-  gap: 50px;
-  padding-left: 60px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 20px;
+  padding: 0;
 }
 
 .total-budget {
   /* background-color: rgba(195, 232, 248, 0.5); */
   background-color: #dde5fc;
-  width: 380px;
+  width: auto;
+  min-width: 0;
   padding: 30px;
-  padding-left: 60px;
   border-radius: 10px;
   box-shadow: 4px 8px 15px 2px rgba(0, 0, 0, 0.2);
   flex-direction: column;
@@ -290,9 +232,19 @@
   justify-content: left;
 }
 
-.total-budget-title {
-  color: rgb(92, 92, 92);
-  font-size: 1.75rem;
+/*
+ * Shared typography for the three legacy budget summary cards.
+ *
+ * Their titles and amounts previously repeated this exact
+ * font stack six times. One shared rule keeps the same
+ * appearance while removing unnecessary duplication.
+ */
+.total-budget-title,
+.total-budget-amount,
+.actual-spent-title,
+.actual-spent-amount,
+.remaining-budget-title,
+.remaining-budget-amount {
   font-family:
     'Inter Tight',
     -apple-system,
@@ -305,31 +257,24 @@
     'Apple Color Emoji',
     'Segoe UI Emoji',
     'Segoe UI Symbol';
+}
+
+.total-budget-title {
+  color: rgb(92, 92, 92);
+  font-size: 1.75rem;
 }
 
 .total-budget-amount {
   color: black;
   font-size: 2.5rem;
-  font-family:
-    'Inter Tight',
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    Roboto,
-    Helvetica,
-    Arial,
-    sans-serif,
-    'Apple Color Emoji',
-    'Segoe UI Emoji',
-    'Segoe UI Symbol';
 }
 
 .actual-spent {
   /* background-color: rgba(135, 213, 247, 0.5); */
   background-color: #c4d5fc;
-  width: 380px;
+  width: auto;
+  min-width: 0;
   padding: 30px;
-  padding-left: 60px;
   border-radius: 10px;
   box-shadow: 4px 8px 15px 2px rgba(0, 0, 0, 0.2);
   flex-direction: column;
@@ -347,43 +292,19 @@
 .actual-spent-title {
   color: rgb(92, 92, 92);
   font-size: 1.75rem;
-  font-family:
-    'Inter Tight',
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    Roboto,
-    Helvetica,
-    Arial,
-    sans-serif,
-    'Apple Color Emoji',
-    'Segoe UI Emoji',
-    'Segoe UI Symbol';
 }
 
 .actual-spent-amount {
   color: black;
   font-size: 2.5rem;
-  font-family:
-    'Inter Tight',
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    Roboto,
-    Helvetica,
-    Arial,
-    sans-serif,
-    'Apple Color Emoji',
-    'Segoe UI Emoji',
-    'Segoe UI Symbol';
 }
 
 .remaining-budget {
   /* background-color: rgba(68, 164, 205, 0.5); */
   background-color: #a2b7e9;
-  width: 380px;
+  width: auto;
+  min-width: 0;
   padding: 30px;
-  padding-left: 60px;
   border-radius: 10px;
   box-shadow: 4px 8px 15px 2px rgba(0, 0, 0, 0.2);
   flex-direction: column;
@@ -401,35 +322,11 @@
 .remaining-budget-title {
   color: rgb(92, 92, 92);
   font-size: 1.75rem;
-  font-family:
-    'Inter Tight',
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    Roboto,
-    Helvetica,
-    Arial,
-    sans-serif,
-    'Apple Color Emoji',
-    'Segoe UI Emoji',
-    'Segoe UI Symbol';
 }
 
 .remaining-budget-amount {
   color: black;
   font-size: 2.5rem;
-  font-family:
-    'Inter Tight',
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    Roboto,
-    Helvetica,
-    Arial,
-    sans-serif,
-    'Apple Color Emoji',
-    'Segoe UI Emoji',
-    'Segoe UI Symbol';
 }
 
 /*
@@ -543,4 +440,751 @@
 .profile-option:hover,
 .logout-option:hover {
   background-color: #f3f4f6;
+}
+
+/*
+ * Dashboard connected accounts.
+ *
+ * Keep the section centered and responsive.
+ * These styles are scoped to the new account components,
+ * so existing budget and profile styles remain intact.
+ */
+.dashboard-accounts {
+  /* The parent controls width and horizontal alignment. */
+  width: 100%;
+  margin: 0;
+  padding: 24px;
+  box-sizing: border-box;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  box-shadow: 0 4px 18px rgba(15, 23, 42, 0.06);
+}
+
+.accounts-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 22px;
+}
+
+.accounts-heading h2 {
+  margin: 0 0 6px;
+  font-size: 1.35rem;
+  color: #1f2937;
+}
+
+.accounts-heading p {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+.accounts-heading > .material-symbols-outlined {
+  font-size: 30px;
+  color: #6284e2;
+}
+
+.account-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.account-card {
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.account-select {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 18px 20px;
+  gap: 16px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.account-select:hover {
+  background: #f8faff;
+}
+
+.account-select:focus-visible,
+.dashboard-accounts button:focus-visible {
+  outline: 3px solid #6284e2;
+  outline-offset: -3px;
+}
+
+.account-information,
+.transaction-details {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 5px;
+}
+
+.account-information strong,
+.transaction-details strong {
+  overflow-wrap: anywhere;
+  color: #1f2937;
+  font-size: 0.98rem;
+}
+
+.account-description,
+.transaction-description {
+  font-size: 0.84rem;
+  color: #64748b;
+}
+
+.account-value {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+  color: #1f2937;
+  white-space: nowrap;
+}
+
+.account-value .material-symbols-outlined {
+  color: #64748b;
+}
+
+/*
+ * Expanded transaction area.
+ */
+.account-transactions {
+  padding: 20px;
+  border-top: 1px solid #e2e8f0;
+  background: #fbfcff;
+}
+
+.account-transactions h3 {
+  margin: 0 0 15px;
+  font-size: 1rem;
+  color: #334155;
+}
+
+.transaction-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.transaction-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  padding: 13px 0;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.transaction-amount {
+  flex-shrink: 0;
+  color: #334155;
+  font-size: 0.95rem;
+}
+
+.transaction-amount.incoming {
+  color: #16805d;
+}
+
+.transaction-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 20px;
+  color: #64748b;
+  font-size: 0.875rem;
+}
+
+.pagination-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.pagination-buttons button,
+.accounts-message button {
+  padding: 8px 14px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  color: #334155;
+  cursor: pointer;
+}
+
+.pagination-buttons button:hover:not(:disabled),
+.accounts-message button:hover {
+  background: #eef2ff;
+}
+
+.pagination-buttons button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.accounts-message {
+  padding: 12px 0;
+  color: #64748b;
+}
+
+/*
+ * Keep account balances and transaction rows readable
+ * on phones and smaller browser windows.
+ */
+@media (max-width: 600px) {
+  .dashboard-accounts {
+    width: 100%;
+    padding: 16px;
+  }
+
+  .account-select {
+    padding: 14px;
+  }
+
+  .account-value {
+    gap: 6px;
+  }
+
+  .account-transactions {
+    padding: 14px;
+  }
+
+  .transaction-pagination {
+    flex-wrap: wrap;
+  }
+}
+
+/*
+ * Dashboard chart row.
+ *
+ * Match the width of the net-worth and account sections.
+ * Use equal-width columns on desktop.
+ */
+.dashboard-charts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+
+  /* Align both chart cards with the surrounding sections. */
+  width: 100%;
+  margin: 0;
+  box-sizing: border-box;
+}
+
+.financial-chart-card {
+  min-width: 0;
+  padding: 24px;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 4px 18px rgba(15, 23, 42, 0.06);
+}
+
+.chart-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.chart-heading h2 {
+  margin: 0 0 5px;
+  font-size: 1.15rem;
+  color: #1f2937;
+}
+
+.chart-heading p {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.85rem;
+}
+
+.chart-heading > .material-symbols-outlined {
+  color: #6284e2;
+  font-size: 27px;
+}
+
+.net-worth-graph {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.chart-grid-line {
+  stroke: #e2e8f0;
+  stroke-width: 1;
+  stroke-dasharray: 4 5;
+}
+
+.chart-axis-label {
+  font-size: 13px;
+  fill: #64748b;
+}
+
+.chart-line {
+  fill: none;
+  stroke: #6284e2;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.chart-point {
+  fill: #6284e2;
+  stroke: white;
+  stroke-width: 2;
+}
+
+.chart-message {
+  color: #64748b;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.chart-message button {
+  padding: 8px 14px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.chart-hint {
+  margin-top: 8px;
+  font-size: 0.8rem;
+}
+
+/* Stack the charts on narrow screens. */
+@media (max-width: 800px) {
+  .dashboard-charts {
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+
+  .financial-chart-card {
+    padding: 18px;
+  }
+}
+
+/*
+ * Expenses-by-category visualization.
+ *
+ * The donut and legend share the same card.
+ * The layout adapts without adding another chart library.
+ */
+.expense-chart-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+}
+
+.expense-donut-container {
+  width: min(100%, 250px);
+}
+
+.expense-donut {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.expense-donut-label {
+  fill: #64748b;
+  font-size: 12px;
+}
+
+.expense-donut-total {
+  fill: #1f2937;
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.expense-legend {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.expense-legend-row,
+.expense-legend-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.expense-legend-row {
+  justify-content: space-between;
+}
+
+.expense-legend-name {
+  min-width: 0;
+  color: #475569;
+  font-size: 0.88rem;
+}
+
+.expense-color-dot {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+
+.expense-legend-amount {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  white-space: nowrap;
+  font-size: 0.88rem;
+  color: #1f2937;
+}
+
+.expense-legend-amount span {
+  color: #64748b;
+  font-size: 0.78rem;
+}
+
+/*
+ * Historical net-worth range selector.
+ *
+ * Compact native select that remains usable with
+ * keyboard navigation and on mobile devices.
+ */
+.net-worth-range-label {
+  display: block;
+  margin-top: 14px;
+  margin-bottom: 5px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #475569;
+}
+
+.net-worth-range-select {
+  width: 100%;
+  max-width: 190px;
+  padding: 8px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: white;
+  color: #1f2937;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.net-worth-range-select:focus-visible {
+  outline: 2px solid #6284e2;
+  outline-offset: 2px;
+}
+
+/* Makes simulated history unmistakable. */
+.net-worth-demo-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0;
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.net-worth-demo-note .material-symbols-outlined {
+  font-size: 18px;
+}
+
+/*
+ * Month selector for the Expenses by Category chart.
+ *
+ * Keep this compact so it doesn't push the donut chart
+ * too far down or affect the responsive chart layout.
+ */
+.expense-month-control {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  margin-top: 12px;
+  margin-bottom: 12px;
+}
+
+.expense-month-control label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #475569;
+}
+
+.expense-month-control select {
+  box-sizing: border-box;
+  max-width: 190px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  color: #1f2937;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.expense-month-control select:focus-visible {
+  outline: 2px solid #6284e2;
+  outline-offset: 2px;
+}
+
+/* ==========================================================
+   DASHBOARD BUDGET AND GOAL PROGRESS
+
+   These cards match the two-column chart layout.
+   Both cards stack vertically on smaller screens.
+   ========================================================== */
+
+.dashboard-progress-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  margin: 0;
+}
+
+.dashboard-progress-card {
+  min-width: 0;
+  padding: 28px;
+  border: 1px solid #dbe3ef;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgb(15 23 42 / 4%);
+}
+
+.dashboard-progress-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.dashboard-progress-header h2 {
+  margin: 0 0 6px;
+  color: #1e293b;
+  font-size: 1.4rem;
+}
+
+.dashboard-progress-header p {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.88rem;
+}
+
+.dashboard-progress-header button {
+  padding: 8px 14px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  color: #334155;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.dashboard-progress-header button:hover {
+  background: #f1f5f9;
+}
+
+.dashboard-progress-item {
+  margin-bottom: 22px;
+}
+
+.dashboard-progress-item:last-child {
+  margin-bottom: 0;
+}
+
+.dashboard-progress-item-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 9px;
+  color: #1e293b;
+  font-size: 0.9rem;
+}
+
+.dashboard-progress-track {
+  width: 100%;
+  height: 11px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e8edf4;
+}
+
+.dashboard-progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  transition: width 180ms ease;
+}
+
+.budget-fill {
+  background: #16a085;
+}
+
+.budget-fill.over-budget {
+  background: #dc6262;
+}
+
+.goal-fill {
+  background: #6484e8;
+}
+
+.dashboard-progress-detail,
+.dashboard-progress-warning,
+.dashboard-progress-success {
+  margin: 8px 0 0;
+  font-size: 0.82rem;
+  color: #64748b;
+}
+
+.dashboard-progress-warning {
+  color: #b42318;
+  font-weight: 600;
+}
+
+.dashboard-progress-success {
+  color: #07815b;
+  font-weight: 600;
+}
+
+.progress-empty {
+  margin: 16px 0;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+@media (max-width: 800px) {
+  .dashboard-progress-grid {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  .dashboard-progress-card {
+    padding: 20px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-progress-fill {
+    transition: none;
+  }
+}
+
+/* ==========================================================
+   TOTAL NET WORTH SUMMARY
+
+   Match the appearance of the Connected Accounts card
+   and the dashboard's existing financial charts.
+   ========================================================== */
+
+.net-worth-card {
+  box-sizing: border-box;
+
+  /* Match the centered layout of Connected Accounts. */
+
+  /* Follow the shared 1100px dashboard container. */
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 30px 34px;
+  border: 1px solid #dbe3ef;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgb(15 23 42 / 4%);
+}
+
+.net-worth-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.net-worth-label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.net-worth-label .material-symbols-outlined {
+  color: #6484e8;
+  font-size: 30px;
+}
+
+.net-worth-label h2 {
+  margin: 0;
+  color: #1e293b;
+  font-family: inherit;
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+
+.net-worth-value {
+  margin: 8px 0;
+  color: #1e293b;
+  font-family: inherit;
+  font-size: clamp(2.2rem, 4vw, 3.2rem);
+  font-weight: 750;
+  letter-spacing: -0.035em;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.net-worth-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 26px;
+  color: #475569;
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.net-worth-breakdown span {
+  white-space: nowrap;
+}
+
+.net-worth-note {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+/* Keep the summary readable on narrow screens. */
+@media (max-width: 600px) {
+  .net-worth-card {
+    padding: 22px 20px;
+    border-radius: 16px;
+  }
+
+  .net-worth-value {
+    font-size: 2rem;
+  }
+
+  .net-worth-breakdown {
+    flex-direction: column;
+    gap: 8px;
+  }
+}
+
+/*
+ * Keep the three budget summary cards from overflowing
+ * smaller screens.
+ */
+@media (max-width: 800px) {
+  .totals-and-remaining {
+    grid-template-columns: 1fr;
+  }
 }

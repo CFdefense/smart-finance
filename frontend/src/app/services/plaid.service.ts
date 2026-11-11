@@ -1,43 +1,25 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 
-/**
- * Represents a financial account returned by the Rust Plaid API.
- *
- * A single bank connection (item_id) may contain multiple accounts.
- * For example, one bank could provide both checking and savings.
- */
-export interface PlaidAccount {
-  account_id: string;
-  item_id: string;
-  // Actual financial institution name, such as Chase.
-  institution_name: string | null;
-  name: string;
-  official_name: string | null;
-  account_type: string;
-  account_subtype: string | null;
-  mask: string | null;
-  current_balance: number | null;
-  available_balance: number | null;
-  currency_code: string | null;
-}
+import type {
+  PlaidAccountsResponse,
+  PlaidTransactionsResponse,
+  PlaidLinkTokenResponse,
+  PlaidExchangeTokenResponse,
+  NetWorthHistoryResponse,
+} from '../models/plaid.models';
 
-/** Response from GET /api/plaid/accounts. */
-export interface PlaidAccountsResponse {
-  accounts: PlaidAccount[];
-}
-
-/** Response containing the temporary token used to open Plaid Link. */
-export interface PlaidLinkTokenResponse {
-  link_token: string;
-}
-
-/** Response confirming that Plaid Link connected a bank successfully. */
-export interface PlaidExchangeTokenResponse {
-  success: boolean;
-  item_id: string;
-}
+export type {
+  PlaidAccount,
+  PlaidAccountsResponse,
+  PlaidTransaction,
+  PlaidTransactionsResponse,
+  PlaidLinkTokenResponse,
+  PlaidExchangeTokenResponse,
+  NetWorthSnapshot,
+  NetWorthHistoryResponse,
+} from '../models/plaid.models';
 
 /**
  * Handles communication between Angular and our Rust Plaid endpoints.
@@ -63,6 +45,51 @@ export class PlaidService {
    */
   getAccounts(): Observable<PlaidAccountsResponse> {
     return this.http.get<PlaidAccountsResponse>(`${this.baseUrl}/accounts`, {
+      withCredentials: true,
+    });
+  }
+
+  /**
+   * Retrieve historical linked-account net-worth snapshots.
+   *
+   * Rust determines which records belong to the signed-in user.
+   * withCredentials sends the authentication cookie.
+   */
+  getNetWorthHistory(): Observable<NetWorthHistoryResponse> {
+    return this.http.get<NetWorthHistoryResponse>(
+      'http://localhost:3001/api/accounts/net-worth/history',
+      {
+        withCredentials: true,
+      },
+    );
+  }
+
+  /**
+   * Retrieve transactions for one account, or all accounts.
+   *
+   * The backend validates ownership, so the caller cannot
+   * retrieve another user's transactions by guessing an ID.
+   *
+   * Defaults:
+   * - 20 transactions per page.
+   * - First page (offset 0).
+   *
+   * We let HttpParams handle query-string encoding.
+   */
+  getTransactions(
+    accountId?: string,
+    limit = 20,
+    offset = 0,
+  ): Observable<PlaidTransactionsResponse> {
+    let params = new HttpParams().set('limit', limit).set('offset', offset);
+
+    // An omitted accountId requests transactions from all accounts.
+    if (accountId !== undefined) {
+      params = params.set('account_id', accountId);
+    }
+
+    return this.http.get<PlaidTransactionsResponse>(`${this.baseUrl}/transactions`, {
+      params,
       withCredentials: true,
     });
   }

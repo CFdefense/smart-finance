@@ -180,4 +180,29 @@ describe('BudgetService', () => {
 
     expect(completed).toBe(true);
   });
+
+  it('retrieves spending totals for every category', () => {
+    let total = -1;
+
+    service.getSpendingByCategory().subscribe((response) => {
+      total = response.total;
+    });
+
+    const request = httpMock.expectOne('http://localhost:3001/api/budgets/spending-by-category');
+
+    expect(request.request.method).toBe('GET');
+    expect(request.request.withCredentials).toBe(true);
+
+    // Spending must be available even without any budgets.
+    request.flush({
+      month: '2026-11',
+      total: 100,
+      categories: [
+        { category: 'GROCERIES', amount: 60 },
+        { category: 'FOOD_DINING', amount: 40 },
+      ],
+    });
+
+    expect(total).toBe(100);
+  });
 });

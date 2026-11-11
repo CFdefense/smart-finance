@@ -62,6 +62,7 @@ pub async fn create_router_with_ai(
     // Nest the routes
     let routes = AxumRouter::new()
         .nest("/user", controllers::user::user_routes())
+        .nest("/accounts", controllers::account::account_routes())
         .nest("/budgets", controllers::budget::budget_routes())
         .nest("/rules", controllers::rules::rule_routes())
         .nest("/goals", controllers::goals::goal_routes())

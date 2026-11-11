@@ -1,14 +1,36 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
-import { of, throwError } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
 import { UserDashboard } from './dashboard';
 import { AuthService } from '../app/services/auth.service';
 import { ProfileService } from '../app/services/profile.service';
 import { BudgetService, type Budget } from '../app/services/budget.service';
+import { PlaidService, type PlaidAccount } from '../app/services/plaid.service';
+import { GoalsService, type Goal } from '../app/services/goals.service';
 
 describe('UserDashboard', () => {
+  /**
+   * Returns a date a specified number of days before today.
+   *
+   * This prevents historical chart tests from breaking
+   * whenever the calendar date changes.
+   *
+   * Examples:
+   * daysAgo(0) = today
+   * daysAgo(1) = yesterday
+   * daysAgo(10) = ten days ago
+   */
+  const daysAgo = (days: number): string => {
+    const date = new Date();
+
+    // Use UTC consistently with YYYY-MM-DD snapshot strings.
+    date.setUTCHours(12, 0, 0, 0);
+    date.setUTCDate(date.getUTCDate() - days);
+
+    return date.toISOString().slice(0, 10);
+  };
+
   let component: UserDashboard;
   let router: Router;
 
@@ -19,6 +41,13 @@ describe('UserDashboard', () => {
 
   let budgetService: {
     getBudgets: ReturnType<typeof vi.fn>;
+    getSpendingByCategory: ReturnType<typeof vi.fn>;
+  };
+
+  // Mock the Goals API so dashboard tests never make
+  // actual HTTP requests or modify real user data.
+  let goalsService: {
+    getGoals: ReturnType<typeof vi.fn>;
   };
 
   let authService: {
@@ -65,17 +94,96 @@ describe('UserDashboard', () => {
     },
   ];
 
+  let plaidService: {
+    getAccounts: ReturnType<typeof vi.fn>;
+    getTransactions: ReturnType<typeof vi.fn>;
+    getNetWorthHistory: ReturnType<typeof vi.fn>;
+  };
+
+  const mockAccounts: PlaidAccount[] = [
+    {
+      account_id: 'account-123',
+      item_id: 'item-123',
+      institution_name: 'Test Bank',
+      name: 'Checking',
+      official_name: null,
+      account_type: 'depository',
+      account_subtype: 'checking',
+      mask: '1234',
+      current_balance: 2000,
+      available_balance: 1800,
+      currency_code: 'USD',
+    },
+  ];
+
   beforeEach(async () => {
+    // Provide an empty goals list by default.
+    //
+    // Individual tests can replace this response with
+    // goals that are active, completed, or archived.
+    goalsService = {
+      getGoals: vi.fn().mockReturnValue(of({ goals: [] })),
+    };
+
     profileService = {
       getProfile: vi.fn().mockReturnValue(of({ first_name: 'Mitchell' })),
     };
 
     budgetService = {
+      // Existing budget API mock.
       getBudgets: vi.fn().mockReturnValue(of({ month: '2026-11', budgets: mockBudgets })),
+
+      // New monthly category-spending API mock.
+      getSpendingByCategory: vi.fn().mockReturnValue(
+        of({
+          month: '2026-11',
+          total: 100,
+          categories: [
+            { category: 'GROCERIES', amount: 60 },
+            { category: 'FOOD_DINING', amount: 40 },
+          ],
+        }),
+      ),
     };
 
     authService = {
       logout: vi.fn().mockReturnValue(of(void 0)),
+    };
+
+    plaidService = {
+      getAccounts: vi.fn().mockReturnValue(of({ accounts: mockAccounts })),
+
+      getTransactions: vi.fn().mockReturnValue(
+        of({
+          transactions: [
+            {
+              transaction_id: 'tx-1',
+              account_id: 'account-123',
+              name: 'Grocery Store',
+              amount: 50,
+              date: '2026-11-10',
+              pending: false,
+              category: 'GROCERIES',
+            },
+          ],
+          total: 1,
+          limit: 20,
+          offset: 0,
+        }),
+      ),
+
+      getNetWorthHistory: vi.fn().mockReturnValue(
+        of({
+          snapshots: [
+            {
+              snapshot_date: '2026-11-10',
+              amount: 2000,
+              included_accounts: 1,
+              excluded_accounts: 0,
+            },
+          ],
+        }),
+      ),
     };
 
     await TestBed.configureTestingModule({
@@ -84,7 +192,9 @@ describe('UserDashboard', () => {
         provideRouter([]),
         { provide: ProfileService, useValue: profileService },
         { provide: BudgetService, useValue: budgetService },
+        { provide: GoalsService, useValue: goalsService },
         { provide: AuthService, useValue: authService },
+        { provide: PlaidService, useValue: plaidService },
       ],
     })
       // These tests target dashboard logic, not HTML rendering.
@@ -220,5 +330,684 @@ describe('UserDashboard', () => {
     component.openProfile();
 
     expect(router.navigate).toHaveBeenCalledWith(['/profile']);
+  });
+
+  it('loads connected accounts when dashboard initializes', () => {
+    expect(plaidService.getAccounts).toHaveBeenCalledOnce();
+    expect(component.accounts()).toEqual(mockAccounts);
+    expect(component.accountsLoading()).toBe(false);
+  });
+
+  it('loads transactions when an account is selected', () => {
+    component.selectAccount('account-123');
+
+    expect(component.selectedAccountId()).toBe('account-123');
+
+    expect(plaidService.getTransactions).toHaveBeenCalledWith('account-123', 20, 0);
+
+    expect(component.transactions()).toHaveLength(1);
+    expect(component.transactionTotal()).toBe(1);
+  });
+
+  it('collapses an account when selected twice', () => {
+    component.selectAccount('account-123');
+    component.selectAccount('account-123');
+
+    expect(component.selectedAccountId()).toBeNull();
+    expect(component.transactions()).toEqual([]);
+    expect(component.transactionsLoading()).toBe(false);
+  });
+
+  it('handles an account retrieval failure', () => {
+    plaidService.getAccounts.mockReturnValue(throwError(() => new Error('Accounts unavailable')));
+
+    const fixture = TestBed.createComponent(UserDashboard);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.accountsError()).toBe(true);
+    expect(fixture.componentInstance.accountsLoading()).toBe(false);
+  });
+
+  it('handles a transaction retrieval failure', () => {
+    plaidService.getTransactions.mockReturnValue(
+      throwError(() => new Error('Transactions unavailable')),
+    );
+
+    component.selectAccount('account-123');
+
+    expect(component.transactionsError()).toBe(true);
+    expect(component.transactionsLoading()).toBe(false);
+  });
+
+  it('loads net-worth history after loading accounts', () => {
+    expect(plaidService.getAccounts).toHaveBeenCalledOnce();
+    expect(plaidService.getNetWorthHistory).toHaveBeenCalledOnce();
+
+    expect(component.netWorthHistory()).toHaveLength(1);
+    expect(component.netWorthHistoryLoading()).toBe(false);
+  });
+
+  it('creates a chart marker for one historical snapshot', () => {
+    const chart = component.netWorthChart();
+
+    expect(chart.markers).toHaveLength(1);
+    expect(chart.markers[0].amount).toBe(2000);
+
+    // A single point is centered rather than stretched
+    // across an imaginary historical timeline.
+    expect(chart.markers[0].x).toBe(320);
+  });
+
+  it('plots multiple historical snapshots in date order', () => {
+    component.netWorthHistory.set([
+      {
+        // Two days ago, net worth was $1,000.
+        snapshot_date: daysAgo(2),
+        amount: 1000,
+        included_accounts: 1,
+        excluded_accounts: 0,
+      },
+      {
+        // Today, net worth increased to $1,500.
+        snapshot_date: daysAgo(0),
+        amount: 1500,
+        included_accounts: 1,
+        excluded_accounts: 0,
+      },
+    ]);
+
+    const chart = component.netWorthChart();
+
+    // Both snapshots should appear in chronological order.
+    expect(chart.markers).toHaveLength(2);
+    expect(chart.firstDate).toBe(daysAgo(2));
+    expect(chart.lastDate).toBe(daysAgo(0));
+
+    // SVG coordinates increase downward.
+    // A higher net worth must therefore have a smaller Y value.
+    expect(chart.markers[1].y).toBeLessThan(chart.markers[0].y);
+  });
+
+  it('handles an empty net-worth history', () => {
+    component.netWorthHistory.set([]);
+
+    expect(component.netWorthChart().markers).toEqual([]);
+    expect(component.netWorthChart().points).toBe('');
+  });
+
+  it('handles failure when retrieving net-worth history', () => {
+    plaidService.getNetWorthHistory.mockReturnValue(
+      throwError(() => new Error('History unavailable')),
+    );
+
+    component.loadNetWorthHistory();
+
+    expect(component.netWorthHistoryError()).toBe(true);
+    expect(component.netWorthHistoryLoading()).toBe(false);
+  });
+
+  /**
+   * Verify that a constant net worth doesn't cause
+   * division by zero when calculating SVG coordinates.
+   */
+  it('plots equal net-worth values safely', () => {
+    component.netWorthHistory.set([
+      {
+        snapshot_date: '2026-11-10',
+        amount: 2000,
+        included_accounts: 1,
+        excluded_accounts: 0,
+      },
+      {
+        snapshot_date: '2026-11-11',
+        amount: 2000,
+        included_accounts: 1,
+        excluded_accounts: 0,
+      },
+    ]);
+
+    const chart = component.netWorthChart();
+
+    expect(chart.markers).toHaveLength(2);
+    expect(chart.markers[0].y).toBe(chart.markers[1].y);
+    expect(Number.isFinite(chart.markers[0].y)).toBe(true);
+  });
+
+  /**
+   * Verify that gaps in calendar dates are proportional.
+   *
+   * A snapshot on November 11 should be much closer to
+   * November 10 than November 20.
+   */
+  it('spaces historical points according to actual dates', () => {
+    component.netWorthHistory.set([
+      {
+        // First snapshot: 20 days ago
+        snapshot_date: daysAgo(20),
+        amount: 1000,
+        included_accounts: 1,
+        excluded_accounts: 0,
+      },
+      {
+        // Second snapshot: 10 days ago
+        snapshot_date: daysAgo(10),
+        amount: 1200,
+        included_accounts: 1,
+        excluded_accounts: 0,
+      },
+      {
+        // Third snapshot: today
+        snapshot_date: daysAgo(0),
+        amount: 1500,
+        included_accounts: 1,
+        excluded_accounts: 0,
+      },
+    ]);
+
+    const markers = component.netWorthChart().markers;
+
+    expect(markers).toHaveLength(3);
+    expect(markers[0].x).toBe(50);
+    expect(markers[2].x).toBe(590);
+
+    // The middle date is exactly halfway between
+    // the earliest and latest dates.
+    //
+    // Chart boundaries: x = 50 and x = 590.
+    // Their midpoint is 320.
+    expect(markers[1].x).toBeCloseTo(320);
+  });
+
+  /**
+   * Negative net worth is valid when liabilities exceed assets.
+   */
+  it('supports negative historical net worth', () => {
+    component.netWorthHistory.set([
+      {
+        snapshot_date: '2026-11-10',
+        amount: -3000,
+        included_accounts: 2,
+        excluded_accounts: 0,
+      },
+      {
+        snapshot_date: '2026-11-11',
+        amount: -2000,
+        included_accounts: 2,
+        excluded_accounts: 0,
+      },
+    ]);
+
+    const chart = component.netWorthChart();
+
+    expect(chart.minValue).toBeLessThan(-3000);
+    expect(chart.maxValue).toBeGreaterThan(-2000);
+    expect(chart.markers[1].y).toBeLessThan(chart.markers[0].y);
+  });
+
+  /**
+   * A selected account should always begin at page zero.
+   */
+  it('resets pagination when switching accounts', () => {
+    component.selectAccount('account-123');
+
+    component.transactionPage.set(3);
+    component.selectAccount('account-456');
+
+    expect(component.selectedAccountId()).toBe('account-456');
+    expect(component.transactionPage()).toBe(0);
+
+    expect(plaidService.getTransactions).toHaveBeenLastCalledWith('account-456', 20, 0);
+  });
+
+  /**
+   * Test the page-navigation guards.
+   */
+  it('does not navigate before the first transaction page', () => {
+    component.selectAccount('account-123');
+    plaidService.getTransactions.mockClear();
+
+    component.previousTransactionPage();
+
+    expect(component.transactionPage()).toBe(0);
+    expect(plaidService.getTransactions).not.toHaveBeenCalled();
+  });
+
+  it('does not navigate beyond the final transaction page', () => {
+    component.selectAccount('account-123');
+    plaidService.getTransactions.mockClear();
+
+    // Our default mock response contains only one transaction.
+    component.nextTransactionPage();
+
+    expect(component.transactionPage()).toBe(0);
+    expect(plaidService.getTransactions).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Verify that the Next button requests the correct
+   * database offset when there are multiple pages.
+   */
+  it('loads the next transaction page when available', () => {
+    component.selectAccount('account-123');
+
+    // Simulate three pages of transactions.
+    component.transactionTotal.set(45);
+
+    component.nextTransactionPage();
+
+    expect(component.transactionPage()).toBe(1);
+    expect(plaidService.getTransactions).toHaveBeenLastCalledWith('account-123', 20, 20);
+  });
+
+  it('returns to the previous transaction page', () => {
+    component.selectAccount('account-123');
+    component.transactionTotal.set(45);
+
+    component.nextTransactionPage();
+    component.previousTransactionPage();
+
+    expect(component.transactionPage()).toBe(0);
+    expect(plaidService.getTransactions).toHaveBeenLastCalledWith('account-123', 20, 0);
+  });
+
+  it('does not load transactions without a selected account', () => {
+    plaidService.getTransactions.mockClear();
+
+    component.loadTransactions();
+
+    expect(plaidService.getTransactions).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Verify that unknown account types aren't incorrectly
+   * counted as assets or liabilities.
+   */
+  it('excludes unsupported account types from net worth', () => {
+    component.accounts.set([
+      {
+        ...mockAccounts[0],
+        account_type: 'other',
+        current_balance: 5000,
+      },
+    ]);
+
+    const result = component.netWorthSummary();
+
+    expect(result.amount).toBe(0);
+    expect(result.included).toBe(0);
+    expect(result.excluded).toBe(1);
+  });
+
+  it('excludes non-finite balances from net worth', () => {
+    component.accounts.set([
+      {
+        ...mockAccounts[0],
+        current_balance: Number.NaN,
+      },
+      {
+        ...mockAccounts[0],
+        account_id: 'infinite',
+        current_balance: Number.POSITIVE_INFINITY,
+      },
+    ]);
+
+    const result = component.netWorthSummary();
+
+    expect(result.included).toBe(0);
+    expect(result.excluded).toBe(2);
+    expect(result.amount).toBe(0);
+  });
+
+  /**
+   * Test the readable category-label conversion.
+   */
+  it('formats transaction categories for display', () => {
+    expect(component.categoryLabel('FOOD_DINING')).toBe('Food Dining');
+    expect(component.categoryLabel('GROCERIES')).toBe('Groceries');
+    expect(component.categoryLabel('OTHER')).toBe('Other');
+  });
+
+  it('loads category spending when dashboard initializes', () => {
+    expect(budgetService.getSpendingByCategory).toHaveBeenCalledOnce();
+    expect(component.categorySpendingLoading()).toBe(false);
+    expect(component.categorySpendingError()).toBe(false);
+    expect(component.expenseChart().total).toBe(100);
+  });
+
+  it('calculates category percentages correctly', () => {
+    const chart = component.expenseChart();
+
+    expect(chart.segments).toHaveLength(2);
+
+    expect(chart.segments[0].label).toBe('Groceries');
+    expect(chart.segments[0].percent).toBe(60);
+
+    expect(chart.segments[1].label).toBe('Food Dining');
+    expect(chart.segments[1].percent).toBe(40);
+  });
+
+  it('positions the second donut segment after the first', () => {
+    const segments = component.expenseChart().segments;
+
+    // The first segment starts at zero.
+    expect(segments[0].dashoffset).toBe(0);
+
+    // The second is shifted backward by the length of
+    // the first, preventing both segments from overlapping.
+    expect(segments[1].dashoffset).toBeLessThan(0);
+  });
+
+  it('handles an empty spending response', () => {
+    component.categorySpending.set({
+      month: '2026-11',
+      total: 0,
+      categories: [],
+    });
+
+    expect(component.expenseChart().total).toBe(0);
+    expect(component.expenseChart().segments).toEqual([]);
+  });
+
+  it('handles a failed spending request', () => {
+    budgetService.getSpendingByCategory.mockReturnValue(
+      throwError(() => new Error('Spending API unavailable')),
+    );
+
+    component.loadCategorySpending();
+
+    expect(component.categorySpendingError()).toBe(true);
+    expect(component.categorySpendingLoading()).toBe(false);
+  });
+
+  it('ignores invalid category amounts', () => {
+    component.categorySpending.set({
+      month: '2026-11',
+      total: 100,
+      categories: [
+        { category: 'GROCERIES', amount: 100 },
+        { category: 'SHOPPING', amount: Number.NaN },
+        { category: 'OTHER', amount: -20 },
+      ],
+    });
+
+    const chart = component.expenseChart();
+
+    expect(chart.segments).toHaveLength(1);
+    expect(chart.segments[0].category).toBe('GROCERIES');
+  });
+
+  /**
+   * A 10-year range should include our synthetic
+   * 2016 data, while a shorter range excludes it.
+   */
+  it('filters net-worth snapshots by selected time range', () => {
+    // Use relative dates so this test works in future years.
+    const now = new Date();
+    const recentDate = now.toISOString().slice(0, 10);
+    const oldDate = new Date(Date.UTC(now.getUTCFullYear() - 8, now.getUTCMonth(), 1))
+      .toISOString()
+      .slice(0, 10);
+
+    component.netWorthHistory.set([
+      {
+        snapshot_date: oldDate,
+        amount: 800,
+        included_accounts: 1,
+        excluded_accounts: 0,
+        is_demo: true,
+      },
+      {
+        snapshot_date: recentDate,
+        amount: 2100,
+        included_accounts: 1,
+        excluded_accounts: 0,
+        is_demo: false,
+      },
+    ]);
+
+    // The default range includes both dates.
+    component.netWorthRange.set('10Y');
+
+    expect(component.visibleNetWorthHistory()).toHaveLength(2);
+    expect(component.netWorthChart().markers).toHaveLength(2);
+
+    // A one-year range excludes the older snapshot.
+    component.netWorthRange.set('1Y');
+
+    expect(component.visibleNetWorthHistory()).toHaveLength(1);
+    expect(component.netWorthChart().markers).toHaveLength(1);
+    expect(component.netWorthChart().markers[0].amount).toBe(2100);
+  });
+
+  /**
+   * The chart should expose whether its visible data
+   * includes simulated sandbox history.
+   */
+  it('identifies demo history in the selected range', () => {
+    const now = new Date();
+
+    const recentDate = now.toISOString().slice(0, 10);
+    const oldDate = new Date(Date.UTC(now.getUTCFullYear() - 8, now.getUTCMonth(), 1))
+      .toISOString()
+      .slice(0, 10);
+
+    component.netWorthHistory.set([
+      {
+        snapshot_date: oldDate,
+        amount: 800,
+        included_accounts: 1,
+        excluded_accounts: 0,
+        is_demo: true,
+      },
+      {
+        snapshot_date: recentDate,
+        amount: 2100,
+        included_accounts: 1,
+        excluded_accounts: 0,
+        is_demo: false,
+      },
+    ]);
+
+    component.netWorthRange.set('10Y');
+    expect(component.visibleNetWorthIncludesDemo()).toBe(true);
+
+    component.netWorthRange.set('1Y');
+    expect(component.visibleNetWorthIncludesDemo()).toBe(false);
+  });
+
+  /**
+   * Selecting an available month should request spending
+   * for that month and update the selected-month signal.
+   */
+  it('reloads category spending when the month changes', () => {
+    budgetService.getSpendingByCategory.mockClear();
+
+    // Use the second dropdown option, which is always
+    // the previous calendar month.
+    const previousMonth = component.expenseMonthOptions[1].value;
+
+    component.onExpenseMonthChange({
+      target: { value: previousMonth },
+    } as unknown as Event);
+
+    expect(component.selectedExpenseMonth()).toBe(previousMonth);
+    expect(budgetService.getSpendingByCategory).toHaveBeenCalledWith(previousMonth);
+  });
+
+  /**
+   * Invalid month values should never reach the API.
+   */
+  it('rejects invalid expense months', () => {
+    budgetService.getSpendingByCategory.mockClear();
+
+    component.onExpenseMonthChange({
+      target: { value: 'not-a-month' },
+    } as unknown as Event);
+
+    expect(budgetService.getSpendingByCategory).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The dashboard should display active budgets only.
+   *
+   * We reuse the existing mockBudgets fixture:
+   * - Groceries: active
+   * - Entertainment: active
+   * - Shopping: inactive
+   */
+  it('shows only active budgets in its progress overview', () => {
+    const activeBudgets = component.dashboardActiveBudgets();
+
+    expect(activeBudgets).toHaveLength(2);
+    expect(activeBudgets.map((budget) => budget.name)).toEqual(['Groceries', 'Entertainment']);
+  });
+
+  /**
+   * Percentages shown as CSS widths must be between
+   * 0 and 100, even if spending exceeds the budget.
+   *
+   * The text still displays the actual percentage.
+   */
+  it('clamps progress bar widths safely', () => {
+    expect(component.progressBarWidth(50)).toBe(50);
+    expect(component.progressBarWidth(125)).toBe(100);
+    expect(component.progressBarWidth(-20)).toBe(0);
+    expect(component.progressBarWidth(Number.NaN)).toBe(0);
+
+    // The percentage label must not hide overspending.
+    expect(component.progressLabel(125)).toBe('125.0%');
+  });
+
+  /**
+   * Archived goals should not appear in the dashboard.
+   * Active and completed goals are both relevant.
+   */
+  it('shows active and completed goals but excludes archived goals', () => {
+    // Only the fields relevant to this dashboard test
+    // differ between these otherwise identical goals.
+    const baseGoal: Goal = {
+      id: 1,
+      name: 'Emergency Fund',
+      description: null,
+      target_amount: 5000,
+      target_date: null,
+      account_id: 'account-123',
+      baseline_balance: 1000,
+      current_balance: 3000,
+      progress_percent: 50,
+      remaining: 2000,
+      on_track: null,
+      status: 'ACTIVE',
+      created_at: '2026-11-01T12:00:00Z',
+    };
+
+    component.dashboardGoals.set([
+      baseGoal,
+      {
+        ...baseGoal,
+        id: 2,
+        name: 'Vacation',
+        status: 'COMPLETED',
+        progress_percent: 100,
+      },
+      {
+        ...baseGoal,
+        id: 3,
+        name: 'Old Goal',
+        status: 'ARCHIVED',
+      },
+    ]);
+
+    expect(component.dashboardVisibleGoals()).toHaveLength(2);
+    expect(component.dashboardVisibleGoals().map((goal) => goal.name)).toEqual([
+      'Emergency Fund',
+      'Vacation',
+    ]);
+  });
+
+  /**
+   * If users switch months quickly, HTTP responses
+   * may arrive in a different order than requested.
+   *
+   * The dashboard must keep the newest selected month
+   * even when an older request finishes afterward.
+   */
+  it('ignores outdated expense month responses', () => {
+    // Subjects let the test control response timing.
+    const octoberRequest = new Subject<{
+      month: string;
+      total: number;
+      categories: { category: 'GROCERIES'; amount: number }[];
+    }>();
+
+    const novemberRequest = new Subject<{
+      month: string;
+      total: number;
+      categories: { category: 'GROCERIES'; amount: number }[];
+    }>();
+
+    // The initial dashboard load already happened
+    // during beforeEach. Clear that mock call history.
+    budgetService.getSpendingByCategory.mockClear();
+
+    // Return a different observable for each request.
+    budgetService.getSpendingByCategory
+      .mockReturnValueOnce(octoberRequest.asObservable())
+      .mockReturnValueOnce(novemberRequest.asObservable());
+
+    // Arthur selects October, then immediately November.
+    component.selectedExpenseMonth.set('2026-10');
+    component.loadCategorySpending();
+
+    component.selectedExpenseMonth.set('2026-11');
+    component.loadCategorySpending();
+
+    // November finishes first.
+    novemberRequest.next({
+      month: '2026-11',
+      total: 200,
+      categories: [{ category: 'GROCERIES', amount: 200 }],
+    });
+    novemberRequest.complete();
+
+    expect(component.categorySpending()?.month).toBe('2026-11');
+    expect(component.expenseChart().total).toBe(200);
+
+    // October finishes late with different spending.
+    // Its data must NOT overwrite November.
+    octoberRequest.next({
+      month: '2026-10',
+      total: 999,
+      categories: [{ category: 'GROCERIES', amount: 999 }],
+    });
+    octoberRequest.complete();
+
+    expect(component.categorySpending()?.month).toBe('2026-11');
+    expect(component.expenseChart().total).toBe(200);
+    expect(component.categorySpendingLoading()).toBe(false);
+    expect(component.categorySpendingError()).toBe(false);
+  });
+
+  /**
+   * The dropdown must contain exactly twelve months,
+   * ordered newest to oldest, including year boundaries.
+   */
+  it('provides twelve consecutive expense months', () => {
+    const options = component.expenseMonthOptions;
+
+    expect(options).toHaveLength(12);
+
+    // The first option is the current calendar month.
+    expect(options[0].value).toBe(component.selectedExpenseMonth());
+
+    // Each following entry represents the previous month.
+    for (let index = 1; index < options.length; index++) {
+      const previous = new Date(`${options[index - 1].value}-01T12:00:00`);
+      previous.setMonth(previous.getMonth() - 1);
+
+      const expected = `${previous.getFullYear()}-${String(previous.getMonth() + 1).padStart(2, '0')}`;
+
+      expect(options[index].value).toBe(expected);
+    }
   });
 });

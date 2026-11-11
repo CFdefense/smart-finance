@@ -1,0 +1,71 @@
+{
+  "version": 2,
+  "seed": "arthur-smart-finance-2026",
+  "override_accounts": [
+    {
+      "type": "depository",
+      "subtype": "checking",
+      "starting_balance": 4200.0,
+      "currency": "USD",
+      "meta": {
+        "name": "Plaid Checking",
+        "official_name": "Plaid Checking"
+      },
+      "inflow_model": {
+        "type": "none"
+      }
+    },
+    {
+      "type": "depository",
+      "subtype": "savings",
+      "starting_balance": 14500.0,
+      "currency": "USD",
+      "meta": {
+        "name": "Plaid Saving",
+        "official_name": "Plaid Saving"
+      },
+      "inflow_model": {
+        "type": "none"
+      }
+    },
+    {
+      "type": "depository",
+      "subtype": "money market",
+      "starting_balance": 26500.0,
+      "currency": "USD",
+      "meta": {
+        "name": "Plaid Money Market",
+        "official_name": "Plaid Money Market"
+      },
+      "inflow_model": {
+        "type": "none"
+      }
+    },
+    {
+      "type": "investment",
+      "subtype": "401k",
+      "starting_balance": 38500.0,
+      "currency": "USD",
+      "meta": {
+        "name": "Plaid 401k",
+        "official_name": "Plaid 401k"
+      },
+      "inflow_model": {
+        "type": "none"
+      }
+    },
+    {
+      "type": "credit",
+      "subtype": "credit card",
+      "starting_balance": 1750.0,
+      "currency": "USD",
+      "meta": {
+        "name": "Plaid Credit Card",
+        "official_name": "Plaid Credit Card"
+      },
+      "inflow_model": {
+        "type": "none"
+      }
+    }
+  ]
+}
