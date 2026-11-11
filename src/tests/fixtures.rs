@@ -13,7 +13,7 @@ use serde_json::{json, Value};
 use sqlx::PgPool;
 use tower::ServiceExt;
 
-use crate::{db, plaid::client::PlaidClient};
+use crate::{chat::AiClient, db, plaid::client::PlaidClient};
 
 /// Sends an authenticated JSON request and returns `(status, json body)`.
 ///
@@ -249,10 +249,16 @@ pub fn mock_plaid_url() -> &'static str {
 /// CORS is not enforced in unit/integration tests, so the origin is a placeholder.
 /// The returned `Router` is ready for [`tower::ServiceExt::oneshot`] calls.
 pub async fn test_app() -> Router {
+    test_app_with_ai(AiClient::from_env()).await
+}
+
+/// Like [`test_app`], but chat replies go through the supplied [`AiClient`] (e.g. a mock).
+pub async fn test_app_with_ai(ai: AiClient) -> Router {
     dotenvy::dotenv().ok();
-    crate::create_router(
+    crate::create_router_with_ai(
         "http://localhost:5173",
         PlaidClient::with_base_url(mock_plaid_url()),
+        ai,
     )
     .await
 }

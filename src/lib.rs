@@ -2,6 +2,7 @@
 //!
 //! Exposes application modules for use by integration tests and helper binaries.
 
+pub mod chat;
 pub mod controllers;
 pub mod db;
 pub mod error;
@@ -23,6 +24,9 @@ use tower_http::cors::CorsLayer;
 
 /// Create the API router using a caller-supplied [`plaid::client::PlaidClient`].
 ///
+/// The AI chat client is built from the environment ([`chat::AiClient::from_env`]).
+/// Use [`create_router_with_ai`] to inject a custom one.
+///
 /// Accepts `frontend_url`: the URL to configure CORS to.
 /// Accepts `plaid`: an optional plaid client to use. (Mock Clients accepted)
 ///
@@ -30,6 +34,21 @@ use tower_http::cors::CorsLayer;
 ///
 /// Panics if `frontend_url` cannot be parsed into a valid [`HeaderValue`].
 pub async fn create_router(frontend_url: &str, plaid: plaid::client::PlaidClient) -> Router {
+    create_router_with_ai(frontend_url, plaid, chat::AiClient::from_env()).await
+}
+
+/// Create the API router with caller-supplied Plaid and AI clients.
+///
+/// Accepts `ai`: the client used to reach the ai-service (a mock URL is accepted in tests).
+///
+/// # Panics
+///
+/// Panics if `frontend_url` cannot be parsed into a valid [`HeaderValue`].
+pub async fn create_router_with_ai(
+    frontend_url: &str,
+    plaid: plaid::client::PlaidClient,
+    ai: chat::AiClient,
+) -> Router {
     let pool = db::create_pool().await;
     let cookie_key_hex =
         std::env::var("COOKIE_KEY").expect("COOKIE_KEY environment variable is required");
@@ -47,6 +66,7 @@ pub async fn create_router(frontend_url: &str, plaid: plaid::client::PlaidClient
         .nest("/budgets", controllers::budget::budget_routes())
         .nest("/rules", controllers::rules::rule_routes())
         .nest("/goals", controllers::goals::goal_routes())
+        .nest("/chat", controllers::chat::chat_routes())
         .nest("/plaid", controllers::plaid::plaid_routes());
 
     // Build the api router
@@ -77,6 +97,8 @@ pub async fn create_router(frontend_url: &str, plaid: plaid::client::PlaidClient
         .layer(Extension(pool))
         .layer(Extension(cookie_key))
         .layer(Extension(plaid))
+        .layer(Extension(ai))
+        .layer(Extension(controllers::chat::new_in_flight()))
         .layer(CookieManagerLayer::new())
         .layer(cors)
 }

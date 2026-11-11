@@ -7,16 +7,22 @@ import { GoalsPage } from '../goals/goals';
 import { Budgets } from '../budgets/budgets';
 import { AppLayout } from './app-layout/app-layout';
 import { authGuard } from './auth-guard';
+import { Landing } from './landing/landing';
+import { PageNotFound } from './page-not-found/page-not-found';
 
 export const routeConfig: Routes = [
-  // Redirect visitors from the root URL to Login.
+  // Redirect visitors from the root URL to Landing.
   {
     path: '',
-    redirectTo: 'login',
+    redirectTo: 'landing',
     pathMatch: 'full',
   },
 
   // Public pages do not use the shared layout.
+  {
+    path: 'landing',
+    component: Landing,
+  },
   {
     path: 'login',
     component: Login,
@@ -57,4 +63,5 @@ export const routeConfig: Routes = [
       // when those pages are implemented.
     ],
   },
+  { path: '**', component: PageNotFound },
 ];

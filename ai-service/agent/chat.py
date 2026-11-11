@@ -1,7 +1,8 @@
 import logging
+from collections.abc import Iterator
 from typing import Any
 
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
@@ -49,6 +50,16 @@ def build_chat_graph(llm_with_tools, tools) -> CompiledStateGraph[Any, Any, Any,
     return graph.compile()
 
 
+def build_messages(request: ChatRequest) -> list[Any]:
+    """Convert the request's history plus its new message into graph messages."""
+    messages: list[Any] = [
+        HumanMessage(m.content) if m.role == "user" else AIMessage(m.content)
+        for m in request.history
+    ]
+    messages.append(HumanMessage(request.message))
+    return messages
+
+
 class ChatAgent:
     """Agent responsible for handling user requests with financial context."""
 
@@ -69,7 +80,7 @@ class ChatAgent:
                     {
                         "user_id": request.user_id,
                         "context": "",
-                        "messages": [request.message],
+                        "messages": build_messages(request),
                     },
                     config={"callbacks": [AgentCallbackHandler()], "run_name": "chat"},
                 )
@@ -83,3 +94,80 @@ class ChatAgent:
             return ChatResponse(response=last.text if answered else _GAVE_UP)
         finally:
             clear_run()
+
+    def generate_stream(self, request: ChatRequest) -> Iterator[dict[str, Any]]:
+        """
+        Answer the user as a stream of events. Never raises.
+
+        Every log line of the run shares one run id. The run is re-bound before each step because
+        a threadpool (FastAPI's, for a sync stream) gives every step its own context copy.
+        """
+        run_id = new_run_id()
+        events = self._stream_events(request)
+        try:
+            while True:
+                bind_run(run_id, None, request.user_id)
+                try:
+                    event = next(events)
+                except StopIteration:
+                    return
+                yield event
+        finally:
+            events.close()
+            clear_run()
+
+    def _stream_events(self, request: ChatRequest) -> Iterator[dict[str, Any]]:
+        """
+        Answer the user as a stream of events. Never raises.
+
+        Events: status (tool running), token (reply text), error, and a final done with the
+        full reply. Only reply text from the `respond` node is streamed; tool output is not.
+        The done.response text is the concatenation of all token text emitted during the stream.
+        """
+        _log.info(
+            "chat.stream.start message_chars=%d history=%d",
+            len(request.message),
+            len(request.history),
+        )
+        messages = build_messages(request)
+        emitted: list[str] = []
+        streamed_round = False  # tokens already sent for the current respond round
+        try:
+            for mode, data in self._graph.stream(
+                {"user_id": request.user_id, "context": "", "messages": messages},
+                config={"callbacks": [AgentCallbackHandler()], "run_name": "chat"},
+                stream_mode=["messages", "updates"],
+            ):
+                if mode == "messages":
+                    chunk, metadata = data
+                    if (
+                        metadata.get("langgraph_node") == "respond"
+                        and isinstance(chunk, AIMessageChunk)
+                        and chunk.text
+                    ):
+                        streamed_round = True
+                        emitted.append(chunk.text)
+                        yield {"type": "token", "text": chunk.text}
+                    continue
+                update = data.get("respond")
+                if not update:
+                    continue
+                message = update["messages"]
+                if isinstance(message, list):
+                    message = message[-1]
+                if message.tool_calls:
+                    for call in message.tool_calls:
+                        yield {"type": "status", "tool": call["name"]}
+                else:
+                    if message.text and not streamed_round:  # model did not stream; send it whole
+                        emitted.append(message.text)
+                        yield {"type": "token", "text": message.text}
+                streamed_round = False
+        except Exception as exc:
+            _log.error("chat.stream.crashed type=%s", type(exc).__name__)
+            _log.debug("chat.stream.crashed detail", exc_info=True)
+            yield {"type": "error", "code": "ai_failed", "message": _UNAVAILABLE}
+            return
+        final_response = "".join(emitted)
+        _log.info("chat.stream.end answered=%s", bool(final_response))
+        yield {"type": "done", "response": final_response or _GAVE_UP}
