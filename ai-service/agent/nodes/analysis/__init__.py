@@ -3,6 +3,7 @@
 from agent.nodes.analysis.assess import make_assess, route_after_assess
 from agent.nodes.analysis.claim import claim_transaction, route_after_claim
 from agent.nodes.analysis.decision import decide, decide_notification, route_after_decide
+from agent.nodes.analysis.detect import make_detect_anomaly
 from agent.nodes.analysis.finalization import finalize
 from agent.nodes.analysis.investigate import (
     MAX_TOOL_ROUNDS,
@@ -28,4 +29,5 @@ __all__ = [
     "route_after_claim",
     "route_after_decide",
     "route_after_investigate",
+    "make_detect_anomaly",
 ]

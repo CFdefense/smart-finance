@@ -1,10 +1,13 @@
+import json
 import logging
 import os
+from collections.abc import Iterator
 from contextlib import asynccontextmanager
 
 import psycopg
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
 
 from agent import (
     AnalysisResult,
@@ -37,21 +40,24 @@ async def lifespan(app: FastAPI):
     openai_key = os.getenv("OPENAI_API_KEY")
     model = os.getenv("AGENT_MODEL", "gpt-4.1")
 
-    if openai_key:
-        app.state.analyzer_agent = AnalyzerAgent(openai_key, model)
-        app.state.chat_agent = ChatAgent(openai_key, model)
-    else:
-        logging.warning("OPENAI_API_KEY not set; /chat and /analyze are disabled.")
-        app.state.analyzer_agent = None
-        app.state.chat_agent = None
-
-    app.state.detector = CombinedDetector(
+    detector = CombinedDetector(
         [
             ZScoreDetector(threshold=float(os.getenv("ANOMALY_ZSCORE_THRESHOLD", "3.5"))),
             DuplicateDetector(),
             SubscriptionIncreaseDetector(),
         ]
     )
+
+    app.state.detector = detector
+
+    if openai_key:
+        app.state.analyzer_agent = AnalyzerAgent(openai_key, model, detector)
+        app.state.chat_agent = ChatAgent(openai_key, model)
+    else:
+        logging.warning("OPENAI_API_KEY not set; /chat and /analyze are disabled.")
+        app.state.analyzer_agent = None
+        app.state.chat_agent = None
+
     yield
 
     # Cleanup here if we need to
@@ -66,6 +72,20 @@ def chat(request: ChatRequest) -> ChatResponse:
     if app.state.chat_agent is None:
         raise HTTPException(status_code=503, detail="AI assistant is not available.")
     return app.state.chat_agent.generate_answer(request)
+
+
+@app.post("/chat/stream")
+def chat_stream(request: ChatRequest) -> StreamingResponse:
+    """Stream a chat reply as newline-delimited JSON events."""
+    if app.state.chat_agent is None:
+        raise HTTPException(status_code=503, detail="AI assistant is not available.")
+    events = app.state.chat_agent.generate_stream(request)
+
+    def lines() -> Iterator[str]:
+        for event in events:
+            yield json.dumps(event) + "\n"
+
+    return StreamingResponse(lines(), media_type="application/x-ndjson")
 
 
 @app.post("/analyze")

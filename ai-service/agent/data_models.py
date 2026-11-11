@@ -4,11 +4,19 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 
+class HistoryMessage(BaseModel):
+    """One earlier message of the conversation."""
+
+    role: Literal["user", "assistant"]
+    content: str
+
+
 class ChatRequest(BaseModel):
     """Represent an incoming chat request."""
 
     user_id: int
     message: str
+    history: list[HistoryMessage] = Field(default_factory=list, max_length=20)
 
 
 class ChatResponse(BaseModel):

@@ -36,7 +36,13 @@ def claim_analysis(transaction_id: str, user_id: int) -> tuple[bool, str | None]
 
 
 def finish_analysis(
-    transaction_id: str, status: str, verdict: str | None, notified: bool, error: str | None
+    transaction_id: str,
+    status: str,
+    verdict: str | None,
+    notified: bool,
+    error: str | None,
+    anomaly_flagged: bool | None,
+    anomaly_reason: str | None,
 ) -> None:
     """
     Record the outcome of a claimed analysis; `status` is 'done' or 'failed'.
@@ -48,8 +54,9 @@ def finish_analysis(
         conn.execute(
             """
             UPDATE transaction_analyses
-            SET status = %s, verdict = %s, notified = %s, error = %s, updated_at = NOW()
+            SET status = %s, verdict = %s, notified = %s, error = %s,
+                anomaly_flagged = %s, anomaly_reason = %s, updated_at = NOW()
             WHERE transaction_id = %s AND status = 'started'
             """,
-            (status, verdict, notified, error, transaction_id),
+            (status, verdict, notified, error, anomaly_flagged, anomaly_reason, transaction_id),
         )
