@@ -127,11 +127,30 @@ pub async fn seed_tester_profile(
     result.user_id = user_id;
 
     // 1. Create sandbox public token via PlaidClient
+    // Load a custom Plaid fixture when the password begins with @file:
+    //
+    // Normal fixtures use a literal sandbox password.
+    // Custom fixtures use the JSON file contents instead.
+    // This keeps the large Plaid configuration out of
+    // the tester list while preserving the normal API flow.
+    let sandbox_password = if let Some(path) = tester.sandbox_password.strip_prefix("@file:") {
+        let contents = std::fs::read_to_string(path)
+            .map_err(|e| AppError::Internal(format!("Could not read Plaid fixture {path}: {e}")))?;
+
+        // Check that the file contains valid JSON before sending it.
+        serde_json::from_str::<serde_json::Value>(&contents)
+            .map_err(|e| AppError::Internal(format!("Invalid Plaid fixture {path}: {e}")))?;
+
+        contents
+    } else {
+        tester.sandbox_password.clone()
+    };
+
     let public_token = plaid
         .create_sandbox_public_token(
             &tester.institution_id,
             &tester.sandbox_username,
-            &tester.sandbox_password,
+            &sandbox_password,
         )
         .await?;
 
