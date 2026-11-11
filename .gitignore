@@ -42,3 +42,6 @@ __pycache__/
 
 # All logs (the AI service's analyzer.log and log_<txid>.txt hold payment data)
 logs/
+
+# promptfoo dependencies for the agent eval framework
+node_modules/
