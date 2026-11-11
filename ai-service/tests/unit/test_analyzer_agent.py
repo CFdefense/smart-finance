@@ -8,6 +8,7 @@ from langchain_core.messages import AIMessage
 
 import agent.analyze as analyze_mod
 import agent.nodes.analysis.claim as claim_mod
+import agent.nodes.analysis.detect as detect_mod
 import agent.nodes.analysis.finalization as finalization_mod
 import agent.nodes.analysis.load_context as load_context_mod
 import agent.nodes.analysis.notification as notification_mod
@@ -15,6 +16,7 @@ import agent.tools.transactions as transactions_mod
 from agent import AnalyzedTransaction, AnalyzeRequest, Assessment
 from agent.analyze import AnalyzerAgent, build_analyzer_graph
 from agent.logging import RunContextFilter, default_log_dir
+from anomaly import FlaggedTransaction
 from db import Account, Rule
 
 TXN = AnalyzedTransaction(
@@ -27,6 +29,20 @@ TXN = AnalyzedTransaction(
     category="ENTERTAINMENT",
 )
 REQUEST = AnalyzeRequest(user_id=7, transaction=TXN)
+INITIAL_STATE = {
+    "run_id": "r",
+    "user_id": 7,
+    "transaction": TXN,
+    "context": "",
+    "messages": [],
+    "anomaly_flagged": None,
+    "anomaly_reason": None,
+    "assessment": None,
+    "notify": False,
+    "notified": False,
+    "status": "",
+    "error": None,
+}
 ASK_HISTORY = AIMessage(
     content="", tool_calls=[{"name": "get_transactions", "args": {}, "id": "c1"}]
 )
@@ -50,6 +66,24 @@ class ScriptedLLM:
         # A copy matters: LangGraph's add_messages treats a repeated message id as an update,
         # so returning the same AIMessage object twice would replace it instead of appending.
         return reply.model_copy(deep=True)
+
+
+class CountingDetector:
+    """Counts its runs; raises `error`, flags new transactions with `reason`, or flags nothing."""
+
+    def __init__(self, error: Exception | None = None, reason: str | None = None):
+        self.error = error
+        self.reason = reason
+        self.calls = 0
+
+    def find_anomalies(self, new, history):
+        """Count the call, then raise, flag the new transactions, or report nothing unusual."""
+        self.calls += 1
+        if self.error:
+            raise self.error
+        if self.reason:
+            return [FlaggedTransaction(transaction=t, reason=self.reason) for t in new]
+        return []
 
 
 def _assessment(verdict, should_notify=False):
@@ -83,13 +117,14 @@ def world(monkeypatch):
         notification_mod, "send_notification", lambda u, m: seen["sent"].append((u, m))
     )
     monkeypatch.setattr(finalization_mod, "finish_analysis", lambda *a: seen["recorded"].append(a))
+    monkeypatch.setattr(detect_mod, "load_transactions", lambda u, **kw: [])
     return seen
 
 
-def run(investigate, assess):
+def run(investigate, assess, detector=None):
     """Run the graph through a real AnalyzerAgent using the scripted LLMs."""
     agent = AnalyzerAgent.__new__(AnalyzerAgent)
-    agent._graph = build_analyzer_graph(investigate, assess)
+    agent._graph = build_analyzer_graph(investigate, assess, detector or CountingDetector())
     return agent.analyze(REQUEST)
 
 
@@ -103,7 +138,7 @@ def test_alert_uses_tools_notifies_and_records(world):
     assert result.status == "ANALYZED" and result.notified is True
     assert result.assessment.verdict == "ALERT"
     assert world["sent"] == [(7, "Casino Royale $250.00: Breaks a rule")]
-    assert world["recorded"] == [("t1", "done", "ALERT", True, None)]
+    assert world["recorded"] == [("t1", "done", "ALERT", True, None, False, None)]
     assert investigate.calls == 2
 
 
@@ -135,11 +170,12 @@ def test_duplicate_stops_before_any_llm_call(world, monkeypatch):
     """An already-claimed transaction short-circuits: no LLM, no notification, nothing recorded."""
     monkeypatch.setattr(claim_mod, "claim_analysis", lambda t, u: (False, "done"))
     investigate, assess = ScriptedLLM(AIMessage(content="x")), ScriptedLLM(_assessment("ALERT"))
+    detector = CountingDetector()
 
-    result = run(investigate, assess)
+    result = run(investigate, assess, detector)
 
     assert result.status == "DUPLICATE" and result.assessment is None
-    assert investigate.calls == 0 and assess.calls == 0
+    assert investigate.calls == 0 and assess.calls == 0 and detector.calls == 0
     assert world["sent"] == [] and world["recorded"] == []
 
 
@@ -159,7 +195,7 @@ def test_assess_failure_is_failed_without_notification(world):
 
     assert result.status == "FAILED" and result.error == "assess_failed"
     assert world["sent"] == []
-    assert world["recorded"] == [("t1", "failed", None, False, "assess_failed")]
+    assert world["recorded"] == [("t1", "failed", None, False, "assess_failed", False, None)]
 
 
 def test_investigate_failure_still_reaches_assess(world):
@@ -209,22 +245,14 @@ def test_unexpected_graph_error_becomes_failed_result(world, monkeypatch):
 def test_no_node_ever_writes_the_transaction(world):
     """The transaction is immutable: no state update contains the `transaction` key."""
     graph = build_analyzer_graph(
-        ScriptedLLM(ASK_HISTORY, AIMessage(content="done")), ScriptedLLM(_assessment("ALERT"))
+        ScriptedLLM(ASK_HISTORY, AIMessage(content="done")),
+        ScriptedLLM(_assessment("ALERT")),
+        CountingDetector(),
     )
-    initial = {
-        "run_id": "r",
-        "user_id": 7,
-        "transaction": TXN,
-        "context": "",
-        "messages": [],
-        "assessment": None,
-        "notify": False,
-        "notified": False,
-        "status": "",
-        "error": None,
-    }
 
-    updates = [u for chunk in graph.stream(initial, stream_mode="updates") for u in chunk.values()]
+    updates = [
+        u for chunk in graph.stream(INITIAL_STATE, stream_mode="updates") for u in chunk.values()
+    ]
 
     assert updates and all("transaction" not in (u or {}) for u in updates)
 
@@ -292,7 +320,7 @@ def test_constructor_builds_a_working_agent(monkeypatch, world):
 
     monkeypatch.setattr(analyze_mod, "ChatOpenAI", FakeChat)
 
-    result = AnalyzerAgent("sk-test", "gpt-test").analyze(REQUEST)
+    result = AnalyzerAgent("sk-test", "gpt-test", CountingDetector()).analyze(REQUEST)
 
     assert result.status == "ANALYZED"
 
@@ -308,7 +336,7 @@ def test_context_failure_after_claim_still_records_the_run(world, monkeypatch):
     result = run(ScriptedLLM(AIMessage(content="x")), ScriptedLLM(_assessment("OK")))
 
     assert result.status == "ANALYZED"
-    assert world["recorded"] == [("t1", "done", "OK", False, None)]
+    assert world["recorded"] == [("t1", "done", "OK", False, None, False, None)]
 
 
 def test_finalize_retries_the_write_once(world, monkeypatch):
@@ -332,4 +360,35 @@ def test_non_assessment_result_is_a_failed_attempt(world):
     result = run(ScriptedLLM(AIMessage(content="x")), ScriptedLLM(None))
 
     assert result.status == "FAILED" and result.error == "assess_failed"
-    assert world["recorded"] == [("t1", "failed", None, False, "assess_failed")]
+    assert world["recorded"] == [("t1", "failed", None, False, "assess_failed", False, None)]
+
+
+def test_anomaly_failure_after_claim_still_records_the_run(world):
+    """Every claimed run checks for anomalies, and a detector crash must not strand the claim."""
+    detector = CountingDetector(error=RuntimeError("detector broke"))
+
+    result = run(ScriptedLLM(AIMessage(content="x")), ScriptedLLM(_assessment("OK")), detector)
+
+    assert detector.calls == 1
+    assert result.status == "ANALYZED"
+    assert world["recorded"] == [("t1", "done", "OK", False, None, None, None)]
+
+
+def test_flagged_transaction_writes_the_anomaly_to_state(world):
+    """A detector flag reaches the graph state with its reason and is recorded at the end."""
+    detector = CountingDetector(reason="$250.00 is far above your typical purchase")
+    graph = build_analyzer_graph(
+        ScriptedLLM(AIMessage(content="x")), ScriptedLLM(_assessment("OK")), detector
+    )
+
+    state = graph.invoke(INITIAL_STATE)
+
+    assert detector.calls == 1
+    assert state["anomaly_flagged"] is True
+    assert state["anomaly_reason"] == "$250.00 is far above your typical purchase"
+    assert state["status"] == "ANALYZED"
+    # A flag always notifies, even when the model's verdict is OK.
+    assert len(world["sent"]) == 1
+    assert world["recorded"] == [
+        ("t1", "done", "OK", True, None, True, "$250.00 is far above your typical purchase")
+    ]

@@ -22,6 +22,8 @@ def finalize(state: AnalyzerState) -> StateUpdate:
                 assessment.verdict if assessment else None,
                 bool(state.get("notified")),
                 state.get("error"),
+                state.get("anomaly_flagged"),
+                state.get("anomaly_reason"),
             )
             break
         except Exception as exc:
