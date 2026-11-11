@@ -377,13 +377,15 @@
 -->
             <div class="expense-month-control">
               <label for="expense-month">Spending month</label>
-
-              <input
+              <select
                 id="expense-month"
-                type="month"
                 [value]="selectedExpenseMonth()"
                 (change)="onExpenseMonthChange($event)"
-                aria-label="Select expense month" />
+                aria-label="Select expense month">
+                @for (month of expenseMonthOptions; track month.value) {
+                  <option [value]="month.value">{{ month.label }}</option>
+                }
+              </select>
             </div>
           </div>
 

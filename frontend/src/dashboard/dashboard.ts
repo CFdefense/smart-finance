@@ -465,6 +465,32 @@ export class UserDashboard implements OnInit, OnDestroy {
   }
 
   /**
+   * Generate twelve selectable months:
+   * the current month plus the previous eleven.
+   *
+   * The list updates automatically based on today's date,
+   * so we never need to hardcode a year or month.
+   */
+  readonly expenseMonthOptions = Array.from({ length: 12 }, (_, index) => {
+    const today = new Date();
+
+    // JavaScript handles crossing year boundaries automatically.
+    // For example, January 2027 minus one month is December 2026.
+    const date = new Date(today.getFullYear(), today.getMonth() - index, 1);
+
+    // Format the value for our Rust API: YYYY-MM.
+    const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+
+    // Display a readable label, such as "November 2026".
+    const label = date.toLocaleDateString('en-US', {
+      month: 'long',
+      year: 'numeric',
+    });
+
+    return { value, label };
+  });
+
+  /**
    * The month currently displayed in Expenses by Category.
    *
    * Angular signals automatically update the UI whenever
@@ -473,29 +499,28 @@ export class UserDashboard implements OnInit, OnDestroy {
   readonly selectedExpenseMonth = signal(this.currentExpenseMonth());
 
   /**
-   * Called whenever the user chooses a different month.
+   * Reload spending when a user selects another month.
    *
-   * The native HTML month input returns YYYY-MM.
+   * Only one of our twelve dropdown options is accepted.
+   * This prevents unsupported months from being requested.
    */
   onExpenseMonthChange(event: Event): void {
-    const input = event.target as HTMLInputElement;
-    const month = input.value;
+    const selectedMonth = (event.target as HTMLSelectElement).value;
 
-    // Reject malformed dates before requesting the backend.
-    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+    // Ignore values that weren't generated for the dropdown.
+    if (!this.expenseMonthOptions.some((option) => option.value === selectedMonth)) {
       return;
     }
 
-    // Do not make unnecessary requests if the selected
-    // month hasn't actually changed.
-    if (month === this.selectedExpenseMonth()) {
+    // Avoid unnecessary requests when the same month is selected.
+    if (selectedMonth === this.selectedExpenseMonth()) {
       return;
     }
 
-    this.selectedExpenseMonth.set(month);
+    this.selectedExpenseMonth.set(selectedMonth);
 
-    // Reload only the expenses chart.
-    // Other dashboard cards remain unchanged.
+    // Existing request logic handles loading/error states
+    // and ignores outdated responses from previous selections.
     this.loadCategorySpending();
   }
 

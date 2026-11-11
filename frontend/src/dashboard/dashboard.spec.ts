@@ -816,23 +816,22 @@ describe('UserDashboard', () => {
   });
 
   /**
-   * Selecting a different month should reload only
-   * category spending using the chosen YYYY-MM value.
+   * Selecting an available month should request spending
+   * for that month and update the selected-month signal.
    */
   it('reloads category spending when the month changes', () => {
-    // Clear the initial call made during dashboard setup.
     budgetService.getSpendingByCategory.mockClear();
 
-    // Simulate selecting October 2026.
+    // Use the second dropdown option, which is always
+    // the previous calendar month.
+    const previousMonth = component.expenseMonthOptions[1].value;
+
     component.onExpenseMonthChange({
-      target: { value: '2026-10' },
+      target: { value: previousMonth },
     } as unknown as Event);
 
-    // The selected month should update immediately.
-    expect(component.selectedExpenseMonth()).toBe('2026-10');
-
-    // Rust must receive the selected month.
-    expect(budgetService.getSpendingByCategory).toHaveBeenCalledWith('2026-10');
+    expect(component.selectedExpenseMonth()).toBe(previousMonth);
+    expect(budgetService.getSpendingByCategory).toHaveBeenCalledWith(previousMonth);
   });
 
   /**
@@ -987,5 +986,28 @@ describe('UserDashboard', () => {
     expect(component.expenseChart().total).toBe(200);
     expect(component.categorySpendingLoading()).toBe(false);
     expect(component.categorySpendingError()).toBe(false);
+  });
+
+  /**
+   * The dropdown must contain exactly twelve months,
+   * ordered newest to oldest, including year boundaries.
+   */
+  it('provides twelve consecutive expense months', () => {
+    const options = component.expenseMonthOptions;
+
+    expect(options).toHaveLength(12);
+
+    // The first option is the current calendar month.
+    expect(options[0].value).toBe(component.selectedExpenseMonth());
+
+    // Each following entry represents the previous month.
+    for (let index = 1; index < options.length; index++) {
+      const previous = new Date(`${options[index - 1].value}-01T12:00:00`);
+      previous.setMonth(previous.getMonth() - 1);
+
+      const expected = `${previous.getFullYear()}-${String(previous.getMonth() + 1).padStart(2, '0')}`;
+
+      expect(options[index].value).toBe(expected);
+    }
   });
 });

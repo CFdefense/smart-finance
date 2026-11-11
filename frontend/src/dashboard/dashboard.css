@@ -1065,7 +1065,7 @@
   color: #475569;
 }
 
-.expense-month-control input {
+.expense-month-control select {
   box-sizing: border-box;
   max-width: 190px;
   width: 100%;
@@ -1079,7 +1079,7 @@
   cursor: pointer;
 }
 
-.expense-month-control input:focus-visible {
+.expense-month-control select:focus-visible {
   outline: 2px solid #6284e2;
   outline-offset: 2px;
 }
