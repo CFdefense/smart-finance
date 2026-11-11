@@ -16,6 +16,7 @@ import {
 } from '../app/services/plaid.service';
 import { Subscription } from 'rxjs';
 import type { OnDestroy } from '@angular/core';
+import { GoalsService, type Goal } from '../app/services/goals.service';
 
 @Component({
   imports: [CurrencyPipe, DecimalPipe],
@@ -30,6 +31,9 @@ export class UserDashboard implements OnInit, OnDestroy {
 
   private readonly profileService = inject(ProfileService);
   private readonly budgetService = inject(BudgetService);
+
+  // Reuse the same authenticated Goals API as the Goals page.
+  private readonly goalsService = inject(GoalsService);
 
   // Reuse the Plaid service already used by the Profile page.
   private readonly plaidService = inject(PlaidService);
@@ -319,6 +323,84 @@ export class UserDashboard implements OnInit, OnDestroy {
   readonly budgetsError = signal(false);
 
   /**
+   * Financial goals returned by the Rust backend.
+   *
+   * Goal progress is already calculated server-side
+   * using the linked account's current balance.
+   */
+  readonly dashboardGoals = signal<Goal[]>([]);
+  readonly dashboardGoalsLoading = signal(true);
+  readonly dashboardGoalsError = signal(false);
+
+  /**
+   * Display active budgets only.
+   *
+   * The dashboard provides a quick overview, while the
+   * full Budgets page handles creating and editing them.
+   */
+  readonly dashboardActiveBudgets = computed(() =>
+    this.budgets().filter((budget) => budget.active),
+  );
+
+  /**
+   * Archived goals are deliberately hidden from the
+   * dashboard. Active and completed goals remain visible.
+   */
+  readonly dashboardVisibleGoals = computed(() =>
+    this.dashboardGoals().filter((goal) => goal.status !== 'ARCHIVED'),
+  );
+
+  /**
+   * Ensure a percentage is safe to use as a CSS width.
+   *
+   * Budget percentages can legitimately exceed 100
+   * when spending is over the limit. The displayed text
+   * keeps that original percentage, but a progress bar
+   * must never overflow its container.
+   */
+  progressBarWidth(percent: number): number {
+    if (!Number.isFinite(percent)) {
+      return 0;
+    }
+
+    return Math.min(100, Math.max(0, percent));
+  }
+
+  /**
+   * Show readable percentages with one decimal place
+   * without displaying NaN or Infinity.
+   */
+  progressLabel(percent: number): string {
+    if (!Number.isFinite(percent)) {
+      return '0%';
+    }
+
+    return `${Math.max(0, percent).toFixed(1)}%`;
+  }
+
+  /**
+   * Load the signed-in user's financial goals.
+   *
+   * This is deliberately separate from budget loading:
+   * a failure in one section shouldn't hide the other.
+   */
+  loadDashboardGoals(): void {
+    this.dashboardGoalsLoading.set(true);
+    this.dashboardGoalsError.set(false);
+
+    this.goalsService.getGoals().subscribe({
+      next: (response) => {
+        this.dashboardGoals.set(response.goals);
+        this.dashboardGoalsLoading.set(false);
+      },
+      error: () => {
+        this.dashboardGoalsError.set(true);
+        this.dashboardGoalsLoading.set(false);
+      },
+    });
+  }
+
+  /**
    * The combined monthly spending limits for active budgets.
    */
   readonly totalBudget = computed(() =>
@@ -510,6 +592,8 @@ export class UserDashboard implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.loadProfile();
     this.loadBudgetSummary();
+    // Fetch goal progress alongside the dashboard summary.
+    this.loadDashboardGoals();
     this.loadAccounts();
     this.loadCategorySpending();
   }

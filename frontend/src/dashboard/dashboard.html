@@ -482,6 +482,125 @@
       </article>
     </section>
 
+    <!-- =====================================================
+     DASHBOARD PROGRESS OVERVIEW
+
+     This section summarizes budget and savings progress.
+     Detailed editing stays on the Budgets and Goals pages.
+     ===================================================== -->
+    <section class="dashboard-progress-grid" aria-label="Financial progress">
+      <!-- ================= MONTHLY BUDGETS ================= -->
+      <article class="dashboard-progress-card">
+        <div class="dashboard-progress-header">
+          <div>
+            <h2>Monthly Budgets</h2>
+            <p>Spending compared with your monthly limits</p>
+          </div>
+
+          <button type="button" (click)="openBudgets()">Manage</button>
+        </div>
+
+        @if (budgetsLoading()) {
+          <p class="progress-empty">Loading budgets...</p>
+        } @else if (budgetsError()) {
+          <p class="progress-empty">Unable to load budgets.</p>
+        } @else if (dashboardActiveBudgets().length === 0) {
+          <p class="progress-empty">No active budgets yet. Create one to track your spending.</p>
+        } @else {
+          @for (budget of dashboardActiveBudgets(); track budget.id) {
+            <div class="dashboard-progress-item">
+              <div class="dashboard-progress-item-heading">
+                <strong>{{ budget.name }}</strong>
+
+                <span>
+                  {{ progressLabel(budget.percent_used) }}
+                </span>
+              </div>
+
+              <div
+                class="dashboard-progress-track"
+                role="progressbar"
+                [attr.aria-label]="budget.name + ' budget usage'"
+                [attr.aria-valuenow]="progressBarWidth(budget.percent_used)"
+                aria-valuemin="0"
+                aria-valuemax="100">
+                <div
+                  class="dashboard-progress-fill budget-fill"
+                  [class.over-budget]="budget.over_budget || budget.percent_used > 100"
+                  [style.width.%]="progressBarWidth(budget.percent_used)"></div>
+              </div>
+
+              <p class="dashboard-progress-detail">
+                {{ budget.spent | currency }} spent of
+                {{ budget.monthly_limit | currency }}
+              </p>
+
+              @if (budget.over_budget) {
+                <p class="dashboard-progress-warning">
+                  Over budget by {{ -budget.remaining | currency }}
+                </p>
+              }
+            </div>
+          }
+        }
+      </article>
+
+      <!-- ================= FINANCIAL GOALS ================= -->
+      <article class="dashboard-progress-card">
+        <div class="dashboard-progress-header">
+          <div>
+            <h2>Savings Goals</h2>
+            <p>Progress toward your financial targets</p>
+          </div>
+
+          <button type="button" (click)="openGoals()">Manage</button>
+        </div>
+
+        @if (dashboardGoalsLoading()) {
+          <p class="progress-empty">Loading goals...</p>
+        } @else if (dashboardGoalsError()) {
+          <p class="progress-empty">Unable to load goals.</p>
+        } @else if (dashboardVisibleGoals().length === 0) {
+          <p class="progress-empty">No financial goals yet. Create one to track your progress.</p>
+        } @else {
+          @for (goal of dashboardVisibleGoals(); track goal.id) {
+            <div class="dashboard-progress-item">
+              <div class="dashboard-progress-item-heading">
+                <strong>{{ goal.name }}</strong>
+
+                <span>
+                  {{ progressLabel(goal.progress_percent) }}
+                </span>
+              </div>
+
+              <div
+                class="dashboard-progress-track"
+                role="progressbar"
+                [attr.aria-label]="goal.name + ' goal progress'"
+                [attr.aria-valuenow]="progressBarWidth(goal.progress_percent)"
+                aria-valuemin="0"
+                aria-valuemax="100">
+                <div
+                  class="dashboard-progress-fill goal-fill"
+                  [style.width.%]="progressBarWidth(goal.progress_percent)"></div>
+              </div>
+
+              <p class="dashboard-progress-detail">
+                {{ goal.current_balance | currency }} current balance /
+                {{ goal.target_amount | currency }} target
+              </p>
+
+              @if (goal.status === 'COMPLETED') {
+                <p class="dashboard-progress-success">Goal completed!</p>
+              } @else {
+                <p class="dashboard-progress-detail">{{ goal.remaining | currency }} remaining</p>
+              }
+            </div>
+          }
+        }
+      </article>
+    </section>
+
     <div class="budget-buttons">
       <!-- Open the Budgets page to create, edit, or delete budgets. -->
       <button type="button" class="create-budget" (click)="openBudgets()">

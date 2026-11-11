@@ -8,6 +8,7 @@ import { AuthService } from '../app/services/auth.service';
 import { ProfileService } from '../app/services/profile.service';
 import { BudgetService, type Budget } from '../app/services/budget.service';
 import { PlaidService, type PlaidAccount } from '../app/services/plaid.service';
+import { GoalsService, type Goal } from '../app/services/goals.service';
 
 describe('UserDashboard', () => {
   /**
@@ -42,6 +43,12 @@ describe('UserDashboard', () => {
   let budgetService: {
     getBudgets: ReturnType<typeof vi.fn>;
     getSpendingByCategory: ReturnType<typeof vi.fn>;
+  };
+
+  // Mock the Goals API so dashboard tests never make
+  // actual HTTP requests or modify real user data.
+  let goalsService: {
+    getGoals: ReturnType<typeof vi.fn>;
   };
 
   let authService: {
@@ -111,6 +118,14 @@ describe('UserDashboard', () => {
   ];
 
   beforeEach(async () => {
+    // Provide an empty goals list by default.
+    //
+    // Individual tests can replace this response with
+    // goals that are active, completed, or archived.
+    goalsService = {
+      getGoals: vi.fn().mockReturnValue(of({ goals: [] })),
+    };
+
     profileService = {
       getProfile: vi.fn().mockReturnValue(of({ first_name: 'Mitchell' })),
     };
@@ -178,6 +193,7 @@ describe('UserDashboard', () => {
         provideRouter([]),
         { provide: ProfileService, useValue: profileService },
         { provide: BudgetService, useValue: budgetService },
+        { provide: GoalsService, useValue: goalsService },
         { provide: AuthService, useValue: authService },
         { provide: PlaidService, useValue: plaidService },
       ],
@@ -831,5 +847,83 @@ describe('UserDashboard', () => {
     } as unknown as Event);
 
     expect(budgetService.getSpendingByCategory).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The dashboard should display active budgets only.
+   *
+   * We reuse the existing mockBudgets fixture:
+   * - Groceries: active
+   * - Entertainment: active
+   * - Shopping: inactive
+   */
+  it('shows only active budgets in its progress overview', () => {
+    const activeBudgets = component.dashboardActiveBudgets();
+
+    expect(activeBudgets).toHaveLength(2);
+    expect(activeBudgets.map((budget) => budget.name)).toEqual(['Groceries', 'Entertainment']);
+  });
+
+  /**
+   * Percentages shown as CSS widths must be between
+   * 0 and 100, even if spending exceeds the budget.
+   *
+   * The text still displays the actual percentage.
+   */
+  it('clamps progress bar widths safely', () => {
+    expect(component.progressBarWidth(50)).toBe(50);
+    expect(component.progressBarWidth(125)).toBe(100);
+    expect(component.progressBarWidth(-20)).toBe(0);
+    expect(component.progressBarWidth(Number.NaN)).toBe(0);
+
+    // The percentage label must not hide overspending.
+    expect(component.progressLabel(125)).toBe('125.0%');
+  });
+
+  /**
+   * Archived goals should not appear in the dashboard.
+   * Active and completed goals are both relevant.
+   */
+  it('shows active and completed goals but excludes archived goals', () => {
+    // Only the fields relevant to this dashboard test
+    // differ between these otherwise identical goals.
+    const baseGoal: Goal = {
+      id: 1,
+      name: 'Emergency Fund',
+      description: null,
+      target_amount: 5000,
+      target_date: null,
+      account_id: 'account-123',
+      baseline_balance: 1000,
+      current_balance: 3000,
+      progress_percent: 50,
+      remaining: 2000,
+      on_track: null,
+      status: 'ACTIVE',
+      created_at: '2026-11-01T12:00:00Z',
+    };
+
+    component.dashboardGoals.set([
+      baseGoal,
+      {
+        ...baseGoal,
+        id: 2,
+        name: 'Vacation',
+        status: 'COMPLETED',
+        progress_percent: 100,
+      },
+      {
+        ...baseGoal,
+        id: 3,
+        name: 'Old Goal',
+        status: 'ARCHIVED',
+      },
+    ]);
+
+    expect(component.dashboardVisibleGoals()).toHaveLength(2);
+    expect(component.dashboardVisibleGoals().map((goal) => goal.name)).toEqual([
+      'Emergency Fund',
+      'Vacation',
+    ]);
   });
 });
