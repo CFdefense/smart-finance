@@ -437,6 +437,17 @@ export class UserDashboard implements OnInit, OnDestroy {
   readonly categorySpendingError = signal(false);
 
   /**
+   * Identifies the newest category-spending request.
+   *
+   * Every time the user selects a month (or retries),
+   * this number increases.
+   *
+   * Responses from older requests are ignored so an
+   * outdated month cannot replace the latest chart.
+   */
+  private categorySpendingRequestId = 0;
+
+  /**
    * Returns the current calendar month in YYYY-MM format.
    *
    * We use the local calendar date because the month picker
@@ -802,6 +813,10 @@ export class UserDashboard implements OnInit, OnDestroy {
    * failures in either section don't hide the other.
    */
   loadCategorySpending(): void {
+    // Give this request a unique, increasing identifier.
+    // A later request will make this identifier outdated.
+    const requestId = ++this.categorySpendingRequestId;
+
     this.categorySpendingLoading.set(true);
     this.categorySpendingError.set(false);
 
@@ -809,10 +824,22 @@ export class UserDashboard implements OnInit, OnDestroy {
     // rather than always using the current month.
     this.budgetService.getSpendingByCategory(this.selectedExpenseMonth()).subscribe({
       next: (response) => {
+        // Ignore a response if the user has requested
+        // a different month since this request started.
+        if (requestId !== this.categorySpendingRequestId) {
+          return;
+        }
+
         this.categorySpending.set(response);
         this.categorySpendingLoading.set(false);
       },
       error: () => {
+        // An older failed request must not hide a newer
+        // month's successful chart or loading state.
+        if (requestId !== this.categorySpendingRequestId) {
+          return;
+        }
+
         this.categorySpendingError.set(true);
         this.categorySpendingLoading.set(false);
       },

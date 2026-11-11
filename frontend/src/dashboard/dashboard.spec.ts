@@ -1,8 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
-import { of, throwError } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
 import { UserDashboard } from './dashboard';
 import { AuthService } from '../app/services/auth.service';
 import { ProfileService } from '../app/services/profile.service';
@@ -925,5 +924,68 @@ describe('UserDashboard', () => {
       'Emergency Fund',
       'Vacation',
     ]);
+  });
+
+  /**
+   * If users switch months quickly, HTTP responses
+   * may arrive in a different order than requested.
+   *
+   * The dashboard must keep the newest selected month
+   * even when an older request finishes afterward.
+   */
+  it('ignores outdated expense month responses', () => {
+    // Subjects let the test control response timing.
+    const octoberRequest = new Subject<{
+      month: string;
+      total: number;
+      categories: { category: 'GROCERIES'; amount: number }[];
+    }>();
+
+    const novemberRequest = new Subject<{
+      month: string;
+      total: number;
+      categories: { category: 'GROCERIES'; amount: number }[];
+    }>();
+
+    // The initial dashboard load already happened
+    // during beforeEach. Clear that mock call history.
+    budgetService.getSpendingByCategory.mockClear();
+
+    // Return a different observable for each request.
+    budgetService.getSpendingByCategory
+      .mockReturnValueOnce(octoberRequest.asObservable())
+      .mockReturnValueOnce(novemberRequest.asObservable());
+
+    // Arthur selects October, then immediately November.
+    component.selectedExpenseMonth.set('2026-10');
+    component.loadCategorySpending();
+
+    component.selectedExpenseMonth.set('2026-11');
+    component.loadCategorySpending();
+
+    // November finishes first.
+    novemberRequest.next({
+      month: '2026-11',
+      total: 200,
+      categories: [{ category: 'GROCERIES', amount: 200 }],
+    });
+    novemberRequest.complete();
+
+    expect(component.categorySpending()?.month).toBe('2026-11');
+    expect(component.expenseChart().total).toBe(200);
+
+    // October finishes late with different spending.
+    // Its data must NOT overwrite November.
+    octoberRequest.next({
+      month: '2026-10',
+      total: 999,
+      categories: [{ category: 'GROCERIES', amount: 999 }],
+    });
+    octoberRequest.complete();
+
+    expect(component.categorySpending()?.month).toBe('2026-11');
+    expect(component.expenseChart().total).toBe(200);
+    expect(component.categorySpendingLoading()).toBe(false);
+    expect(component.categorySpendingError()).toBe(false);
   });
 });
