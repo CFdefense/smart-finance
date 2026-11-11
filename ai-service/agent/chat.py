@@ -50,6 +50,16 @@ def build_chat_graph(llm_with_tools, tools) -> CompiledStateGraph[Any, Any, Any,
     return graph.compile()
 
 
+def build_messages(request: ChatRequest) -> list[Any]:
+    """Convert the request's history plus its new message into graph messages."""
+    messages: list[Any] = [
+        HumanMessage(m.content) if m.role == "user" else AIMessage(m.content)
+        for m in request.history
+    ]
+    messages.append(HumanMessage(request.message))
+    return messages
+
+
 class ChatAgent:
     """Agent responsible for handling user requests with financial context."""
 
@@ -70,7 +80,7 @@ class ChatAgent:
                     {
                         "user_id": request.user_id,
                         "context": "",
-                        "messages": [request.message],
+                        "messages": build_messages(request),
                     },
                     config={"callbacks": [AgentCallbackHandler()], "run_name": "chat"},
                 )
@@ -119,11 +129,7 @@ class ChatAgent:
             len(request.message),
             len(request.history),
         )
-        messages: list[Any] = [
-            HumanMessage(m.content) if m.role == "user" else AIMessage(m.content)
-            for m in request.history
-        ]
-        messages.append(HumanMessage(request.message))
+        messages = build_messages(request)
         emitted: list[str] = []
         streamed_round = False  # tokens already sent for the current respond round
         try:

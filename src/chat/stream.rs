@@ -13,6 +13,9 @@ pub const DEFAULT_TOTAL_TIMEOUT: Duration = Duration::from_secs(120);
 /// Default idle timeout between consecutive stream chunks (15 seconds).
 pub const DEFAULT_IDLE_TIMEOUT: Duration = Duration::from_secs(15);
 
+/// Maximum size in bytes of a single NDJSON line; a longer line aborts the stream.
+pub const MAX_LINE_BYTES: usize = 1024 * 1024;
+
 /// User-facing error message emitted when the AI service fails mid-stream or times out.
 pub const AI_UNAVAILABLE_MESSAGE: &str =
     "Sorry, the assistant is having trouble right now. Please try again shortly.";
@@ -75,30 +78,58 @@ impl std::error::Error for StartError {}
 #[derive(Debug, Default)]
 pub struct NdjsonParser {
     buffer: Vec<u8>,
+    overflowed: bool,
 }
 
 impl NdjsonParser {
     /// Creates a new, empty line parser.
     #[must_use]
     pub fn new() -> Self {
-        Self { buffer: Vec::new() }
+        Self {
+            buffer: Vec::new(),
+            overflowed: false,
+        }
+    }
+
+    /// Returns `true` once a line exceeded [`MAX_LINE_BYTES`]; the parser then ignores further input.
+    #[must_use]
+    pub fn overflowed(&self) -> bool {
+        self.overflowed
     }
 
     /// Pushes new bytes into the parser and returns any complete [`AiEvent`]s parsed from new lines.
     ///
     /// Blank lines and unparseable lines are ignored without logging to protect user privacy.
+    /// If a line (complete or still pending) exceeds [`MAX_LINE_BYTES`], the buffer is discarded
+    /// and [`NdjsonParser::overflowed`] becomes `true`.
     pub fn push(&mut self, chunk: &[u8]) -> Vec<AiEvent> {
-        self.buffer.extend_from_slice(chunk);
         let mut events = Vec::new();
+        if self.overflowed {
+            return events;
+        }
+        self.buffer.extend_from_slice(chunk);
 
         while let Some(pos) = self.buffer.iter().position(|&b| b == b'\n') {
+            if pos >= MAX_LINE_BYTES {
+                self.overflow();
+                return events;
+            }
             let line_bytes: Vec<u8> = self.buffer.drain(..=pos).collect();
             if let Some(event) = Self::parse_line(&line_bytes) {
                 events.push(event);
             }
         }
 
+        if self.buffer.len() > MAX_LINE_BYTES {
+            self.overflow();
+        }
+
         events
+    }
+
+    fn overflow(&mut self) {
+        self.overflowed = true;
+        self.buffer = Vec::new();
     }
 
     /// Flushes any remaining bytes in the buffer as a final line without requiring a trailing newline.
@@ -197,19 +228,24 @@ impl AiClient {
             "history": history,
         });
 
-        let resp = self
-            .http
-            .post(format!("{}/chat/stream", self.base_url))
-            .json(&body)
-            .send()
-            .await
-            .map_err(|_| StartError::Unavailable)?;
+        // The total deadline starts before the request is sent so that connecting and waiting
+        // for response headers count against it, not just the streaming phase.
+        let total_deadline = tokio::time::Instant::now() + self.total_timeout;
+
+        let resp = tokio::time::timeout_at(
+            total_deadline,
+            self.http
+                .post(format!("{}/chat/stream", self.base_url))
+                .json(&body)
+                .send(),
+        )
+        .await
+        .map_err(|_| StartError::Unavailable)?
+        .map_err(|_| StartError::Unavailable)?;
 
         if !resp.status().is_success() {
             return Err(StartError::Unavailable);
         }
-
-        let total_deadline = tokio::time::Instant::now() + self.total_timeout;
 
         Ok(AiStream {
             response: resp,
@@ -293,6 +329,10 @@ impl AiStream {
                 Ok(Ok(Some(chunk))) => {
                     let events = self.parser.push(&chunk);
                     self.buffered_events.extend(events);
+                    if self.parser.overflowed() {
+                        // Deliver events parsed before the oversized line, then fail the turn.
+                        self.eof_reached = true;
+                    }
                 }
                 Ok(Ok(None)) => {
                     self.eof_reached = true;
@@ -461,6 +501,96 @@ mod tests {
                 }
             ]
         );
+    }
+    #[test]
+    fn test_parser_overflow_on_unterminated_long_line() {
+        let mut parser = NdjsonParser::new();
+        let big = vec![b'a'; MAX_LINE_BYTES + 1];
+        assert!(parser.push(&big).is_empty());
+        assert!(parser.overflowed());
+        assert!(parser
+            .push(b"{\"type\":\"token\",\"text\":\"x\"}\n")
+            .is_empty());
+        assert!(parser.finish().is_empty());
+    }
+
+    #[test]
+    fn test_parser_overflow_keeps_events_before_long_line() {
+        let mut parser = NdjsonParser::new();
+        let mut chunk = b"{\"type\":\"token\",\"text\":\"ok\"}\n".to_vec();
+        chunk.extend(vec![b'a'; MAX_LINE_BYTES + 1]);
+        assert_eq!(
+            parser.push(&chunk),
+            vec![AiEvent::Token {
+                text: "ok".to_string()
+            }]
+        );
+        assert!(parser.overflowed());
+    }
+
+    #[test]
+    fn test_parser_accepts_line_at_limit() {
+        let mut parser = NdjsonParser::new();
+        assert!(parser.push(&vec![b' '; MAX_LINE_BYTES]).is_empty());
+        assert!(!parser.overflowed());
+    }
+
+    #[tokio::test]
+    async fn test_relay_oversized_line_yields_error() {
+        let router = Router::new().route(
+            "/chat/stream",
+            post(|| async {
+                let stream = futures_util::stream::iter(vec![
+                    Ok::<_, std::io::Error>(axum::body::Bytes::from(
+                        "{\"type\":\"token\",\"text\":\"hi\"}\n",
+                    )),
+                    Ok::<_, std::io::Error>(axum::body::Bytes::from(vec![
+                        b'a';
+                        MAX_LINE_BYTES + 1
+                    ])),
+                ]);
+                Body::from_stream(stream).into_response()
+            }),
+        );
+
+        let url = spawn_mock_server(router).await;
+        let client = AiClient::with_base_url(url);
+        let mut stream = client.start(1, "Hi", vec![]).await.expect("stream starts");
+
+        assert_eq!(
+            stream.next_event().await,
+            Some(AiEvent::Token {
+                text: "hi".to_string()
+            })
+        );
+        assert_eq!(
+            stream.next_event().await,
+            Some(AiEvent::Error {
+                code: "ai_failed".to_string(),
+                message: AI_UNAVAILABLE_MESSAGE.to_string()
+            })
+        );
+        assert_eq!(stream.next_event().await, None);
+    }
+
+    #[tokio::test]
+    async fn test_relay_headers_never_sent_times_out() {
+        let router = Router::new().route(
+            "/chat/stream",
+            post(|| async {
+                tokio::time::sleep(Duration::from_secs(30)).await;
+                StatusCode::OK.into_response()
+            }),
+        );
+
+        let url = spawn_mock_server(router).await;
+        let client = AiClient::with_base_url(url)
+            .with_timeouts(Duration::from_millis(200), Duration::from_millis(200));
+
+        let started = std::time::Instant::now();
+        let res = client.start(1, "Hi", vec![]).await;
+        assert_eq!(res.unwrap_err(), StartError::Unavailable);
+        assert!(started.elapsed() < Duration::from_secs(5));
     }
 
     async fn spawn_mock_server(router: Router) -> String {

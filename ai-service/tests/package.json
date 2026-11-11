@@ -1,0 +1,13 @@
+{
+  "name": "agent-eval-framework",
+  "private": true,
+  "description": "promptfoo harness that evaluates the analyze and chat agents",
+  "engines": { "node": ">=22.22.0" },
+  "scripts": {
+    "eval": "PROMPTFOO_PYTHON=$PWD/../.venv/bin/python PROMPTFOO_DISABLE_TELEMETRY=1 PROMPTFOO_DISABLE_UPDATE=1 promptfoo eval -c promptfooconfig.yaml --no-cache",
+    "view": "promptfoo view"
+  },
+  "dependencies": {
+    "promptfoo": "0.125.1"
+  }
+}
