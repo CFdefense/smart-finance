@@ -106,3 +106,17 @@ Copy `.env.example` to `.env`. The defaults match the Docker Compose Postgres se
 | `FRONTEND_URL` | Allowed CORS origin |
 | `BIND_ADDRESS` | Server bind address (e.g. `127.0.0.1:3001`) |
 | `RUST_LOG` | Log level (e.g. `debug`, `info`) |
+
+## Container Run Steps
+
+In order to run the containers on the VM, it is important to do certain steps in the right order. 
+
+1. Pull recent changes from Git. 
+2. Start the database `docker compose up -d --wait db`.
+   1. `-d`: detach so you can use your terminal
+   2. `--wait`: wait until db is healthy. 
+3. Migrate the db `sqlx migrate run`
+4. Build the backend image `docker compose build backend`. 
+5. Create the `backend` and `ai-service` containers.
+
+You can run all these steps in order by running `bash deploy.sh` in `deploy/`
