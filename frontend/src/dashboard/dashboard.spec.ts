@@ -799,4 +799,37 @@ describe('UserDashboard', () => {
     component.netWorthRange.set('1Y');
     expect(component.visibleNetWorthIncludesDemo()).toBe(false);
   });
+
+  /**
+   * Selecting a different month should reload only
+   * category spending using the chosen YYYY-MM value.
+   */
+  it('reloads category spending when the month changes', () => {
+    // Clear the initial call made during dashboard setup.
+    budgetService.getSpendingByCategory.mockClear();
+
+    // Simulate selecting October 2026.
+    component.onExpenseMonthChange({
+      target: { value: '2026-10' },
+    } as unknown as Event);
+
+    // The selected month should update immediately.
+    expect(component.selectedExpenseMonth()).toBe('2026-10');
+
+    // Rust must receive the selected month.
+    expect(budgetService.getSpendingByCategory).toHaveBeenCalledWith('2026-10');
+  });
+
+  /**
+   * Invalid month values should never reach the API.
+   */
+  it('rejects invalid expense months', () => {
+    budgetService.getSpendingByCategory.mockClear();
+
+    component.onExpenseMonthChange({
+      target: { value: 'not-a-month' },
+    } as unknown as Event);
+
+    expect(budgetService.getSpendingByCategory).not.toHaveBeenCalled();
+  });
 });

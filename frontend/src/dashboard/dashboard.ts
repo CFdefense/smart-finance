@@ -355,6 +355,58 @@ export class UserDashboard implements OnInit, OnDestroy {
   readonly categorySpendingError = signal(false);
 
   /**
+   * Returns the current calendar month in YYYY-MM format.
+   *
+   * We use the local calendar date because the month picker
+   * represents the month the user sees on their computer.
+   *
+   * Example: November 2026 becomes "2026-11".
+   */
+  private currentExpenseMonth(): string {
+    const today = new Date();
+
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+
+    return `${year}-${month}`;
+  }
+
+  /**
+   * The month currently displayed in Expenses by Category.
+   *
+   * Angular signals automatically update the UI whenever
+   * their values change.
+   */
+  readonly selectedExpenseMonth = signal(this.currentExpenseMonth());
+
+  /**
+   * Called whenever the user chooses a different month.
+   *
+   * The native HTML month input returns YYYY-MM.
+   */
+  onExpenseMonthChange(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const month = input.value;
+
+    // Reject malformed dates before requesting the backend.
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+      return;
+    }
+
+    // Do not make unnecessary requests if the selected
+    // month hasn't actually changed.
+    if (month === this.selectedExpenseMonth()) {
+      return;
+    }
+
+    this.selectedExpenseMonth.set(month);
+
+    // Reload only the expenses chart.
+    // Other dashboard cards remain unchanged.
+    this.loadCategorySpending();
+  }
+
+  /**
    * Colors used consistently for each spending category.
    *
    * These match the Category enum in our Rust backend.
@@ -669,7 +721,9 @@ export class UserDashboard implements OnInit, OnDestroy {
     this.categorySpendingLoading.set(true);
     this.categorySpendingError.set(false);
 
-    this.budgetService.getSpendingByCategory().subscribe({
+    // Ask Rust to calculate spending for the chosen month,
+    // rather than always using the current month.
+    this.budgetService.getSpendingByCategory(this.selectedExpenseMonth()).subscribe({
       next: (response) => {
         this.categorySpending.set(response);
         this.categorySpendingLoading.set(false);

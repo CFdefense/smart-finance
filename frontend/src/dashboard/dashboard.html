@@ -368,6 +368,23 @@
                 Current month's spending
               }
             </p>
+
+            <!--
+  Let users view spending from different calendar months.
+
+  The input automatically displays a native month picker,
+  which is accessible on desktop and mobile devices.
+-->
+            <div class="expense-month-control">
+              <label for="expense-month">Spending month</label>
+
+              <input
+                id="expense-month"
+                type="month"
+                [value]="selectedExpenseMonth()"
+                (change)="onExpenseMonthChange($event)"
+                aria-label="Select expense month" />
+            </div>
           </div>
 
           <span class="material-symbols-outlined" aria-hidden="true">donut_small</span>
