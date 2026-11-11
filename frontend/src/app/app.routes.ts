@@ -63,5 +63,5 @@ export const routeConfig: Routes = [
       // when those pages are implemented.
     ],
   },
-  { path: '**', component: PageNotFound }
+  { path: '**', component: PageNotFound },
 ];

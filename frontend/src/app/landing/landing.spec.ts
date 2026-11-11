@@ -1,12 +1,23 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TestBed } from '@angular/core/testing';
-import { Router } from '@angular/router';
-import { of, throwError } from 'rxjs';
 import { Landing } from './landing';
 
 describe('Landing', () => {
-  let component: Landing;
-  let router: {
-    navigate: ReturnType<typeof vi.fn>;
-  };
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [Landing],
+    }).compileComponents();
+  });
+
+  it('should create the landing page', () => {
+    const fixture = TestBed.createComponent(Landing);
+    const landing = fixture.componentInstance;
+    expect(landing).toBeTruthy();
+  });
+
+  it('should render title', async () => {
+    const fixture = TestBed.createComponent(Landing);
+    await fixture.whenStable();
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.querySelector('h1')?.textContent).toContain('Finance Budgeting App');
+  });
 });
