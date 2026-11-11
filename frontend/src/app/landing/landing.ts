@@ -1,8 +1,8 @@
 import { Component, inject, signal } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
+import { Router } from '@angular/router';
 
 @Component({
-  imports: [RouterLink],
+  imports: [],
   selector: 'app-root',
   styleUrl: './landing.css',
   templateUrl: './landing.html',

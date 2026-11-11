@@ -8,6 +8,7 @@ import { Budgets } from '../budgets/budgets';
 import { AppLayout } from './app-layout/app-layout';
 import { authGuard } from './auth-guard';
 import { Landing } from './landing/landing';
+import { PageNotFound } from './page-not-found/page-not-found';
 
 export const routeConfig: Routes = [
   // Redirect visitors from the root URL to Landing.
@@ -62,4 +63,5 @@ export const routeConfig: Routes = [
       // when those pages are implemented.
     ],
   },
+  { path: '**', component: PageNotFound }
 ];
