@@ -4,22 +4,27 @@
  * Keeps the greeting on the left and the
  * profile dropdown on the right.
  */
+
+/*
+ * Align the welcome message with the dashboard cards.
+ * Keep the profile menu on the right.
+ */
 .header {
+  box-sizing: border-box;
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
   gap: 24px;
 
-  width: 100%;
-  box-sizing: border-box;
-
-  padding: 32px 48px;
+  width: min(1100px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 28px 0 24px;
 }
 
 /* Adapt the header for narrower screens. */
 @media (max-width: 700px) {
   .header {
-    padding: 24px 16px;
+    padding: 20px 0;
     gap: 12px;
   }
 }
@@ -156,17 +161,28 @@
   display: block;
 }
 
+/*
+ * ONE shared layout for the entire dashboard.
+ *
+ * Every major section now inherits the same available
+ * width instead of calculating its own margins.
+ */
 .parent {
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  row-gap: 50px;
+  gap: 24px;
+
+  width: min(1100px, calc(100% - 32px));
+  margin: 0 auto 48px;
 }
 
 .budget-buttons {
   display: flex;
   align-items: center;
-  gap: 30px;
-  padding-left: 60px;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 0;
 }
 
 .create-budget {
@@ -264,18 +280,19 @@
 }
 
 .totals-and-remaining {
-  display: flex;
-  align-items: center;
-  gap: 50px;
-  padding-left: 60px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 20px;
+  padding: 0;
 }
 
 .total-budget {
   /* background-color: rgba(195, 232, 248, 0.5); */
   background-color: #dde5fc;
-  width: 380px;
+  width: auto;
+  min-width: 0;
   padding: 30px;
-  padding-left: 60px;
   border-radius: 10px;
   box-shadow: 4px 8px 15px 2px rgba(0, 0, 0, 0.2);
   flex-direction: column;
@@ -327,9 +344,9 @@
 .actual-spent {
   /* background-color: rgba(135, 213, 247, 0.5); */
   background-color: #c4d5fc;
-  width: 380px;
+  width: auto;
+  min-width: 0;
   padding: 30px;
-  padding-left: 60px;
   border-radius: 10px;
   box-shadow: 4px 8px 15px 2px rgba(0, 0, 0, 0.2);
   flex-direction: column;
@@ -381,9 +398,9 @@
 .remaining-budget {
   /* background-color: rgba(68, 164, 205, 0.5); */
   background-color: #a2b7e9;
-  width: 380px;
+  width: auto;
+  min-width: 0;
   padding: 30px;
-  padding-left: 60px;
   border-radius: 10px;
   box-shadow: 4px 8px 15px 2px rgba(0, 0, 0, 0.2);
   flex-direction: column;
@@ -553,8 +570,9 @@
  * so existing budget and profile styles remain intact.
  */
 .dashboard-accounts {
-  width: min(1100px, calc(100% - 48px));
-  margin: 0 auto;
+  /* The parent controls width and horizontal alignment. */
+  width: 100%;
+  margin: 0;
   padding: 24px;
   box-sizing: border-box;
   background: #fff;
@@ -743,7 +761,7 @@
  */
 @media (max-width: 600px) {
   .dashboard-accounts {
-    width: calc(100% - 24px);
+    width: 100%;
     padding: 16px;
   }
 
@@ -775,8 +793,9 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 20px;
 
-  width: min(1100px, calc(100% - 48px));
-  margin: 0 auto;
+  /* Align both chart cards with the surrounding sections. */
+  width: 100%;
+  margin: 0;
   box-sizing: border-box;
 }
 
@@ -891,7 +910,7 @@
 @media (max-width: 800px) {
   .dashboard-charts {
     grid-template-columns: 1fr;
-    width: calc(100% - 24px);
+    width: 100%;
   }
 
   .financial-chart-card {
@@ -1076,7 +1095,7 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 24px;
-  margin: 28px 0;
+  margin: 0;
 }
 
 .dashboard-progress-card {
@@ -1203,5 +1222,111 @@
 @media (prefers-reduced-motion: reduce) {
   .dashboard-progress-fill {
     transition: none;
+  }
+}
+
+/* ==========================================================
+   TOTAL NET WORTH SUMMARY
+
+   Match the appearance of the Connected Accounts card
+   and the dashboard's existing financial charts.
+   ========================================================== */
+
+.net-worth-card {
+  box-sizing: border-box;
+
+  /* Match the centered layout of Connected Accounts. */
+
+  /* Follow the shared 1100px dashboard container. */
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 30px 34px;
+  border: 1px solid #dbe3ef;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgb(15 23 42 / 4%);
+}
+
+.net-worth-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.net-worth-label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.net-worth-label .material-symbols-outlined {
+  color: #6484e8;
+  font-size: 30px;
+}
+
+.net-worth-label h2 {
+  margin: 0;
+  color: #1e293b;
+  font-family: inherit;
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+
+.net-worth-value {
+  margin: 8px 0;
+  color: #1e293b;
+  font-family: inherit;
+  font-size: clamp(2.2rem, 4vw, 3.2rem);
+  font-weight: 750;
+  letter-spacing: -0.035em;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.net-worth-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 26px;
+  color: #475569;
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.net-worth-breakdown span {
+  white-space: nowrap;
+}
+
+.net-worth-note {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+/* Keep the summary readable on narrow screens. */
+@media (max-width: 600px) {
+  .net-worth-card {
+    padding: 22px 20px;
+    border-radius: 16px;
+  }
+
+  .net-worth-value {
+    font-size: 2rem;
+  }
+
+  .net-worth-breakdown {
+    flex-direction: column;
+    gap: 8px;
+  }
+}
+
+/*
+ * Keep the three budget summary cards from overflowing
+ * smaller screens.
+ */
+@media (max-width: 800px) {
+  .totals-and-remaining {
+    grid-template-columns: 1fr;
   }
 }
