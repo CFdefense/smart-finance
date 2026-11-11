@@ -24,6 +24,7 @@ from agent.nodes.analysis import (
     finalize,
     load_account_context,
     make_assess,
+    make_detect_anomaly,
     make_investigate,
     notify,
     route_after_assess,
@@ -33,6 +34,7 @@ from agent.nodes.analysis import (
 )
 from agent.state import AnalyzerState
 from agent.tools import ALL_TOOLS
+from anomaly import AnomalyDetector
 
 _log = logging.getLogger(GRAPH)
 
@@ -41,15 +43,21 @@ _LLM_TIMEOUT_SECONDS = 60
 __all__ = ["MAX_TOOL_ROUNDS", "AnalyzerAgent", "build_analyzer_graph"]
 
 
-def build_analyzer_graph(investigate_llm, assess_llm) -> CompiledStateGraph[Any, Any, Any, Any]:
+def build_analyzer_graph(
+    investigate_llm, assess_llm, detector
+) -> CompiledStateGraph[Any, Any, Any, Any]:
     """
     Wire the analyzer workflow.
 
-    claim -> load_context -> investigate <-> tools -> assess -> decide -> notify? -> finalize
+    `anomaly` has no outgoing edge. It only writes `anomaly_flagged`/`anomaly_reason`, which
+    `decide` reads from state. LangGraph runs both branches in the same superstep and finishes
+    it before the next one, so anomaly is always done before assess (and so decide) can run. An
+    `anomaly -> decide` edge would instead run decide early, before there is an assessment.
     """
     graph = StateGraph(AnalyzerState)
     graph.add_node("claim", claim_transaction)
     graph.add_node("load_context", load_account_context)
+    graph.add_node("anomaly", make_detect_anomaly(detector))
     graph.add_node("investigate", make_investigate(investigate_llm))
     graph.add_node("tools", ToolNode(ALL_TOOLS, handle_tool_errors=True))
     graph.add_node("assess", make_assess(assess_llm))
@@ -62,6 +70,7 @@ def build_analyzer_graph(investigate_llm, assess_llm) -> CompiledStateGraph[Any,
         "claim", route_after_claim, {"load_context": "load_context", END: END}
     )
     graph.add_edge("load_context", "investigate")
+    graph.add_edge("load_context", "anomaly")  # fan-out: runs alongside investigate
     graph.add_conditional_edges(
         "investigate", route_after_investigate, {"tools": "tools", "assess": "assess"}
     )
@@ -80,7 +89,7 @@ def build_analyzer_graph(investigate_llm, assess_llm) -> CompiledStateGraph[Any,
 class AnalyzerAgent:
     """Agent that analyzes one transaction and notifies the user when it matters."""
 
-    def __init__(self, openai_key: str, model: str):
+    def __init__(self, openai_key: str, model: str, detector: AnomalyDetector):
         """Create the models and compile the analysis graph."""
         llm = ChatOpenAI(
             api_key=SecretStr(openai_key),
@@ -90,7 +99,7 @@ class AnalyzerAgent:
             max_retries=1,
         )
         self._graph = build_analyzer_graph(
-            llm.bind_tools(ALL_TOOLS), llm.with_structured_output(Assessment)
+            llm.bind_tools(ALL_TOOLS), llm.with_structured_output(Assessment), detector
         )
         if _log.isEnabledFor(logging.DEBUG):
             _log.debug("graph.topology\n%s", self._graph.get_graph().draw_mermaid())
@@ -122,6 +131,8 @@ class AnalyzerAgent:
                             "transaction": txn,
                             "context": "",
                             "messages": [],
+                            "anomaly_flagged": None,
+                            "anomaly_reason": None,
                             "assessment": None,
                             "notify": False,
                             "notified": False,

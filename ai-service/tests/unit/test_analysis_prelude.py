@@ -3,13 +3,22 @@
 import logging
 from datetime import date
 
+import pytest
+
 import agent.nodes.analysis.claim as claim_mod
+import agent.nodes.analysis.detect as detect_mod
 import agent.nodes.analysis.load_context as load_context_mod
 from agent import AnalyzedTransaction
-from agent.nodes.analysis import claim_transaction, load_account_context, route_after_claim
+from agent.nodes.analysis import (
+    claim_transaction,
+    load_account_context,
+    make_detect_anomaly,
+    route_after_claim,
+)
 from agent.nodes.context import format_accounts_context
 from agent.prompts import ASSESS_SYSTEM_PROMPT, INVESTIGATE_SYSTEM_PROMPT, transaction_block
-from db import Account, Budget, Goal, Rule
+from anomaly import FlaggedTransaction
+from db import Account, Budget, Goal, Rule, Transaction
 
 TXN = AnalyzedTransaction(
     transaction_id="t1",
@@ -110,6 +119,54 @@ def test_load_account_context_writes_only_context(monkeypatch):
 
     assert set(result) == {"context"}
     assert "Checking" in result["context"]
+
+
+class RecordingDetector:
+    """Remembers what it was asked to compare; flags the new transaction when given a reason."""
+
+    def __init__(self, reason: str | None):
+        self.reason = reason
+
+    def find_anomalies(self, new, history):
+        """Record the inputs and flag every new transaction if a reason was given."""
+        self.new, self.history = new, history
+        if self.reason is None:
+            return []
+        return [FlaggedTransaction(transaction=t, reason=self.reason) for t in new]
+
+
+@pytest.mark.parametrize(
+    ("reason", "expected"),
+    [
+        (None, {"anomaly_flagged": False, "anomaly_reason": None}),
+        (
+            "Possible duplicate; went up",
+            {"anomaly_flagged": True, "anomaly_reason": "Possible duplicate; went up"},
+        ),
+    ],
+)
+def test_anomaly_compares_the_transaction_to_the_rest_of_its_history(monkeypatch, reason, expected):
+    """
+    The detector sees this transaction as new and the user's other transactions as history.
+
+    The transaction's own stored row is left out of history, or it would look like a duplicate
+    of itself. The node writes only `anomaly_flagged` and `anomaly_reason`.
+    """
+    me = Transaction(transaction_id="t1", name=TXN.name, amount=99.5, date=TXN.date)
+    other = Transaction(transaction_id="t0", name="Grocer", amount=40.0, date=date(2026, 10, 1))
+    loaded = []
+    monkeypatch.setattr(
+        detect_mod, "load_transactions", lambda user_id, **kw: loaded.append(user_id) or [me, other]
+    )
+    detector = RecordingDetector(reason)
+
+    result = make_detect_anomaly(detector)(STATE)
+
+    assert loaded == [7]
+    assert [t.transaction_id for t in detector.new] == ["t1"]
+    assert detector.new[0].amount == TXN.amount and detector.new[0].category == TXN.category
+    assert detector.history == [other]
+    assert result == expected
 
 
 def _stub_loaders(monkeypatch, **overrides):
