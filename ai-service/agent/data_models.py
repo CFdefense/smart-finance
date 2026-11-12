@@ -89,4 +89,6 @@ class AnalysisResult(BaseModel):
     status: AnalysisStatus
     assessment: Assessment | None = None
     notified: bool = False
+    anomaly_flagged: bool | None = None  # None = detection failed or didn't run
+    anomaly_reason: str | None = None
     error: str | None = None

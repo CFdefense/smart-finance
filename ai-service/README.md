@@ -36,7 +36,8 @@ uv sync
               "assessment": {"verdict": "REVIEW", "summary": "...", "rule_violations": [],
                              "budget_notes": [], "goal_notes": [], "should_notify": true,
                              "notify_reason": "..."},
-              "notified": true, "error": null}
+              "notified": true, "anomaly_flagged": false, "anomaly_reason": null, "error": null}
+              anomaly_flagged is null when detection failed or didn't run.
              status is ANALYZED, DUPLICATE (already analyzed) or FAILED (see error).
              422 if the account is not the user's; 503 without OPENAI_API_KEY.
              A FAILED result is still HTTP 200 (retry later); only an unowned account is 422.
