@@ -19,6 +19,9 @@
           "builder": "@angular/build:application",
           "options": {
             "browser": "src/main.ts",
+            "define": {
+              "API_URL": "'http://localhost:3001/api'"
+            },
             "tsConfig": "tsconfig.app.json",
             "assets": [
               {

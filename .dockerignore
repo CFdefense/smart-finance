@@ -1,0 +1,7 @@
+# Used when the build context is the repo root (the backend image).
+# Allowlist: ignore everything, then let through only what the Rust build needs.
+# target/ (several GB) and .env (secrets) must never be sent to a build.
+*
+!Cargo.toml
+!Cargo.lock
+!src/

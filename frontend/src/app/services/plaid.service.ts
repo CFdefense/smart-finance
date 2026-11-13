@@ -1,6 +1,7 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
+import { API_BASE_URL } from '../api-config';
 
 import type {
   PlaidAccountsResponse,
@@ -36,7 +37,7 @@ export class PlaidService {
   private readonly http = inject(HttpClient);
 
   // All Plaid-related backend endpoints share this prefix.
-  private readonly baseUrl = 'http://localhost:3001/api/plaid';
+  private readonly baseUrl = `${API_BASE_URL}/plaid`;
 
   /**
    * Retrieve the authenticated user's connected financial accounts.

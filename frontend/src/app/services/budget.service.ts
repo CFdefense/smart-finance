@@ -1,6 +1,7 @@
 import { inject, Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { API_BASE_URL } from '../api-config';
 
 /**
  * Import shared budget data models.
@@ -43,7 +44,7 @@ export type {
 export class BudgetService {
   private readonly http = inject(HttpClient);
 
-  private readonly baseUrl = 'http://localhost:3001/api/budgets';
+  private readonly baseUrl = `${API_BASE_URL}/budgets`;
 
   /**
    * Returns the user's budgets and their spending.
