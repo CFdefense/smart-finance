@@ -15,6 +15,12 @@ from agent import (
     ChatAgent,
     ChatRequest,
 )
+from anomaly import (
+    CombinedDetector,
+    DuplicateDetector,
+    SubscriptionIncreaseDetector,
+    ZScoreDetector,
+)
 from definition import EvalCase
 from evaldb import resolve_account
 
@@ -31,7 +37,17 @@ def _agent(kind: str):
         # Keep per-transaction log files out of ai-service/logs.
         os.environ.setdefault("AGENT_LOG_DIR", tempfile.mkdtemp(prefix="agent-eval-logs-"))
         model = os.getenv("AGENT_MODEL", "gpt-4.1")
-        _agents[kind] = AnalyzerAgent(key, model) if kind == "analyze" else ChatAgent(key, model)
+        if kind == "analyze":
+            detector = CombinedDetector(
+                [
+                    ZScoreDetector(threshold=float(os.getenv("ANOMALY_ZSCORE_THRESHOLD", "3.5"))),
+                    DuplicateDetector(),
+                    SubscriptionIncreaseDetector(),
+                ]
+            )
+            _agents[kind] = AnalyzerAgent(key, model, detector)
+        else:
+            _agents[kind] = ChatAgent(key, model)
     return _agents[kind]
 
 
