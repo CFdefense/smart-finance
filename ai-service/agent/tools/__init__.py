@@ -1,8 +1,18 @@
-"""Tools the agents' LLMs may call. The analyzer's tools read the user's data; chat can search."""
+"""Tools the agents' LLMs may call. The analyzer reads one transaction; chat reads, searches and writes."""
 
+from agent.tools.analytics import ANALYTICS_TOOLS
+from agent.tools.reads import READ_TOOLS
 from agent.tools.transactions import get_transactions
 from agent.tools.web_search import web_search
+from agent.tools.writes import make_write_tools
 
 ALL_TOOLS = [get_transactions]
 
-__all__ = ["ALL_TOOLS", "get_transactions", "web_search"]
+__all__ = [
+    "ALL_TOOLS",
+    "ANALYTICS_TOOLS",
+    "READ_TOOLS",
+    "get_transactions",
+    "make_write_tools",
+    "web_search",
+]
