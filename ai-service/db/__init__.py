@@ -1,4 +1,5 @@
 from db.analyses import claim_analysis, finish_analysis
+from db.analytics import MerchantTotal, category_totals, merchant_totals, net_flow
 from db.connection import get_connection
 from db.models import Account, Budget, Goal, NotificationPreferences, Rule, Transaction
 from db.queries import (
@@ -16,9 +17,11 @@ __all__ = [
     "Account",
     "Budget",
     "Goal",
+    "MerchantTotal",
     "NotificationPreferences",
     "Rule",
     "Transaction",
+    "category_totals",
     "claim_analysis",
     "finish_analysis",
     "get_connection",
@@ -29,5 +32,7 @@ __all__ = [
     "load_preferences",
     "load_rules",
     "load_transactions",
+    "merchant_totals",
+    "net_flow",
     "user_owns_account",
 ]

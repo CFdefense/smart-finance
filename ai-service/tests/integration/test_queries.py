@@ -6,6 +6,7 @@ from datetime import date
 import pytest
 
 from db import (
+    category_totals,
     get_connection,
     load_accounts,
     load_all_rules,
@@ -13,6 +14,8 @@ from db import (
     load_goals,
     load_preferences,
     load_transactions,
+    merchant_totals,
+    net_flow,
 )
 
 # (name, amount, category, date)
@@ -170,3 +173,46 @@ def test_load_all_rules_returns_enabled_rules_for_any_account(user_with_data):
 
     assert [(r.description, r.account_ids) for r in rules] == [("No gambling", [f"acc-{tag}"])]
     assert load_all_rules(user_id + 999_999) == []
+
+
+def test_category_totals_sum_only_money_out_in_the_window(user_with_data):
+    """Positive amounts per category inside [start, end); the refund and the September TV are out."""
+    user_id, _ = user_with_data
+
+    totals = category_totals(user_id, date(2026, 10, 1), date(2026, 11, 1))
+
+    assert totals == {"GROCERIES": 60, "FOOD_DINING": 20}
+    assert list(totals) == ["GROCERIES", "FOOD_DINING"]  # biggest first
+
+
+def test_category_totals_end_is_exclusive(user_with_data):
+    """A transaction on the end date is not counted."""
+    user_id, _ = user_with_data
+
+    assert category_totals(user_id, date(2026, 10, 1), date(2026, 10, 2)) == {"FOOD_DINING": 5}
+
+
+def test_merchant_totals_group_and_limit(user_with_data):
+    """Merchants are ranked by total spend and limited."""
+    user_id, _ = user_with_data
+
+    top = merchant_totals(user_id, date(2026, 9, 1), date(2026, 11, 1), limit=2)
+
+    assert [(m.name, m.total, m.count) for m in top] == [("tv", 900, 1), ("groceries", 60, 1)]
+
+
+def test_net_flow_is_deposits_minus_withdrawals_on_depository_accounts(user_with_data):
+    """Money in minus money out; the refund counts as money in."""
+    user_id, _ = user_with_data
+
+    assert net_flow(user_id, date(2026, 10, 1), date(2026, 11, 1)) == -60
+
+
+def test_analytics_never_include_other_users(user_with_data):
+    """Another user id sees nothing."""
+    user_id, _ = user_with_data
+    other = user_id + 999_999
+
+    assert category_totals(other, date(2026, 1, 1), date(2027, 1, 1)) == {}
+    assert merchant_totals(other, date(2026, 1, 1), date(2027, 1, 1), 5) == []
+    assert net_flow(other, date(2026, 1, 1), date(2027, 1, 1)) == 0
