@@ -1,0 +1,22 @@
+- description: Chat reports each budget's spend and what is left this month
+  vars:
+    persona: arthur@test.com
+    agent: chat
+    budgets:
+      - { name: Groceries, category: GROCERIES, monthly_limit: 300 }
+      - { name: Eating out, category: FOOD_DINING, monthly_limit: 100 }
+    seed_transactions:
+      - { name: Whole Foods, amount: 280.00, account: Plaid Credit Card, category: GROCERIES, days_ago: 0 }
+      - { name: Chipotle, amount: 40.00, account: Plaid Credit Card, category: FOOD_DINING, days_ago: 0 }
+    message: How am I doing on my budgets this month?
+    expect_tools: [budget_status]
+    must_contain: ["Groceries", "280", "Eating out", "40"]
+    expected: >-
+      Says Groceries has $280 spent of $300 with only $20 left (nearly used up) and Eating out has
+      $40 spent of $100 with $60 left.
+  assert:
+    - { type: python, value: "file://graders.py:tools_called" }
+    - { type: python, value: "file://graders.py:output_contains" }
+    - { type: python, value: "file://graders.py:adherence" }
+    - { type: python, value: "file://graders.py:accuracy" }
+    - { type: python, value: "file://graders.py:goal" }

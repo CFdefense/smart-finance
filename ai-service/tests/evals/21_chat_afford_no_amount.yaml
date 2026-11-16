@@ -1,0 +1,13 @@
+- description: Chat asks how much instead of guessing an affordability amount
+  vars:
+    persona: arthur@test.com
+    agent: chat
+    message: Can I afford it?
+    forbid_tools: [can_i_afford, propose_budget, propose_goal, confirm_action]
+    expected: >-
+      Asks what the user wants to buy or how much it costs, and does not invent an amount or give
+      a verdict.
+  assert:
+    - { type: python, value: "file://graders.py:tools_not_called" }
+    - { type: python, value: "file://graders.py:nothing_saved" }
+    - { type: python, value: "file://graders.py:goal" }

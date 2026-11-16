@@ -1,0 +1,17 @@
+- description: Chat explains that a goal must be above the current balance
+  vars:
+    persona: arthur@test.com
+    agent: chat
+    message: Set a goal to save $10,000 in my Plaid Saving account.
+    expect_tools: [propose_goal]
+    forbid_tools: [confirm_action]
+    must_contain: ["14,500"]
+    expected: >-
+      Explains that Plaid Saving already holds $14,500, so a $10,000 target is already met, and
+      offers a higher target. It does not claim a goal was created.
+  assert:
+    - { type: python, value: "file://graders.py:tools_called" }
+    - { type: python, value: "file://graders.py:tools_not_called" }
+    - { type: python, value: "file://graders.py:nothing_saved" }
+    - { type: python, value: "file://graders.py:output_contains" }
+    - { type: python, value: "file://graders.py:goal" }

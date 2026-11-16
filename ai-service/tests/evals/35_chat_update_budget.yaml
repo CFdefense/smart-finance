@@ -1,0 +1,23 @@
+- description: Chat raises an existing budget after the user agrees
+  vars:
+    persona: arthur@test.com
+    agent: chat
+    budgets:
+      - { name: Groceries, category: GROCERIES, monthly_limit: 300 }
+      - { name: Eating out, category: FOOD_DINING, monthly_limit: 100 }
+    message: Raise my groceries budget to $450 a month.
+    followups: ["Yes, update it."]
+    expect_tools: [propose_update, confirm_action]
+    expect_backend:
+      - method: PUT
+        path_prefix: /api/budgets/
+        turn: 1
+        body: { monthly_limit: 450 }
+    expected: >-
+      Proposes changing the Groceries budget from $300 to $450, then reports it updated. It leaves
+      the Eating out budget alone.
+  assert:
+    - { type: python, value: "file://graders.py:tools_called" }
+    - { type: python, value: "file://graders.py:backend_matches" }
+    - { type: python, value: "file://graders.py:confirmed_before_write" }
+    - { type: python, value: "file://graders.py:goal" }

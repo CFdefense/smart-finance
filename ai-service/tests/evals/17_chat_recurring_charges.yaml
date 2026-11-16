@@ -1,0 +1,28 @@
+- description: Chat finds subscriptions and ignores one-off purchases
+  vars:
+    persona: arthur@test.com
+    agent: chat
+    seed_transactions:
+      - { name: Netflix, amount: 15.49, account: Plaid Credit Card, category: ENTERTAINMENT, days_ago: 5 }
+      - { name: Netflix, amount: 15.49, account: Plaid Credit Card, category: ENTERTAINMENT, days_ago: 35 }
+      - { name: Netflix, amount: 15.49, account: Plaid Credit Card, category: ENTERTAINMENT, days_ago: 65 }
+      - { name: Spotify, amount: 11.99, account: Plaid Credit Card, category: ENTERTAINMENT, days_ago: 8 }
+      - { name: Spotify, amount: 11.99, account: Plaid Credit Card, category: ENTERTAINMENT, days_ago: 38 }
+      - { name: Spotify, amount: 11.99, account: Plaid Credit Card, category: ENTERTAINMENT, days_ago: 68 }
+      - { name: Planet Fitness, amount: 24.99, account: Plaid Credit Card, category: HEALTHCARE, days_ago: 12 }
+      - { name: Planet Fitness, amount: 24.99, account: Plaid Credit Card, category: HEALTHCARE, days_ago: 42 }
+      - { name: Planet Fitness, amount: 24.99, account: Plaid Credit Card, category: HEALTHCARE, days_ago: 72 }
+      - { name: Best Buy, amount: 299.00, account: Plaid Credit Card, category: SHOPPING, days_ago: 20 }
+    message: What subscriptions am I paying for?
+    expect_tools: [find_recurring_charges]
+    must_contain: ["Netflix", "Spotify", "Planet Fitness"]
+    must_not_contain: ["Best Buy"]
+    expected: >-
+      Lists Netflix ($15.49), Spotify ($11.99) and Planet Fitness ($24.99) as monthly charges and
+      does not call the one-time Best Buy purchase a subscription.
+  assert:
+    - { type: python, value: "file://graders.py:tools_called" }
+    - { type: python, value: "file://graders.py:output_contains" }
+    - { type: python, value: "file://graders.py:output_excludes" }
+    - { type: python, value: "file://graders.py:accuracy" }
+    - { type: python, value: "file://graders.py:goal" }

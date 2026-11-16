@@ -1,0 +1,20 @@
+- description: Chat compares the last 30 days with the 30 days before
+  vars:
+    persona: arthur@test.com
+    agent: chat
+    seed_transactions:
+      - { name: Whole Foods, amount: 90.00, account: Plaid Credit Card, category: GROCERIES, days_ago: 5 }
+      - { name: Chipotle, amount: 30.00, account: Plaid Credit Card, category: FOOD_DINING, days_ago: 6 }
+      - { name: Whole Foods, amount: 45.00, account: Plaid Credit Card, category: GROCERIES, days_ago: 38 }
+      - { name: Chipotle, amount: 60.00, account: Plaid Credit Card, category: FOOD_DINING, days_ago: 45 }
+    message: Compare my spending over the last 30 days to the 30 days before that.
+    expect_tools: [compare_periods]
+    must_contain: ["120", "105"]
+    expected: >-
+      Says total spending was $120 in the last 30 days versus $105 in the 30 days before, with
+      groceries up (from $45 to $90) and food and dining down (from $60 to $30).
+  assert:
+    - { type: python, value: "file://graders.py:tools_called" }
+    - { type: python, value: "file://graders.py:output_contains" }
+    - { type: python, value: "file://graders.py:accuracy" }
+    - { type: python, value: "file://graders.py:goal" }

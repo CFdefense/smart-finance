@@ -1,0 +1,24 @@
+- description: Chat estimates when a savings goal will be reached from recent saving
+  vars:
+    persona: arthur@test.com
+    agent: chat
+    goals:
+      - { name: Rainy day, description: Emergency cushion., account: Plaid Saving, target_amount: 20000, days_until_target: 300 }
+    seed_transactions:
+      - { name: Payroll, amount: -3000, account: Plaid Checking, days_ago: 15 }
+      - { name: Payroll, amount: -3000, account: Plaid Checking, days_ago: 45 }
+      - { name: Payroll, amount: -3000, account: Plaid Checking, days_ago: 75 }
+      - { name: Rent, amount: 1800, account: Plaid Checking, days_ago: 12 }
+      - { name: Rent, amount: 1800, account: Plaid Checking, days_ago: 42 }
+      - { name: Rent, amount: 1800, account: Plaid Checking, days_ago: 72 }
+    message: How are my savings goals going, and when will I get there?
+    expect_tools: [goal_progress]
+    must_contain: ["Rainy day", "1,200"]
+    expected: >-
+      Reports the Rainy day goal at 0% with $5,500 to go, a saving pace of about $1,200 per month,
+      and a finish date roughly four to five months out.
+  assert:
+    - { type: python, value: "file://graders.py:tools_called" }
+    - { type: python, value: "file://graders.py:output_contains" }
+    - { type: python, value: "file://graders.py:accuracy" }
+    - { type: python, value: "file://graders.py:goal" }

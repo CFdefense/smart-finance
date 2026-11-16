@@ -1,0 +1,13 @@
+- description: Chat reports every account with its balance
+  vars:
+    persona: arthur@test.com
+    agent: chat
+    message: What accounts do I have, and how much is in each?
+    must_contain: ["Plaid Checking", "4,200", "Plaid Saving", "14,500", "Plaid Money Market", "26,500"]
+    expected: >-
+      Lists Plaid Checking ($4,200), Plaid Saving ($14,500), Plaid Money Market ($26,500),
+      Plaid 401k ($38,500) and the Plaid Credit Card ($1,750 owed) without inventing accounts.
+  assert:
+    - { type: python, value: "file://graders.py:output_contains" }
+    - { type: python, value: "file://graders.py:accuracy" }
+    - { type: python, value: "file://graders.py:goal" }

@@ -1,0 +1,21 @@
+- description: Chat widens a rule from one account to all accounts
+  vars:
+    persona: christian@test.com
+    agent: chat
+    rules:
+      - { description: Flag any single purchase over $200., account: TD Bank Student Checking }
+    message: Make my $200 rule apply to all of my accounts instead of just checking.
+    followups: ["Yes, update it."]
+    expect_tools: [propose_update, confirm_action]
+    expect_backend:
+      - method: PUT
+        path_prefix: /api/rules/
+        turn: 1
+        body: { description: "*", account_ids: [] }
+    expected: >-
+      Proposes that the $200 rule now applies to all accounts, then reports it updated.
+  assert:
+    - { type: python, value: "file://graders.py:tools_called" }
+    - { type: python, value: "file://graders.py:backend_matches" }
+    - { type: python, value: "file://graders.py:confirmed_before_write" }
+    - { type: python, value: "file://graders.py:goal" }

@@ -1,0 +1,17 @@
+- description: Chat warns that an affordable purchase blows the category budget
+  vars:
+    persona: arthur@test.com
+    agent: chat
+    budgets:
+      - { name: Shopping, category: SHOPPING, monthly_limit: 50 }
+    message: Can I afford a $400 jacket? It would be shopping.
+    expect_tools: [can_i_afford]
+    must_contain: ["50"]
+    expected: >-
+      Says the balance can cover $400 but the purchase is far over the $50 Shopping budget, so it
+      does not give an unqualified yes.
+  assert:
+    - { type: python, value: "file://graders.py:tools_called" }
+    - { type: python, value: "file://graders.py:output_contains" }
+    - { type: python, value: "file://graders.py:adherence" }
+    - { type: python, value: "file://graders.py:goal" }

@@ -1,0 +1,19 @@
+- description: Chat creates a rule that covers every account
+  vars:
+    persona: christian@test.com
+    agent: chat
+    message: Add a rule for all my accounts - flag any single purchase over $300.
+    followups: ["Yes, save the rule."]
+    expect_tools: [propose_rule, confirm_action]
+    expect_backend:
+      - method: POST
+        path: /api/rules
+        turn: 1
+        body: { description: "*", account_ids: [] }
+    expected: >-
+      Proposes a rule about purchases over $300 applying to all accounts, then reports it was saved.
+  assert:
+    - { type: python, value: "file://graders.py:tools_called" }
+    - { type: python, value: "file://graders.py:backend_matches" }
+    - { type: python, value: "file://graders.py:confirmed_before_write" }
+    - { type: python, value: "file://graders.py:goal" }
