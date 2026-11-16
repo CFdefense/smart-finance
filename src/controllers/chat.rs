@@ -275,7 +275,7 @@ pub async fn api_get_session(
 
 /// Permanently delete one of the authenticated user's chat sessions.
 ///
-/// The database has ON DELETE CASCADE on chat_messages.session_id,
+/// The database has ON DELETE CASCADE on `chat_messages.session_id`,
 /// so removing the session also removes its entire message history.
 ///
 /// A session belonging to another user is indistinguishable from
