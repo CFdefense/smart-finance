@@ -8,10 +8,10 @@ from agent.tools.formatting import cap
 from db import Budget, Goal, Rule
 
 
-def format_rules(rules: list[Rule]) -> str:
-    """List the rules that apply to the transaction's account. Rule text is fenced as data."""
+def format_rules(rules: list[Rule], title: str = "Rules that apply to this account") -> str:
+    """List rules under `title`. Rule text is fenced as data."""
     lines = [f"- {fence('user_rule', r.description, 500)}" for r in rules]
-    return cap(section("Rules that apply to this account", lines))
+    return cap(section(title, lines))
 
 
 def format_budgets(today: date, budgets: list[Budget]) -> str:

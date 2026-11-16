@@ -71,7 +71,7 @@ def load_budgets(user_id: int, today: date) -> list[Budget]:
     with get_connection() as conn:
         rows = conn.execute(
             f"""
-            SELECT b.name, b.category, b.monthly_limit,
+            SELECT b.id, b.name, b.category, b.monthly_limit,
                    COALESCE((
                        SELECT SUM(t.amount)
                        FROM plaid_transactions t
@@ -89,7 +89,8 @@ def load_budgets(user_id: int, today: date) -> list[Budget]:
             (month_start, month_start, user_id),
         ).fetchall()
     return [
-        Budget(name=r[0], category=r[1], monthly_limit=r[2], spent_this_month=r[3]) for r in rows
+        Budget(id=r[0], name=r[1], category=r[2], monthly_limit=r[3], spent_this_month=r[4])
+        for r in rows
     ]
 
 
@@ -98,8 +99,8 @@ def load_goals(user_id: int) -> list[Goal]:
     with get_connection() as conn:
         rows = conn.execute(
             """
-            SELECT g.name, g.description, a.name, g.target_amount, g.baseline_balance,
-                   a.current_balance, g.target_date
+            SELECT g.id, g.account_id, g.name, g.description, a.name, g.target_amount,
+                   g.baseline_balance, a.current_balance, g.target_date
             FROM goals g
             JOIN plaid_accounts a ON a.account_id = g.account_id
             WHERE g.user_id = %s AND NOT g.archived
@@ -109,13 +110,15 @@ def load_goals(user_id: int) -> list[Goal]:
         ).fetchall()
     return [
         Goal(
-            name=r[0],
-            description=r[1],
-            account_name=r[2],
-            target_amount=r[3],
-            baseline_balance=r[4],
-            current_balance=r[5],
-            target_date=r[6],
+            id=r[0],
+            account_id=r[1],
+            name=r[2],
+            description=r[3],
+            account_name=r[4],
+            target_amount=r[5],
+            baseline_balance=r[6],
+            current_balance=r[7],
+            target_date=r[8],
         )
         for r in rows
     ]
@@ -168,6 +171,25 @@ def load_rules(user_id: int, account_id: str) -> list[Rule]:
             ORDER BY r.id
             """,
             (user_id, account_id),
+        ).fetchall()
+    return [Rule(id=r[0], description=r[1], account_ids=list(r[2])) for r in rows]
+
+
+def load_all_rules(user_id: int) -> list[Rule]:
+    """Load every enabled rule of the user, whatever accounts it applies to."""
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT r.id, r.description,
+                   COALESCE(ARRAY(
+                       SELECT ra.account_id FROM rule_accounts ra
+                       WHERE ra.rule_id = r.id ORDER BY ra.account_id
+                   ), ARRAY[]::text[])
+            FROM rules r
+            WHERE r.user_id = %s AND r.enabled
+            ORDER BY r.id
+            """,
+            (user_id,),
         ).fetchall()
     return [Rule(id=r[0], description=r[1], account_ids=list(r[2])) for r in rows]
 

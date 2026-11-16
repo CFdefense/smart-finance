@@ -31,6 +31,7 @@ class Account(BaseModel):
 class Budget(BaseModel):
     """An active monthly budget and how much has been spent against it this month."""
 
+    id: int | None = None
     name: str
     category: str
     monthly_limit: float
@@ -40,6 +41,8 @@ class Budget(BaseModel):
 class Goal(BaseModel):
     """An account-balance goal that hasn't been archived."""
 
+    id: int | None = None
+    account_id: str | None = None
     name: str
     description: str | None = None
     account_name: str

@@ -8,6 +8,7 @@ import pytest
 from db import (
     get_connection,
     load_accounts,
+    load_all_rules,
     load_budgets,
     load_goals,
     load_preferences,
@@ -135,3 +136,37 @@ def test_load_preferences_raises_for_unknown_user(user_with_data):
     assert load_preferences(user_id).email.startswith("test-")
     with pytest.raises(ValueError):
         load_preferences(user_id + 999_999)
+
+
+def test_load_budgets_and_goals_include_ids(user_with_data):
+    """Budgets and goals carry their ids, and goals their account id."""
+    user_id, tag = user_with_data
+
+    [budget] = load_budgets(user_id, today=date(2026, 10, 20))
+    [goal] = load_goals(user_id)
+
+    assert isinstance(budget.id, int)
+    assert isinstance(goal.id, int) and goal.account_id == f"acc-{tag}"
+
+
+def test_load_all_rules_returns_enabled_rules_for_any_account(user_with_data):
+    """Enabled rules come back with their account ids; disabled and other users' rules do not."""
+    user_id, tag = user_with_data
+    with get_connection() as conn:
+        rule_id = conn.execute(
+            "INSERT INTO rules (user_id, description) VALUES (%s, 'No gambling') RETURNING id",
+            (user_id,),
+        ).fetchone()[0]
+        conn.execute(
+            "INSERT INTO rule_accounts (rule_id, account_id) VALUES (%s, %s)",
+            (rule_id, f"acc-{tag}"),
+        )
+        conn.execute(
+            "INSERT INTO rules (user_id, description, enabled) VALUES (%s, 'Old', false)",
+            (user_id,),
+        )
+
+    rules = load_all_rules(user_id)
+
+    assert [(r.description, r.account_ids) for r in rules] == [("No gambling", [f"acc-{tag}"])]
+    assert load_all_rules(user_id + 999_999) == []

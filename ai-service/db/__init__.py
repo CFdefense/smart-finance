@@ -3,6 +3,7 @@ from db.connection import get_connection
 from db.models import Account, Budget, Goal, NotificationPreferences, Rule, Transaction
 from db.queries import (
     load_accounts,
+    load_all_rules,
     load_budgets,
     load_goals,
     load_preferences,
@@ -22,6 +23,7 @@ __all__ = [
     "finish_analysis",
     "get_connection",
     "load_accounts",
+    "load_all_rules",
     "load_budgets",
     "load_goals",
     "load_preferences",

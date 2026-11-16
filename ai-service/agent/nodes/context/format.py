@@ -3,8 +3,9 @@
 from datetime import date
 
 from agent.formatting import money, section
+from agent.nodes.context.standing import format_rules
 from agent.safety import sanitize
-from db import Account, Budget, Goal, Transaction
+from db import Account, Budget, Goal, Rule, Transaction
 
 RECENT_DAYS = 30
 MAX_TRANSACTIONS = 100
@@ -23,6 +24,7 @@ def format_financial_context(
     budgets: list[Budget],
     goals: list[Goal],
     transactions: list[Transaction],
+    rules: list[Rule] | None = None,
 ) -> str:
     """Format a user's data as compact sections the model can read."""
     sections = [f"Today is {today.isoformat()}."]
@@ -70,4 +72,6 @@ def format_financial_context(
             ],
         )
     )
+    if rules is not None:
+        sections.append(format_rules(rules, title="Rules"))
     return "\n\n".join(sections)
