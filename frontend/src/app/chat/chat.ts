@@ -220,8 +220,15 @@ export class ChatWidget implements OnInit, OnDestroy {
       this.followOutput = true;
       this.scheduleScroll(true);
     } catch {
-      this.errorMessage.set('Unable to open this conversation.');
-      this.showingHistory.set(false);
+      if (!this.destroyed) {
+        this.errorMessage.set('Unable to open this conversation.');
+        this.showingHistory.set(false);
+      }
+    } finally {
+      // Always re-enable the composer when the request finishes.
+      if (!this.destroyed) {
+        this.loadingConversation.set(false);
+      }
     }
   }
 
