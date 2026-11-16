@@ -18,6 +18,41 @@ CATEGORIES = (
     "TRANSPORTATION",
     "OTHER",
 )
+BACKEND_MODES = ("ok", "conflict", "down")
+METHODS = ("POST", "PUT", "DELETE")
+# Every tool ChatAgent registers. A unit test keeps this in step with the agent.
+KNOWN_TOOLS = (
+    "web_search",
+    "list_accounts",
+    "list_transactions",
+    "list_budgets",
+    "list_goals",
+    "list_rules",
+    "spending_by_category",
+    "spending_by_merchant",
+    "compare_periods",
+    "budget_status",
+    "goal_progress",
+    "find_recurring_charges",
+    "can_i_afford",
+    "propose_budget",
+    "propose_rule",
+    "propose_goal",
+    "propose_update",
+    "propose_delete",
+    "confirm_action",
+)
+# Vars that only make sense for the chat agent.
+CHAT_ONLY = (
+    "followups",
+    "backend",
+    "seed_transactions",
+    "search_results",
+    "expect_tools",
+    "forbid_tools",
+    "expect_backend",
+    "private_terms",
+)
 
 
 class DefinitionError(ValueError):
@@ -64,6 +99,15 @@ class TransactionDef:
 
 
 @dataclass(frozen=True)
+class SearchResultDef:
+    """One stubbed web search result."""
+
+    title: str
+    url: str
+    content: str
+
+
+@dataclass(frozen=True)
 class EvalCase:
     """One validated eval test."""
 
@@ -75,6 +119,10 @@ class EvalCase:
     transaction: TransactionDef | None
     message: str | None
     expected: str | None
+    followups: tuple[str, ...] = ()
+    backend: str = "ok"
+    seed_transactions: tuple[TransactionDef, ...] = ()
+    search_results: tuple[SearchResultDef, ...] | None = None
 
 
 def load_personas(path: Path = FIXTURES) -> dict[str, dict[str, Any]]:
@@ -139,8 +187,7 @@ def _rule(item: Any, index: int) -> RuleDef:
     return RuleDef(description=_get(item, "description", where), account=item.get("account"))
 
 
-def _transaction(item: Any) -> TransactionDef:
-    where = "transaction"
+def _transaction(item: Any, where: str = "transaction") -> TransactionDef:
     return TransactionDef(
         name=_get(item, "name", where),
         amount=_number(_get(item, "amount", where), where, "amount"),
@@ -148,6 +195,59 @@ def _transaction(item: Any) -> TransactionDef:
         category=_category(item, where, default="OTHER"),
         days_ago=int(_number(item.get("days_ago", 0), where, "days_ago")),
     )
+
+
+def _strings(test_vars: dict[str, Any], key: str) -> tuple[str, ...]:
+    """Return `test_vars[key]` as a tuple of non-empty strings (missing means empty)."""
+    value = test_vars.get(key)
+    if value is None:
+        return ()
+    if not isinstance(value, list) or not all(isinstance(v, str) and v for v in value):
+        raise DefinitionError(f"{key} must be a list of non-empty strings")
+    return tuple(value)
+
+
+def _tools(test_vars: dict[str, Any], key: str) -> None:
+    """Check that every name in `test_vars[key]` is a real chat tool."""
+    unknown = [name for name in _strings(test_vars, key) if name not in KNOWN_TOOLS]
+    if unknown:
+        raise DefinitionError(
+            f"{key}: unknown tool {unknown}; choose from {', '.join(KNOWN_TOOLS)}"
+        )
+
+
+def _search_result(item: Any, index: int) -> SearchResultDef:
+    where = f"search_results[{index}]"
+    return SearchResultDef(
+        title=_get(item, "title", where),
+        url=item.get("url", "https://example.test"),
+        content=_get(item, "content", where),
+    )
+
+
+def _expect_backend(item: Any, index: int) -> None:
+    """Validate one expected backend call."""
+    where = f"expect_backend[{index}]"
+    if not isinstance(item, dict):
+        raise DefinitionError(f"{where}: must be a mapping")
+    if item.get("method") not in METHODS:
+        raise DefinitionError(f"{where}: method must be one of {', '.join(METHODS)}")
+    if (item.get("path") is None) == (item.get("path_prefix") is None):
+        raise DefinitionError(f"{where}: give exactly one of `path` or `path_prefix`")
+    if item.get("body") is not None and not isinstance(item["body"], dict):
+        raise DefinitionError(f"{where}: `body` must be a mapping")
+    if "turn" in item and (isinstance(item["turn"], bool) or not isinstance(item["turn"], int)):
+        raise DefinitionError(f"{where}: `turn` must be a whole number")
+
+
+def _validate_assertion_inputs(test_vars: dict[str, Any]) -> None:
+    """Check the vars that graders.py reads straight from the test (they are not stored)."""
+    _tools(test_vars, "expect_tools")
+    _tools(test_vars, "forbid_tools")
+    for index, item in enumerate(test_vars.get("expect_backend") or []):
+        _expect_backend(item, index)
+    for key in ("must_contain", "must_not_contain", "private_terms"):
+        _strings(test_vars, key)
 
 
 def parse(test_vars: dict[str, Any], personas: dict[str, dict[str, Any]] | None = None) -> EvalCase:
@@ -166,10 +266,32 @@ def parse(test_vars: dict[str, Any], personas: dict[str, dict[str, Any]] | None 
         raise DefinitionError("budgets: one budget per category")
 
     transaction = message = None
+    chat_extras: dict[str, Any] = {}
     if agent == "analyze":
+        misplaced = [key for key in CHAT_ONLY if test_vars.get(key) not in (None, [], "")]
+        if "search_results" in test_vars:
+            misplaced.append("search_results")
+        if misplaced:
+            raise DefinitionError(f"{misplaced[0]} is only for the chat agent")
         transaction = _transaction(_get(test_vars, "transaction", "vars"))
     else:
         message = _get(test_vars, "message", "vars")
+        backend = test_vars.get("backend", "ok")
+        if backend not in BACKEND_MODES:
+            raise DefinitionError(f"backend must be one of {', '.join(BACKEND_MODES)}")
+        stub = test_vars.get("search_results")
+        chat_extras = {
+            "followups": _strings(test_vars, "followups"),
+            "backend": backend,
+            "seed_transactions": tuple(
+                _transaction(t, f"seed_transactions[{i}]")
+                for i, t in enumerate(test_vars.get("seed_transactions") or [])
+            ),
+            "search_results": None
+            if stub is None
+            else tuple(_search_result(r, i) for i, r in enumerate(stub)),
+        }
+        _validate_assertion_inputs(test_vars)
 
     return EvalCase(
         persona=personas[email],
@@ -180,4 +302,5 @@ def parse(test_vars: dict[str, Any], personas: dict[str, dict[str, Any]] | None 
         transaction=transaction,
         message=message,
         expected=test_vars.get("expected"),
+        **chat_extras,
     )
