@@ -6,6 +6,7 @@ import hooks
 import provider
 from definition import DefinitionError
 from evaldb import PersonaDb
+from runner import RunResult
 
 PERSONA_DB = PersonaDb(name="smartfinance_eval_ab_christian", url="postgres://x/y", user_id=7)
 CONTEXT = {
@@ -36,7 +37,10 @@ def calls(monkeypatch):
     monkeypatch.setattr(
         provider.runner,
         "run",
-        lambda case, url, uid, accounts: log.append(("run", url, uid)) or "the answer",
+        lambda case, url, uid, accounts: (
+            log.append(("run", url, uid))
+            or RunResult("the answer", [{"turn": 0, "name": "list_budgets", "args": {}}], [])
+        ),
     )
 
     class FakeDatabase:
@@ -68,6 +72,9 @@ def test_call_api_prepares_the_database_runs_the_agent_and_returns_facts(calls):
             "facts": {"rules": []},
             "persona": "christian@test.com",
             "agent": "chat",
+            "accounts": {"Checking": "acc_1"},
+            "tool_calls": [{"turn": 0, "name": "list_budgets", "args": {}}],
+            "backend_calls": [],
         },
     }
 

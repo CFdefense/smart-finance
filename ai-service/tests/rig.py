@@ -2,7 +2,10 @@
 
 from typing import Any
 
+from langchain_core.callbacks import BaseCallbackHandler
+
 from agent.backend_api import CONFLICT_MESSAGE, UNREACHABLE_MESSAGE, BackendError
+from agent.pending import PendingActionStore
 
 
 class RecordingBackendApi:
@@ -28,3 +31,43 @@ class RecordingBackendApi:
             raise BackendError(CONFLICT_MESSAGE)
         if self.mode == "down":
             raise BackendError(UNREACHABLE_MESSAGE)
+
+
+class ToolTrace(BaseCallbackHandler):
+    """Records every tool the agent calls, with its arguments and the turn it happened in."""
+
+    def __init__(self):
+        self.turn = 0
+        self.calls: list[dict[str, Any]] = []
+
+    def reset(self) -> None:
+        """Forget recorded calls and go back to turn 0."""
+        self.turn = 0
+        self.calls = []
+
+    def on_tool_start(
+        self, serialized: dict[str, Any], input_str: str, *, inputs: dict | None = None, **kwargs
+    ) -> None:
+        """Record one tool call. The injected graph state is dropped: it is not an argument."""
+        args = {key: value for key, value in (inputs or {}).items() if key != "state"}
+        self.calls.append({"turn": self.turn, "name": serialized.get("name", ""), "args": args})
+
+
+class Rig:
+    """The fakes one eval process shares: backend recorder, tool trace and pending actions."""
+
+    def __init__(self):
+        self.backend = RecordingBackendApi()
+        self.trace = ToolTrace()
+        self.pending = PendingActionStore()
+
+    def reset(self, mode: str = "ok") -> None:
+        """Prepare a clean test: no calls, no pending changes, turn 0, backend in `mode`."""
+        self.backend.reset(mode)
+        self.trace.reset()
+        self.pending.clear()
+
+    def set_turn(self, turn: int) -> None:
+        """Tell both records which user message is being handled."""
+        self.backend.turn = turn
+        self.trace.turn = turn
