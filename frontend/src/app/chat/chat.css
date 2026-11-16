@@ -413,3 +413,70 @@ button:disabled {
     height: min(590px, calc(100dvh - 24px));
   }
 }
+
+/* -------------------------------------------------------
+ * Chat polish: failed messages and streaming feedback
+ * ------------------------------------------------------- */
+
+/*
+ * A failed question is still shown for context, but it
+ * must not look identical to a successfully saved turn.
+ */
+.failed-turn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+}
+
+.failed-user-message {
+  border: 1px dashed #dc2626;
+  background: #fff1f2;
+  color: #991b1b;
+}
+
+.failed-caption {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 87%;
+  margin: 0;
+  color: #b91c1c;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.failed-caption .material-symbols-outlined {
+  flex-shrink: 0;
+  font-size: 15px;
+}
+
+/*
+ * The cursor indicates that the assistant is actively
+ * generating text. It disappears with the temporary
+ * response when the saved message replaces it.
+ */
+.stream-cursor {
+  display: inline-block;
+  width: 5px;
+  height: 13px;
+  margin-left: 3px;
+  border-radius: 1px;
+  background: #2563eb;
+  vertical-align: -2px;
+  animation: chat-cursor-blink 0.9s steps(1) infinite;
+}
+
+@keyframes chat-cursor-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* Avoid unnecessary animations for users who prefer less motion. */
+@media (prefers-reduced-motion: reduce) {
+  .stream-cursor,
+  .loading-dot {
+    animation: none;
+  }
+}

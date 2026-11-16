@@ -1,4 +1,15 @@
-import { Component, inject, OnDestroy, OnInit, signal } from '@angular/core';
+import {
+  afterNextRender,
+  Component,
+  ElementRef,
+  inject,
+  Injector,
+  OnDestroy,
+  OnInit,
+  signal,
+  ViewChild,
+} from '@angular/core';
+
 import { firstValueFrom } from 'rxjs';
 
 import { ChatService } from '../services/chat.service';
@@ -19,6 +30,65 @@ import type { ChatMessage, ChatSession, ChatStreamEvent } from '../models/chat.m
 })
 export class ChatWidget implements OnInit, OnDestroy {
   private readonly chatService = inject(ChatService);
+
+  private readonly injector = inject(Injector);
+
+  @ViewChild('messageList')
+  private messageList?: ElementRef<HTMLDivElement>;
+
+  /**
+   * Follow incoming text unless the user deliberately scrolls up.
+   *
+   * Reading the scroll position lets us distinguish someone browsing
+   * an earlier answer from someone waiting for the latest response.
+   */
+  private followOutput = true;
+
+  /** Whether the previously submitted message failed to send. */
+  readonly failedMessage = signal<string | null>(null);
+
+  /**
+   * Update our follow preference when the user scrolls.
+   * A small threshold avoids floating-point layout differences.
+   */
+  onMessagesScroll(): void {
+    const element = this.messageList?.nativeElement;
+
+    if (!element) {
+      return;
+    }
+
+    const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
+
+    this.followOutput = distanceFromBottom <= 80;
+  }
+
+  /**
+   * Scroll after Angular has rendered the updated messages.
+   *
+   * Scheduling after rendering is important: scrolling immediately
+   * after updating a signal may use the old content height.
+   */
+  private scheduleScroll(force = false): void {
+    if (!force && !this.followOutput) {
+      return;
+    }
+
+    afterNextRender(
+      () => {
+        if (!this.expanded() || this.showingHistory()) {
+          return;
+        }
+
+        const element = this.messageList?.nativeElement;
+
+        if (element && (force || this.followOutput)) {
+          element.scrollTop = element.scrollHeight;
+        }
+      },
+      { injector: this.injector },
+    );
+  }
 
   // Window and conversation navigation.
   readonly expanded = signal(false);
@@ -57,7 +127,14 @@ export class ChatWidget implements OnInit, OnDestroy {
 
   /** Expand or minimize without losing the current conversation. */
   toggleWindow(): void {
-    this.expanded.update((expanded) => !expanded);
+    const opening = !this.expanded();
+
+    this.expanded.set(opening);
+
+    if (opening) {
+      this.followOutput = true;
+      this.scheduleScroll(true);
+    }
   }
 
   /** Show or hide the conversation-history panel. */
@@ -67,6 +144,11 @@ export class ChatWidget implements OnInit, OnDestroy {
 
     if (this.showingHistory()) {
       void this.loadSessions();
+    }
+
+    if (!this.showingHistory()) {
+      this.followOutput = true;
+      this.scheduleScroll(true);
     }
   }
 
@@ -130,13 +212,16 @@ export class ChatWidget implements OnInit, OnDestroy {
       this.activeSessionId.set(session.id);
       this.messages.set(session.messages);
       this.draft.set('');
+
       this.clearResponse();
       this.showingHistory.set(false);
+
+      // Jump to the newest message after opening a saved conversation.
+      this.followOutput = true;
+      this.scheduleScroll(true);
     } catch {
       this.errorMessage.set('Unable to open this conversation.');
       this.showingHistory.set(false);
-    } finally {
-      this.loadingConversation.set(false);
     }
   }
 
@@ -204,28 +289,33 @@ export class ChatWidget implements OnInit, OnDestroy {
   /**
    * Apply each real event from the AI stream.
    *
-   * Tool events update activity; token events append generated
-   * text. "done" signals that Rust saved the completed reply.
+   * Tool statuses come from the backend. We do not invent
+   * reasoning steps or display the model's private reasoning.
    */
   private handleStreamEvent(event: ChatStreamEvent): void {
     switch (event.type) {
       case 'status': {
         const description = this.describeTool(event.tool);
+
         this.currentStatus.set(description);
 
         if (!this.activity().includes(description)) {
           this.activity.update((items) => [...items, description]);
         }
+
+        this.scheduleScroll();
         break;
       }
 
       case 'token':
         this.streamedText.update((text) => text + event.text);
         this.currentStatus.set(null);
+        this.scheduleScroll();
         break;
 
       case 'done':
-        this.currentStatus.set(null);
+        this.currentStatus.set('Saving conversation...');
+        this.scheduleScroll();
         break;
 
       case 'error':
@@ -235,10 +325,11 @@ export class ChatWidget implements OnInit, OnDestroy {
   }
 
   /**
-   * Send the draft and stream the response into the interface.
+   * Send the current draft, stream the answer, and reconcile
+   * the interface with the saved PostgreSQL conversation.
    *
-   * A user message stays temporary until the backend confirms
-   * completion. We then reload the authoritative saved messages.
+   * An AI failure is different from a history-refresh failure:
+   * only an AI failure should offer the original question for retry.
    */
   async send(): Promise<void> {
     const message = this.draft().trim();
@@ -249,6 +340,9 @@ export class ChatWidget implements OnInit, OnDestroy {
 
     this.sending.set(true);
     this.clearResponse();
+
+    // The "done" event contains the assistant message saved by Rust.
+    const completion: { reply: ChatMessage | null } = { reply: null };
 
     try {
       let sessionId = this.activeSessionId();
@@ -264,9 +358,13 @@ export class ChatWidget implements OnInit, OnDestroy {
         this.activeSessionId.set(sessionId);
       }
 
+      // Display the submitted question while the AI is working.
       this.pendingMessage.set(message);
       this.draft.set('');
       this.currentStatus.set('Preparing your answer...');
+
+      this.followOutput = true;
+      this.scheduleScroll(true);
 
       const controller = new AbortController();
       this.streamController = controller;
@@ -274,7 +372,13 @@ export class ChatWidget implements OnInit, OnDestroy {
       await this.chatService.sendMessage(
         sessionId,
         message,
-        (event) => this.handleStreamEvent(event),
+        (event) => {
+          this.handleStreamEvent(event);
+
+          if (event.type === 'done') {
+            completion.reply = event.message;
+          }
+        },
         controller.signal,
       );
 
@@ -282,25 +386,71 @@ export class ChatWidget implements OnInit, OnDestroy {
         return;
       }
 
-      // Refresh from PostgreSQL after the successful save.
-      const saved = await firstValueFrom(this.chatService.getSession(sessionId));
+      /*
+       * A successful stream means Rust has committed the turn.
+       * Fetch the authoritative session to obtain both saved
+       * message IDs and the correct chronological history.
+       */
+      try {
+        const saved = await firstValueFrom(this.chatService.getSession(sessionId));
 
-      this.messages.set(saved.messages);
+        if (this.destroyed) {
+          return;
+        }
+
+        this.messages.set(saved.messages);
+      } catch {
+        /*
+         * The answer was saved, even though reloading failed.
+         * Preserve the visible conversation using the confirmed
+         * reply instead of incorrectly inviting another send.
+         *
+         * The negative ID identifies a temporary display-only
+         * message. Reopening the conversation restores real IDs.
+         */
+        if (completion.reply !== null) {
+          const reply: ChatMessage = completion.reply;
+
+          this.messages.update((existing) => [
+            ...existing,
+            {
+              id: -Date.now(),
+              role: 'user',
+              content: message,
+              created_at: new Date().toISOString(),
+            },
+            reply,
+          ]);
+        }
+
+        this.errorMessage.set(
+          'Your answer was saved, but history could not refresh. ' +
+            'Reopen this conversation to synchronize it.',
+        );
+      }
+
       this.pendingMessage.set(null);
       this.streamedText.set('');
       this.currentStatus.set(null);
+      this.activity.set([]);
 
+      this.scheduleScroll();
       await this.loadSessions();
     } catch (error) {
       if (this.destroyed) {
         return;
       }
 
+      /*
+       * An AI or network failure before "done" does not save
+       * the new turn. Preserve the user's question for retry.
+       */
       this.errorMessage.set(
         error instanceof Error ? error.message : 'The assistant could not complete your request.',
       );
 
-      // Restore the unsaved draft so the user can try again.
+      this.failedMessage.set(message);
+
       if (!this.draft()) {
         this.draft.set(message);
       }
@@ -308,6 +458,9 @@ export class ChatWidget implements OnInit, OnDestroy {
       this.pendingMessage.set(null);
       this.streamedText.set('');
       this.currentStatus.set(null);
+      this.activity.set([]);
+
+      this.scheduleScroll();
     } finally {
       this.streamController = undefined;
 
@@ -317,9 +470,14 @@ export class ChatWidget implements OnInit, OnDestroy {
     }
   }
 
-  /** Remove transient response state, preserving saved messages. */
+  /**
+   * Clear transient response state.
+   *
+   * This never changes messages loaded from PostgreSQL.
+   */
   private clearResponse(): void {
     this.pendingMessage.set(null);
+    this.failedMessage.set(null);
     this.streamedText.set('');
     this.activity.set([]);
     this.currentStatus.set(null);
