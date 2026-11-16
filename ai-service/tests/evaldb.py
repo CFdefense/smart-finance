@@ -22,6 +22,8 @@ PREFIX = "smartfinance_eval_"
 REPO = Path(__file__).resolve().parents[2]
 MIGRATIONS = REPO / "migrations"
 SEED_BIN = REPO / "target" / "debug" / "seed-sandbox"
+# Transaction ids of rows inserted by `seed_transactions`, so they can be cleared between tests.
+SEED_PREFIX = "eval-seed-"
 
 
 @dataclass(frozen=True)
@@ -188,12 +190,15 @@ def resolve_account(accounts: dict[str, str], name: str) -> str:
 
 
 def reset(url: str, user_id: int, case: EvalCase, accounts: dict[str, str]) -> None:
-    """Replace the user's goals, budgets, rules and analyses with the test's definitions."""
+    """Replace the user's goals, budgets, rules, analyses and seeded transactions."""
     _check_url(url)
     today = date.today()
     with psycopg.connect(url) as conn:
         for table in ("budgets", "rules", "goals", "transaction_analyses"):
             conn.execute(f"DELETE FROM {table} WHERE user_id = %s", (user_id,))
+        conn.execute(
+            "DELETE FROM plaid_transactions WHERE transaction_id LIKE %s", (SEED_PREFIX + "%",)
+        )
 
         for budget in case.budgets:
             conn.execute(
@@ -236,5 +241,19 @@ def reset(url: str, user_id: int, case: EvalCase, accounts: dict[str, str]) -> N
                     goal.target_amount,
                     baseline,
                     target_date,
+                ),
+            )
+
+        for index, seed in enumerate(case.seed_transactions):
+            conn.execute(
+                "INSERT INTO plaid_transactions (transaction_id, account_id, name, amount, date, "
+                "category) VALUES (%s, %s, %s, %s, %s, %s)",
+                (
+                    f"{SEED_PREFIX}{index}",
+                    resolve_account(accounts, seed.account),
+                    seed.name,
+                    seed.amount,
+                    today - timedelta(days=seed.days_ago),
+                    seed.category,
                 ),
             )
