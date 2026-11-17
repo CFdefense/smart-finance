@@ -24,7 +24,7 @@ def format_financial_context(
     budgets: list[Budget],
     goals: list[Goal],
     transactions: list[Transaction],
-    rules: list[Rule] | None = None,
+    rules: list[Rule],
 ) -> str:
     """Format a user's data as compact sections the model can read."""
     sections = [f"Today is {today.isoformat()}."]
@@ -72,6 +72,5 @@ def format_financial_context(
             ],
         )
     )
-    if rules is not None:
-        sections.append(format_rules(rules, title="Rules"))
+    sections.append(format_rules(rules, title="Rules"))
     return "\n\n".join(sections)

@@ -56,12 +56,6 @@ def test_context_includes_rules_fenced_as_data():
     assert text.count("</user_rule>") == 1
 
 
-def test_context_without_rules_argument_has_no_rules_section():
-    """Callers that do not pass rules get the old output."""
-    text = format_financial_context(TODAY, accounts=[], budgets=[], goals=[], transactions=[])
-    assert "Rules" not in text
-
-
 def test_empty_rules_say_none():
     """A user with no rules sees an explicit 'none'."""
     text = format_financial_context(TODAY, [], [], [], [], rules=[])
