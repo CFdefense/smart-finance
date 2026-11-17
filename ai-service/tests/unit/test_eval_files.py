@@ -39,7 +39,7 @@ NEEDS = {
     "goal": "expected",
 }
 FILES = sorted(EVALS.glob("*.yaml"))
-NEW = [f for f in FILES if int(f.name[:2]) >= 10]
+NEW = [f for f in FILES if int(f.name[:2]) >= 8]
 
 
 def load(path):
