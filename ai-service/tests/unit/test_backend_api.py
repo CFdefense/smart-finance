@@ -193,3 +193,15 @@ def test_recording_backend_conflict_and_down_modes_raise_after_recording():
     with pytest.raises(BackendError, match=UNREACHABLE_MESSAGE):
         rec.send(7, "POST", "/api/budgets", {})
     assert len(rec.calls) == 1
+
+
+@pytest.mark.parametrize("error", [ValueError("bad"), httpx.InvalidURL("bad url")])
+def test_malformed_requests_are_reported_as_unreachable(error):
+    """A bad URL or value raised by the client becomes the unreachable message, with no detail."""
+
+    def handler(request):
+        raise error
+
+    with pytest.raises(BackendError) as err:
+        make_api(handler).send(7, "POST", "/api/budgets", {})
+    assert str(err.value) == UNREACHABLE_MESSAGE

@@ -91,6 +91,21 @@ workers do not share them (see "Ideas" below).
 ai-service only in environments where the service itself is trusted. This is an interim design; see the first
 idea below for the cleaner long-term fix.
 
+**Trust boundary.** `/chat` and `/chat/stream` trust the `user_id` in the request body; there is no
+authentication of their own. The service must only be reachable from the Rust backend: bind it to loopback
+or an internal network and do not expose it publicly. Because the chat can now write, this matters more than
+it did when it could only read.
+
+### Known limitations
+
+- A staged change stays confirmable for 10 minutes, for any later request by the same user, regardless of
+  chat session.
+- Confirming only runs a change the user was shown (the staged preview). Staging a revised change for the
+  same item replaces the earlier one.
+- The model is told to confirm only after an explicit user "yes". That is an instruction to the model, not
+  something the service can verify; the service only enforces that confirmation happens in a later request
+  than the proposal.
+
 ### Ideas for what the chat agent could do next
 
 Roughly in the order we would build them:

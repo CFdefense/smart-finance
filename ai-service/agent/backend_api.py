@@ -63,7 +63,7 @@ class HttpBackendApi:
             response = self._client.request(
                 method, f"{self._base}{path}", json=body, headers=headers
             )
-        except httpx.HTTPError as exc:
+        except (httpx.HTTPError, httpx.InvalidURL, ValueError) as exc:
             _log.warning("backend.unreachable type=%s", type(exc).__name__)
             raise BackendError(UNREACHABLE_MESSAGE) from None
         _log.info("backend.send method=%s path=%s status=%d", method, path, response.status_code)

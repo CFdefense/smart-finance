@@ -1,5 +1,6 @@
 """Tools: totals, comparisons and projections computed in code, so the model need not add."""
 
+import math
 from datetime import date, timedelta
 
 from langchain_core.tools import tool
@@ -8,7 +9,7 @@ from agent import analytics as calc
 from agent.data_models import Category
 from agent.formatting import money, section
 from agent.safety import sanitize
-from agent.tools.formatting import Refusal, State, cap, safe_tool, today
+from agent.tools.formatting import MAX_AMOUNT, Refusal, State, cap, safe_tool, today
 from db import (
     category_totals,
     load_accounts,
@@ -147,8 +148,8 @@ def can_i_afford(state: State, amount: float, category: Category | None = None) 
 
     If `category` is given, also check what is left in that category's monthly budget.
     """
-    if amount <= 0:
-        raise Refusal("amount must be greater than 0.")
+    if not math.isfinite(amount) or not 0 < amount <= MAX_AMOUNT:
+        raise Refusal(f"amount must be greater than 0 and at most {money(MAX_AMOUNT)}.")
     uid = state["user_id"]
     accounts = [a for a in load_accounts(uid) if a.account_type == "depository"]
     if not accounts:

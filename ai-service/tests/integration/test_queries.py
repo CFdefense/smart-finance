@@ -216,3 +216,38 @@ def test_analytics_never_include_other_users(user_with_data):
     assert category_totals(other, date(2026, 1, 1), date(2027, 1, 1)) == {}
     assert merchant_totals(other, date(2026, 1, 1), date(2027, 1, 1), 5) == []
     assert net_flow(other, date(2026, 1, 1), date(2027, 1, 1)) == 0
+
+
+def test_load_transactions_filters_by_category(user_with_data):
+    """Only the requested category comes back, and the limit applies after the filter."""
+    user_id, _ = user_with_data
+
+    assert [t.name for t in load_transactions(user_id, category="FOOD_DINING")] == [
+        "refund",
+        "lunch",
+        "coffee",
+    ]
+    assert [t.name for t in load_transactions(user_id, category="FOOD_DINING", limit=1)] == [
+        "refund"
+    ]
+    assert load_transactions(user_id, category="TRAVEL") == []
+
+
+def test_load_transactions_filters_by_merchant_ignoring_case(user_with_data):
+    """The merchant filter is a case-insensitive 'contains' match."""
+    user_id, _ = user_with_data
+
+    assert [t.name for t in load_transactions(user_id, merchant="GROCER")] == ["groceries"]
+    assert [t.name for t in load_transactions(user_id, merchant="LUN", category="FOOD_DINING")] == [
+        "lunch"
+    ]
+
+
+def test_load_transactions_merchant_wildcards_match_literally(user_with_data):
+    """`%` and `_` in the merchant text are not wildcards."""
+    user_id, _ = user_with_data
+
+    assert load_transactions(user_id, merchant="%") == []
+    assert load_transactions(user_id, merchant="c_ffee") == []
+    assert load_transactions(user_id, merchant="a\\b") == []
+    assert [t.name for t in load_transactions(user_id, merchant="coffee")] == ["coffee"]

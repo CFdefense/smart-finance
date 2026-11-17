@@ -203,3 +203,58 @@ def test_len_ignores_expired_actions(store, clock):
     add(store)
     clock.now += 601
     assert len(store) == 0
+
+
+def stage(store, user_id=7, kind="budget", method="POST", path="/api/budgets", request_id="r1"):
+    """Stage an action with a full method and path, as the write tools do."""
+    payload = {"method": method, "path": path, "body": None}
+    return store.add(user_id, kind, payload, f"{method} {path}", request_id)
+
+
+def test_a_revised_proposal_replaces_the_earlier_one_for_the_same_target(store):
+    """'Make it $400' after a proposal leaves only the latest one to confirm."""
+    stage(store)
+    latest = stage(store, request_id="r2")
+    assert len(store) == 1
+    assert store.take(7, "r3").action_id == latest.action_id
+
+
+@pytest.mark.parametrize("method", ["PUT", "DELETE"])
+def test_a_revised_update_or_delete_replaces_the_one_for_the_same_item(store, method):
+    """PUT and DELETE target the item path."""
+    stage(store, method=method, path="/api/goals/9", kind="goal")
+    latest = stage(store, method=method, path="/api/goals/9", kind="goal", request_id="r2")
+    assert len(store) == 1 and store.take(7, "r3").action_id == latest.action_id
+
+
+@pytest.mark.parametrize(
+    "other",
+    [
+        {"kind": "goal", "path": "/api/budgets"},
+        {"method": "DELETE", "path": "/api/budgets/3"},
+        {"path": "/api/budgets/4", "method": "PUT"},
+    ],
+)
+def test_different_targets_stay_pending(store, other):
+    """A different kind, method or path is a separate change."""
+    stage(store, method="PUT", path="/api/budgets/3")
+    stage(store, **other)
+    assert len(store) == 2
+
+
+def test_another_users_pending_action_is_never_dropped(store):
+    """Staging for one user leaves an identical-looking action of another user alone."""
+    theirs = stage(store, user_id=8)
+    stage(store, user_id=7)
+    assert len(store) == 2
+    assert store.take(8, "r2").action_id == theirs.action_id
+
+
+def test_a_collision_on_the_action_id_is_regenerated(store, monkeypatch):
+    """If a generated reference is already in use, another one is drawn."""
+    ids = iter(["aaaaaaaa" + "0" * 24, "aaaaaaaa" + "1" * 24, "bbbbbbbb" + "2" * 24])
+    monkeypatch.setattr("agent.pending.uuid.uuid4", lambda: type("U", (), {"hex": next(ids)})())
+    first = add(store)
+    second = add(store)
+    assert (first.action_id, second.action_id) == ("aaaaaaaa", "bbbbbbbb")
+    assert len(store) == 2

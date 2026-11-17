@@ -12,10 +12,26 @@ _USER_ACCOUNTS = """
 """
 
 
+def _like_pattern(text: str) -> str:
+    """Turn `text` into an ILIKE 'contains' pattern, escaping backslash, percent and underscore."""
+    escaped = text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+
 def load_transactions(
-    user_id: int, since: date | None = None, limit: int | None = None
+    user_id: int,
+    since: date | None = None,
+    limit: int | None = None,
+    category: str | None = None,
+    merchant: str | None = None,
 ) -> list[Transaction]:
-    """Load one user's transactions, newest first, optionally only those on or after `since`."""
+    """
+    Load one user's transactions, newest first.
+
+    Optionally only those on or after `since`, in one `category`, or whose name contains
+    `merchant` (case-insensitive; `%` and `_` match themselves).
+    """
+    pattern = _like_pattern(merchant) if merchant else None
     with get_connection() as conn:
         rows = conn.execute(
             f"""
@@ -24,10 +40,12 @@ def load_transactions(
             JOIN {_USER_ACCOUNTS} ON a.account_id = t.account_id
             WHERE l.user_id = %s
               AND (%s::date IS NULL OR t.date >= %s::date)
+              AND (%s::text IS NULL OR t.category = %s::text)
+              AND (%s::text IS NULL OR t.name ILIKE %s::text)
             ORDER BY t.date DESC, t.id DESC
             LIMIT %s
             """,
-            (user_id, since, since, limit),
+            (user_id, since, since, category, category, pattern, pattern, limit),
         ).fetchall()
     return [
         Transaction(transaction_id=r[0], name=r[1], amount=r[2], date=r[3], category=r[4])

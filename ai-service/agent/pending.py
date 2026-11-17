@@ -20,6 +20,13 @@ _SAME_REQUEST = (
 )
 
 
+def _target(kind: str, payload: dict[str, Any]) -> tuple[str, str, str] | None:
+    """Identify what an action changes: its kind, method and path (None if not a route call)."""
+    if "method" not in payload or "path" not in payload:
+        return None
+    return kind, payload["method"], payload["path"]
+
+
 class PendingError(Exception):
     """A pending action cannot be confirmed. The message is safe to show the model."""
 
@@ -61,13 +68,29 @@ class PendingActionStore:
     def add(
         self, user_id: int, kind: str, payload: dict[str, Any], preview: str, request_id: str
     ) -> PendingAction:
-        """Stage an action for `user_id`, dropping the oldest if the store is full."""
+        """
+        Stage an action for `user_id`, dropping the oldest if the store is full.
+
+        An earlier action of the same user with the same kind, method and path is replaced, so a
+        revised proposal ("make it $400") leaves only the latest one to confirm.
+        """
         with self._lock:
             self._purge()
+            target = _target(kind, payload)
+            if target is not None:
+                for key in [
+                    k
+                    for k, a in self._items.items()
+                    if a.user_id == user_id and _target(a.kind, a.payload) == target
+                ]:
+                    del self._items[key]
             while len(self._items) >= self._capacity:
                 del self._items[next(iter(self._items))]
+            action_id = uuid.uuid4().hex[:8]
+            while action_id in self._items:
+                action_id = uuid.uuid4().hex[:8]
             action = PendingAction(
-                action_id=uuid.uuid4().hex[:8],
+                action_id=action_id,
                 user_id=user_id,
                 kind=kind,
                 payload=payload,

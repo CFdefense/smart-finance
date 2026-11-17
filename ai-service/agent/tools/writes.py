@@ -1,5 +1,6 @@
 """Tools: propose changes to budgets, rules and goals, and carry them out once the user agrees."""
 
+import math
 import re
 from datetime import date
 from typing import Any, Literal
@@ -11,7 +12,7 @@ from agent.data_models import Category
 from agent.formatting import money
 from agent.pending import PendingActionStore, PendingError
 from agent.safety import sanitize
-from agent.tools.formatting import Refusal, State, safe_tool, today
+from agent.tools.formatting import MAX_AMOUNT, Refusal, State, safe_tool, today
 from db import Account, load_accounts, load_all_rules, load_budgets, load_goals
 
 MAX_MONTHLY_LIMIT = 1_000_000
@@ -60,10 +61,17 @@ def _text(value: str, what: str, max_len: int) -> str:
 
 def _limit(value: float) -> float:
     """Require a monthly limit above zero and at most MAX_MONTHLY_LIMIT."""
-    if not 0 < value <= MAX_MONTHLY_LIMIT:
+    if not math.isfinite(value) or not 0 < value <= MAX_MONTHLY_LIMIT:
         raise Refusal(
             f"The monthly limit must be more than $0 and at most {money(MAX_MONTHLY_LIMIT)}."
         )
+    return value
+
+
+def _target(value: float) -> float:
+    """Require a finite savings target above zero and at most MAX_AMOUNT."""
+    if not math.isfinite(value) or not 0 < value <= MAX_AMOUNT:
+        raise Refusal(f"The target amount must be greater than 0 and at most {money(MAX_AMOUNT)}.")
     return value
 
 
@@ -188,8 +196,7 @@ def make_write_tools(store: PendingActionStore, backend: BackendApi) -> list[Bas
         `target_date` is YYYY-MM-DD and must be in the future. The user must confirm.
         """
         clean = _text(name, "goal name", NAME_MAX)
-        if target_amount <= 0:
-            raise Refusal("The target amount must be greater than 0.")
+        _target(target_amount)
         uid = state["user_id"]
         depository = [a for a in load_accounts(uid) if a.account_type == "depository"]
         if not depository:
@@ -295,6 +302,7 @@ def make_write_tools(store: PendingActionStore, backend: BackendApi) -> list[Bas
                 body["description"] = description.strip()
                 parts.append("description")
             if target_amount is not None:
+                _target(target_amount)
                 if target_amount <= item.baseline_balance:
                     raise Refusal(
                         "The target must be more than the starting balance "

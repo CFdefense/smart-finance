@@ -344,3 +344,10 @@ def test_database_failures_become_a_generic_message(monkeypatch, tool, loader, a
     monkeypatch.setattr(tools, loader, boom)
 
     assert call(getattr(tools, tool), **args) == UNAVAILABLE
+
+
+@pytest.mark.parametrize("amount", [float("nan"), float("inf"), 1e9 + 1])
+def test_can_i_afford_rejects_non_finite_or_huge_amounts(monkeypatch, amount):
+    """NaN, infinity and absurd amounts are refused before any lookup."""
+    monkeypatch.setattr(tools, "load_accounts", lambda uid: [checking()])
+    assert "amount must be" in call(tools.can_i_afford, amount=amount)

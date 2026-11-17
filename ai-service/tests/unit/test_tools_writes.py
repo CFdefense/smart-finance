@@ -9,7 +9,7 @@ from pydantic import ValidationError
 import agent.tools.writes as writes
 from agent.backend_api import CONFLICT_MESSAGE, UNREACHABLE_MESSAGE
 from agent.pending import PendingActionStore
-from agent.tools.formatting import UNAVAILABLE
+from agent.tools.formatting import MAX_TOOL_CHARS, UNAVAILABLE
 from db import Account, Budget, Goal, Rule
 from rig import RecordingBackendApi
 
@@ -665,3 +665,44 @@ def test_staged_previews_are_sanitized_in_every_proposal(rig):
 
     assert len(previews) == 2
     assert all("<" not in p and ">" not in p and "\x00" not in p for p in previews)
+
+
+@pytest.mark.parametrize("amount", [float("nan"), float("inf"), float("-inf"), 1e9 + 1])
+def test_propose_goal_rejects_non_finite_or_huge_targets(rig, amount):
+    """NaN, infinity and absurdly large targets never reach the store."""
+    text = call(rig, "propose_goal", name="G", account_name="Savings", target_amount=amount)
+    assert "target amount" in text and len(rig.store) == 0
+
+
+@pytest.mark.parametrize("amount", [float("nan"), float("inf"), 1e9 + 1])
+def test_propose_update_rejects_non_finite_or_huge_targets(rig, amount):
+    """A goal update with a bad target is refused."""
+    text = call(rig, "propose_update", kind="goal", item_id=9, target_amount=amount)
+    assert "target amount" in text and len(rig.store) == 0
+
+
+@pytest.mark.parametrize("limit", [float("nan"), float("inf"), float("-inf")])
+def test_budget_limits_reject_non_finite_values(rig, limit):
+    """NaN and infinity fail the monthly limit check on create and update."""
+    created = call(rig, "propose_budget", name="B", category="GROCERIES", monthly_limit=limit)
+    updated = call(rig, "propose_update", kind="budget", item_id=3, monthly_limit=limit)
+    assert "monthly limit" in created and "monthly limit" in updated and len(rig.store) == 0
+
+
+def test_an_oversized_staged_preview_is_capped(rig, monkeypatch):
+    """Anything a tool returns is cut to the output cap, including a staged preview."""
+    monkeypatch.setattr(writes, "_scope", lambda accounts: "all of them " * 1000)
+    text = call(rig, "propose_rule", description="No gambling")
+    assert len(text) <= MAX_TOOL_CHARS + 30 and text.endswith("(truncated)")
+    assert len(rig.store) == 1
+
+
+def test_an_oversized_refusal_is_capped(rig, monkeypatch):
+    """A refusal that comes out too long is cut as well."""
+
+    def too_long(*args):
+        raise writes.Refusal("no " * 5000)
+
+    monkeypatch.setattr(writes, "_accounts_named", too_long)
+    text = call(rig, "propose_rule", description="No gambling", account_names=["x"])
+    assert len(text) <= MAX_TOOL_CHARS + 30 and text.endswith("(truncated)")

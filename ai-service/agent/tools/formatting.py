@@ -11,6 +11,7 @@ from langgraph.prebuilt import InjectedState
 from agent.logging import TOOL
 
 MAX_TOOL_CHARS = 4000
+MAX_AMOUNT = 1_000_000_000
 UNAVAILABLE = "That data is temporarily unavailable. Tell the user, and do not guess."
 
 State = Annotated[dict[str, Any], InjectedState]
@@ -41,14 +42,15 @@ def safe_tool(fn: Callable[..., str]) -> Callable[..., str]:
 
     A `Refusal` returns its own message. Any other error returns a generic message and logs only
     the exception type, so database or network details never reach the model or the user.
+    Whatever is returned is cut to MAX_TOOL_CHARS.
     """
 
     @functools.wraps(fn)
     def wrapper(*args: Any, **kwargs: Any) -> str:
         try:
-            return fn(*args, **kwargs)
+            return cap(fn(*args, **kwargs))
         except Refusal as refusal:
-            return str(refusal)
+            return cap(str(refusal))
         except Exception as exc:
             _log.warning("tool.failed name=%s type=%s", fn.__name__, type(exc).__name__)
             _log.debug("tool.failed detail", exc_info=True)

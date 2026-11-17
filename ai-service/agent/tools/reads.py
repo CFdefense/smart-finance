@@ -10,7 +10,6 @@ from agent.safety import fence, sanitize
 from agent.tools.formatting import State, cap, safe_tool, today
 from db import load_accounts, load_all_rules, load_budgets, load_goals, load_transactions
 
-_FETCH_LIMIT = 500
 _NAME_MAX = 60
 
 
@@ -49,12 +48,12 @@ def list_transactions(
     days = max(1, min(days, 365))
     limit = max(1, min(limit, 50))
     rows = load_transactions(
-        state["user_id"], since=today() - timedelta(days=days), limit=_FETCH_LIMIT
+        state["user_id"],
+        since=today() - timedelta(days=days),
+        limit=limit,
+        category=category,
+        merchant=(merchant or "").strip() or None,
     )
-    wanted = (merchant or "").strip().lower()
-    rows = [
-        t for t in rows if (category is None or t.category == category) and wanted in t.name.lower()
-    ][:limit]
     lines = [
         f"- {t.date.isoformat()} {_name(t.name)}: {money(t.amount)} [{t.category or 'OTHER'}]"
         for t in rows
