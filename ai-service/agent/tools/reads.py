@@ -6,16 +6,9 @@ from langchain_core.tools import tool
 
 from agent.data_models import Category
 from agent.formatting import money, section
-from agent.safety import fence, sanitize
-from agent.tools.formatting import State, cap, safe_tool, today
+from agent.safety import fence
+from agent.tools.helpers import State, cap, goal_balance, label, safe_tool, today
 from db import load_accounts, load_all_rules, load_budgets, load_goals, load_transactions
-
-_NAME_MAX = 60
-
-
-def _name(text: str | None) -> str:
-    """Sanitize a name that came from the user or the bank."""
-    return sanitize(text or "", _NAME_MAX)[0]
 
 
 @tool
@@ -23,7 +16,7 @@ def _name(text: str | None) -> str:
 def list_accounts(state: State) -> str:
     """List the user's linked bank accounts with their type and current and available balances."""
     lines = [
-        f"- {_name(a.name)} ({a.account_subtype or a.account_type}): "
+        f"- {label(a.name)} ({a.account_subtype or a.account_type}): "
         f"current {money(a.current_balance)}, available {money(a.available_balance)}"
         for a in load_accounts(state["user_id"])
     ]
@@ -55,7 +48,7 @@ def list_transactions(
         merchant=(merchant or "").strip() or None,
     )
     lines = [
-        f"- {t.date.isoformat()} {_name(t.name)}: {money(t.amount)} [{t.category or 'OTHER'}]"
+        f"- {t.date.isoformat()} {label(t.name)}: {money(t.amount)} [{t.category or 'OTHER'}]"
         for t in rows
     ]
     return cap(section(f"Transactions in the last {days} days", lines))
@@ -67,7 +60,7 @@ def list_budgets(state: State) -> str:
     """List the user's active monthly budgets with ids and how much is spent this month."""
     now = today()
     lines = [
-        f"- [id={b.id}] {_name(b.name)} [{b.category}]: spent {money(b.spent_this_month)} "
+        f"- [id={b.id}] {label(b.name)} [{b.category}]: spent {money(b.spent_this_month)} "
         f"of {money(b.monthly_limit)}"
         for b in load_budgets(state["user_id"], now)
     ]
@@ -80,12 +73,12 @@ def list_goals(state: State) -> str:
     """List the user's savings goals with ids, balances, targets and progress."""
     lines = []
     for g in load_goals(state["user_id"]):
-        current = g.baseline_balance if g.current_balance is None else g.current_balance
+        current = goal_balance(g)
         span = g.target_amount - g.baseline_balance
         done = 100 if span <= 0 else max(0, min(100, (current - g.baseline_balance) / span * 100))
         lines.append(
-            f"- [id={g.id if g.id is not None else '?'}] {_name(g.name)} on "
-            f"{_name(g.account_name)}: "
+            f"- [id={g.id if g.id is not None else '?'}] {label(g.name)} on "
+            f"{label(g.account_name)}: "
             f"balance {money(g.current_balance)}, started at {money(g.baseline_balance)}, "
             f"target {money(g.target_amount)}"
             + (f" by {g.target_date.isoformat()}" if g.target_date else "")
@@ -99,7 +92,7 @@ def list_goals(state: State) -> str:
 def list_rules(state: State) -> str:
     """List the user's enabled rules (their own words) with ids and the accounts they cover."""
     uid = state["user_id"]
-    names = {a.account_id: _name(a.name) for a in load_accounts(uid)}
+    names = {a.account_id: label(a.name) for a in load_accounts(uid)}
     lines = [
         f"- [id={r.id}] {fence('user_rule', r.description, 500)} "
         f"({', '.join(names.get(i, 'unknown account') for i in r.account_ids) or 'all accounts'})"

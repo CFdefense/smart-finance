@@ -5,8 +5,9 @@ from datetime import date, timedelta
 import pytest
 
 import agent.tools.analytics as tools
+from agent.tools import helpers
 from agent.tools.analytics import ANALYTICS_TOOLS
-from agent.tools.formatting import UNAVAILABLE
+from agent.tools.helpers import UNAVAILABLE
 from db import Account, Budget, Goal, MerchantTotal, Transaction
 
 TODAY = date(2026, 11, 16)
@@ -17,6 +18,7 @@ STATE = {"user_id": 7, "request_id": "r1"}
 def fixed_today(monkeypatch):
     """Pin the tools' clock."""
     monkeypatch.setattr(tools, "today", lambda: TODAY)
+    monkeypatch.setattr(helpers, "today", lambda: TODAY)
 
 
 def call(tool, **args):
@@ -262,7 +264,7 @@ def test_find_recurring_charges_none(monkeypatch):
 def test_can_i_afford_yes_with_budget(monkeypatch):
     """Sums spendable balance over depository accounts and checks the category budget."""
     monkeypatch.setattr(
-        tools,
+        helpers,
         "load_accounts",
         lambda uid: [
             checking(1000, available=900),
@@ -270,7 +272,7 @@ def test_can_i_afford_yes_with_budget(monkeypatch):
         ],
     )
     monkeypatch.setattr(
-        tools,
+        helpers,
         "load_budgets",
         lambda uid, today: [
             Budget(name="Shop", category="SHOPPING", monthly_limit=300, spent_this_month=100)
@@ -285,9 +287,9 @@ def test_can_i_afford_yes_with_budget(monkeypatch):
 
 def test_can_i_afford_over_budget_is_tight(monkeypatch):
     """Going over the category budget is flagged even when the balance is fine."""
-    monkeypatch.setattr(tools, "load_accounts", lambda uid: [checking(5000)])
+    monkeypatch.setattr(helpers, "load_accounts", lambda uid: [checking(5000)])
     monkeypatch.setattr(
-        tools,
+        helpers,
         "load_budgets",
         lambda uid, today: [
             Budget(name="Shop", category="SHOPPING", monthly_limit=300, spent_this_month=280)
@@ -299,16 +301,16 @@ def test_can_i_afford_over_budget_is_tight(monkeypatch):
 
 def test_can_i_afford_uses_current_balance_when_available_is_unknown(monkeypatch):
     """A missing available balance falls back to the current balance."""
-    monkeypatch.setattr(tools, "load_accounts", lambda uid: [checking(500, available=None)])
-    monkeypatch.setattr(tools, "load_budgets", lambda uid, today: [])
+    monkeypatch.setattr(helpers, "load_accounts", lambda uid: [checking(500, available=None)])
+    monkeypatch.setattr(helpers, "load_budgets", lambda uid, today: [])
 
     assert "$500.00" in call(tools.can_i_afford, amount=10)
 
 
 def test_can_i_afford_no_money(monkeypatch):
     """More than the balance is a no."""
-    monkeypatch.setattr(tools, "load_accounts", lambda uid: [checking(100)])
-    monkeypatch.setattr(tools, "load_budgets", lambda uid, today: [])
+    monkeypatch.setattr(helpers, "load_accounts", lambda uid: [checking(100)])
+    monkeypatch.setattr(helpers, "load_budgets", lambda uid, today: [])
 
     assert call(tools.can_i_afford, amount=5_000_000).startswith("Verdict: no")
 
@@ -316,14 +318,14 @@ def test_can_i_afford_no_money(monkeypatch):
 @pytest.mark.parametrize("amount", [0, -5])
 def test_can_i_afford_rejects_non_positive_amounts(monkeypatch, amount):
     """A zero or negative purchase is refused with a reason."""
-    monkeypatch.setattr(tools, "load_accounts", lambda uid: [checking()])
+    monkeypatch.setattr(helpers, "load_accounts", lambda uid: [checking()])
     assert "greater than 0" in call(tools.can_i_afford, amount=amount)
 
 
 def test_can_i_afford_without_a_depository_account(monkeypatch):
     """Only a credit card linked: the tool says it cannot check."""
     monkeypatch.setattr(
-        tools,
+        helpers,
         "load_accounts",
         lambda uid: [Account(account_id="c", name="Card", account_type="credit")],
     )
@@ -348,7 +350,7 @@ def test_database_failures_become_a_generic_message(monkeypatch, tool, loader, a
     def boom(*a, **k):
         raise RuntimeError("password=hunter2")
 
-    monkeypatch.setattr(tools, loader, boom)
+    monkeypatch.setattr(helpers if loader == "load_accounts" else tools, loader, boom)
 
     assert call(getattr(tools, tool), **args) == UNAVAILABLE
 
@@ -356,14 +358,14 @@ def test_database_failures_become_a_generic_message(monkeypatch, tool, loader, a
 @pytest.mark.parametrize("amount", [float("nan"), float("inf"), 1e9 + 1])
 def test_can_i_afford_rejects_non_finite_or_huge_amounts(monkeypatch, amount):
     """NaN, infinity and absurd amounts are refused before any lookup."""
-    monkeypatch.setattr(tools, "load_accounts", lambda uid: [checking()])
+    monkeypatch.setattr(helpers, "load_accounts", lambda uid: [checking()])
     assert "amount must be" in call(tools.can_i_afford, amount=amount)
 
 
 def test_can_i_afford_says_which_accounts_make_up_the_spendable_balance(monkeypatch):
     """The model is told what 'spendable' means so it does not invent a definition."""
     monkeypatch.setattr(
-        tools,
+        helpers,
         "load_accounts",
         lambda uid: [
             Account(

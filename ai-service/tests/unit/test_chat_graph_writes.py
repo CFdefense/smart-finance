@@ -6,10 +6,10 @@ import pytest
 
 import agent.chat as chat_module
 import agent.nodes.context.load as load_context_module
-import agent.tools.writes as writes
 from agent import ChatAgent, ChatRequest, HistoryMessage
 from agent.backend_api import UNREACHABLE_MESSAGE
 from agent.pending import PendingActionStore
+from agent.tools import helpers
 from db import Account, Budget
 from rig import RecordingBackendApi
 from scripted_llm import ScriptedLLM, calls, say
@@ -25,9 +25,9 @@ CONFIRM = ("confirm_action", {})
 def user_world(monkeypatch):
     """Fake the database behind the write tools and the context loader."""
     monkeypatch.setattr(load_context_module, "load_financial_context", lambda uid: "DATA")
-    monkeypatch.setattr(writes, "today", lambda: date(2026, 11, 16))
+    monkeypatch.setattr(helpers, "today", lambda: date(2026, 11, 16))
     monkeypatch.setattr(
-        writes,
+        helpers,
         "load_accounts",
         lambda uid: [
             Account(
@@ -36,7 +36,7 @@ def user_world(monkeypatch):
         ],
     )
     monkeypatch.setattr(
-        writes,
+        helpers,
         "load_budgets",
         lambda uid, today: [
             Budget(

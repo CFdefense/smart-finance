@@ -4,7 +4,7 @@ from datetime import date
 
 from agent.formatting import money, section
 from agent.safety import fence, sanitize
-from agent.tools.formatting import cap
+from agent.tools.helpers import cap
 from db import Budget, Goal, Rule
 
 

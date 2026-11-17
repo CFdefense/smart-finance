@@ -9,7 +9,8 @@ from pydantic import ValidationError
 import agent.tools.writes as writes
 from agent.backend_api import CONFLICT_MESSAGE, UNREACHABLE_MESSAGE
 from agent.pending import PendingActionStore
-from agent.tools.formatting import MAX_TOOL_CHARS, UNAVAILABLE
+from agent.tools import helpers
+from agent.tools.helpers import MAX_TOOL_CHARS, UNAVAILABLE
 from db import Account, Budget, Goal, Rule
 from rig import RecordingBackendApi
 
@@ -30,9 +31,9 @@ def rig(monkeypatch):
 
         return loader
 
-    monkeypatch.setattr(writes, "today", lambda: TODAY)
+    monkeypatch.setattr(helpers, "today", lambda: TODAY)
     monkeypatch.setattr(
-        writes,
+        helpers,
         "load_accounts",
         scoped(
             [
@@ -53,7 +54,7 @@ def rig(monkeypatch):
         ),
     )
     monkeypatch.setattr(
-        writes,
+        helpers,
         "load_budgets",
         scoped(
             [
@@ -68,7 +69,7 @@ def rig(monkeypatch):
         ),
     )
     monkeypatch.setattr(
-        writes,
+        helpers,
         "load_goals",
         scoped(
             [
@@ -85,7 +86,7 @@ def rig(monkeypatch):
         ),
     )
     monkeypatch.setattr(
-        writes,
+        helpers,
         "load_all_rules",
         scoped(
             [
@@ -393,7 +394,7 @@ def test_propose_goal_rejects_a_long_description(rig):
 def test_propose_goal_with_no_depository_accounts(monkeypatch, rig):
     """A user with only credit cards is told why a goal cannot be made."""
     monkeypatch.setattr(
-        writes,
+        helpers,
         "load_accounts",
         lambda uid: [Account(account_id="c", name="Card", account_type="credit")],
     )
@@ -455,6 +456,22 @@ def test_update_goal_fields(rig):
         "path": "/api/goals/9",
         "body": {"target_amount": 9000, "target_date": "2027-05-01"},
     }
+
+
+def test_update_goal_name_and_description(rig):
+    """A goal's name and description are trimmed and sent, and an oversized description is refused."""
+    call(
+        rig,
+        "propose_update",
+        kind="goal",
+        item_id=9,
+        name="  Japan trip ",
+        description=" Spring 2027 ",
+    )
+    assert staged(rig).payload["body"] == {"name": "Japan trip", "description": "Spring 2027"}
+
+    text = call(rig, "propose_update", kind="goal", item_id=9, description="x" * 501)
+    assert "at most 500 characters" in text and len(rig.store) == 0
 
 
 def test_update_goal_target_must_exceed_the_starting_balance(rig):
@@ -625,7 +642,7 @@ def test_database_failure_while_proposing_stages_nothing(monkeypatch, rig):
     def boom(*a):
         raise RuntimeError("password=hunter2")
 
-    monkeypatch.setattr(writes, "load_budgets", boom)
+    monkeypatch.setattr(helpers, "load_budgets", boom)
 
     text = call(rig, "propose_budget", name="B", category="OTHER", monthly_limit=10)
 
@@ -691,7 +708,7 @@ def test_budget_limits_reject_non_finite_values(rig, limit):
 
 def test_an_oversized_staged_preview_is_capped(rig, monkeypatch):
     """Anything a tool returns is cut to the output cap, including a staged preview."""
-    monkeypatch.setattr(writes, "_scope", lambda accounts: "all of them " * 1000)
+    monkeypatch.setattr(helpers, "scope", lambda accounts: "all of them " * 1000)
     text = call(rig, "propose_rule", description="No gambling")
     assert len(text) <= MAX_TOOL_CHARS + 30 and text.endswith("(truncated)")
     assert len(rig.store) == 1
@@ -703,7 +720,7 @@ def test_an_oversized_refusal_is_capped(rig, monkeypatch):
     def too_long(*args):
         raise writes.Refusal("no " * 5000)
 
-    monkeypatch.setattr(writes, "_accounts_named", too_long)
+    monkeypatch.setattr(helpers, "accounts_named", too_long)
     text = call(rig, "propose_rule", description="No gambling", account_names=["x"])
     assert len(text) <= MAX_TOOL_CHARS + 30 and text.endswith("(truncated)")
 
