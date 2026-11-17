@@ -22,6 +22,10 @@ export class Signup {
   errorMessage = signal('');
   isSubmitting = signal(false);
 
+  // toggles password visibility
+  hide = true;
+  hideConfirm = true;
+
   onSignup(): void {
     if (this.isSubmitting()) {
       return;

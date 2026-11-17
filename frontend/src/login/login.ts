@@ -2,9 +2,13 @@ import { Component, inject, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../app/services/auth.service';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
 
 @Component({
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, MatFormFieldModule, MatInputModule, MatButtonModule, MatIconModule],
   selector: 'app-root',
   styleUrl: './login.css',
   templateUrl: './login.html',
@@ -20,6 +24,9 @@ export class Login {
 
   errorMessage = signal('');
   isSubmitting = signal(false);
+
+  // toggles password visibility
+  hide = true;
 
   onLogin(): void {
     if (this.isSubmitting()) {
