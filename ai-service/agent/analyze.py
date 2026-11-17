@@ -146,6 +146,8 @@ class AnalyzerAgent:
                         status=state["status"],
                         assessment=state.get("assessment"),
                         notified=bool(state.get("notified")),
+                        anomaly_flagged=state.get("anomaly_flagged"),
+                        anomaly_reason=state.get("anomaly_reason"),
                         error=state.get("error"),
                     )
                 except Exception as exc:

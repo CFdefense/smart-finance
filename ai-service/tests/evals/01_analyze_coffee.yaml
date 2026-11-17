@@ -1,0 +1,38 @@
+# Routine purchase: nothing to flag.
+# Persona data mirrors the old tests/manual/seed_christian.py.
+- description: Routine coffee is fine and does not notify
+  vars:
+    persona: christian@test.com
+    agent: analyze
+    budgets:
+      - { name: Eating out, category: FOOD_DINING, monthly_limit: 100 }
+      - { name: Shopping, category: SHOPPING, monthly_limit: 150 }
+      - { name: Fun money, category: ENTERTAINMENT, monthly_limit: 40 }
+      - { name: Groceries, category: GROCERIES, monthly_limit: 300 }
+    rules:
+      - description: Flag any single purchase over $200.
+        account: TD Bank Student Checking
+      - description: No gambling, casinos or betting sites on any account.
+      - description: The Capital One card is for dining and travel only.
+        account: Capital One Quicksilver
+    goals:
+      - name: Spring break trip
+        description: Save for a trip with friends.
+        account: TD Bank Student Checking
+        target_amount: 2500
+        days_until_target: 120
+      - name: Roth IRA contribution
+        description: Add $500 to the Roth IRA.
+        account: Robinhood Roth IRA
+        target_amount: 1000
+        days_until_target: 60
+    transaction:
+      name: Blue Bottle Coffee
+      amount: 4.5
+      category: FOOD_DINING
+      account: TD Bank Student Checking
+    expected: Verdict OK, no rule violations, and the user is not notified.
+  assert:
+    - { type: python, value: "file://graders.py:adherence", config: { threshold: 0.7 } }
+    - { type: python, value: "file://graders.py:accuracy", config: { threshold: 0.7 } }
+    - { type: python, value: "file://graders.py:goal", config: { threshold: 0.7 } }

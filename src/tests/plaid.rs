@@ -228,9 +228,276 @@ async fn sync_transactions_authenticated_no_items() {
     assert_eq!(json["has_more"], false);
 }
 
+/**
+ * Verify that transactions can be filtered by account.
+ *
+ * This test creates one authenticated user with two accounts.
+ * Each account receives its own transactions.
+ *
+ * We then verify:
+ * 1. Filtering by Account A excludes Account B's transactions.
+ * 2. Filtering by Account B excludes Account A's transactions.
+ * 3. Pagination and total counts are correct.
+ * 4. Omitting `account_id` returns transactions from both accounts.
+ *
+ * All records belong to a temporary test user and are
+ * deleted automatically through cascading foreign keys.
+ */
+#[tokio::test]
+async fn get_transactions_filters_by_account() {
+    let app = test_app().await;
+    let pool = test_pool().await;
+
+    // Create a unique test user to avoid conflicts with other tests.
+    let email = unique_email("plaid_account_filter");
+    let cookie = authenticated_cookie(app.clone(), &email).await;
+
+    // Retrieve the new user's database ID.
+    let user_id: i32 = sqlx::query_scalar("SELECT id FROM users WHERE email = $1")
+        .bind(&email)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    // Use unique IDs based on the new user.
+    // This prevents parallel tests from sharing account records.
+    let item_id = format!("filter-item-{user_id}");
+    let account_a = format!("filter-account-a-{user_id}");
+    let account_b = format!("filter-account-b-{user_id}");
+
+    // Create a bank connection belonging to our test user.
+    sqlx::query(
+        "INSERT INTO plaid_links (user_id, item_id, access_token)
+         VALUES ($1, $2, $3)",
+    )
+    .bind(user_id)
+    .bind(&item_id)
+    .bind("test-access-token")
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // Create two different accounts within the same bank connection.
+    for (account_id, name) in [(&account_a, "Checking"), (&account_b, "Savings")] {
+        sqlx::query(
+            "INSERT INTO plaid_accounts
+             (account_id, item_id, name, account_type)
+             VALUES ($1, $2, $3, $4)",
+        )
+        .bind(account_id)
+        .bind(&item_id)
+        .bind(name)
+        .bind("depository")
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+
+    // Insert three transactions:
+    // - Two belong to Account A.
+    // - One belongs to Account B.
+    let transactions = [
+        (format!("filter-tx-a1-{user_id}"), &account_a, 20.0),
+        (format!("filter-tx-a2-{user_id}"), &account_a, 30.0),
+        (format!("filter-tx-b1-{user_id}"), &account_b, 40.0),
+    ];
+
+    for (transaction_id, account_id, amount) in &transactions {
+        sqlx::query(
+            "INSERT INTO plaid_transactions
+             (transaction_id, account_id, name, amount, date, pending)
+             VALUES ($1, $2, $3, $4, $5, $6)",
+        )
+        .bind(transaction_id)
+        .bind(account_id)
+        .bind("Test Purchase")
+        .bind(amount)
+        .bind(chrono::NaiveDate::from_ymd_opt(2026, 11, 10).unwrap())
+        .bind(false)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+
+    // TEST 1:
+    // Request Account A with a page size of one.
+    // We should receive one transaction, but the total
+    // should still indicate that Account A has two.
+    let (status, response) = call(
+        &app,
+        "GET",
+        &format!("/api/plaid/transactions?account_id={account_a}&limit=1&offset=0"),
+        &cookie,
+        None,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(response["total"], 2);
+    assert_eq!(response["transactions"].as_array().unwrap().len(), 1);
+    assert_eq!(response["transactions"][0]["account_id"], account_a);
+
+    // TEST 2:
+    // Request Account A's second page.
+    // It should contain the other transaction.
+    let (status, response) = call(
+        &app,
+        "GET",
+        &format!("/api/plaid/transactions?account_id={account_a}&limit=1&offset=1"),
+        &cookie,
+        None,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(response["total"], 2);
+    assert_eq!(response["transactions"].as_array().unwrap().len(), 1);
+    assert_eq!(response["transactions"][0]["account_id"], account_a);
+
+    // TEST 3:
+    // Request Account B.
+    // Its response must exclude Account A's transactions.
+    let (status, response) = call(
+        &app,
+        "GET",
+        &format!("/api/plaid/transactions?account_id={account_b}"),
+        &cookie,
+        None,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(response["total"], 1);
+    assert_eq!(response["transactions"][0]["account_id"], account_b);
+
+    // TEST 4:
+    // Omit the account filter.
+    // The original endpoint behavior must still work.
+    let (status, response) = call(&app, "GET", "/api/plaid/transactions", &cookie, None).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(response["total"], 3);
+    assert_eq!(response["transactions"].as_array().unwrap().len(), 3);
+
+    // Delete the test user.
+    // Foreign-key cascades remove the bank connection,
+    // its accounts, and their transactions.
+    cleanup(&pool, &email).await;
+}
+
+/// Verify daily net-worth snapshots and user-data isolation.
+///
+/// We test that:
+/// 1. A new user initially has no recorded history.
+/// 2. Fetching connected accounts records net worth.
+/// 3. Repeated fetches do not create duplicate daily rows.
+/// 4. A different user cannot read those snapshots.
+#[tokio::test]
+async fn net_worth_history_records_daily_snapshots() {
+    let app = test_app().await;
+    let pool = test_pool().await;
+
+    let email_a = unique_email("net_worth_a");
+    let email_b = unique_email("net_worth_b");
+
+    // Create two separate authenticated users.
+    let cookie_a = authenticated_cookie(app.clone(), &email_a).await;
+    let cookie_b = authenticated_cookie(app.clone(), &email_b).await;
+
+    // Give user A a unique mocked Plaid connection.
+    let user_a_id: i32 = sqlx::query_scalar("SELECT id FROM users WHERE email = $1")
+        .bind(&email_a)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    let public_token = format!("public-history-{user_a_id}");
+
+    let (status, _) = call(
+        &app,
+        "POST",
+        "/api/plaid/exchange-token",
+        &cookie_a,
+        Some(json!({ "public_token": public_token })),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+
+    // Before loading accounts, there should be no history.
+    let (status, history) = call(
+        &app,
+        "GET",
+        "/api/accounts/net-worth/history",
+        &cookie_a,
+        None,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(history["snapshots"].as_array().unwrap().len(), 0);
+
+    // The mock returns one USD checking account with $100.
+    // Loading accounts should create today's snapshot.
+    let (status, _) = call(&app, "GET", "/api/plaid/accounts", &cookie_a, None).await;
+
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, history) = call(
+        &app,
+        "GET",
+        "/api/accounts/net-worth/history",
+        &cookie_a,
+        None,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(history["snapshots"].as_array().unwrap().len(), 1);
+    assert_eq!(history["snapshots"][0]["amount"], 100.0);
+    assert_eq!(history["snapshots"][0]["included_accounts"], 1);
+
+    // Loading the same account again should update today's
+    // existing snapshot, not insert a duplicate.
+    let (status, _) = call(&app, "GET", "/api/plaid/accounts", &cookie_a, None).await;
+
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, history) = call(
+        &app,
+        "GET",
+        "/api/accounts/net-worth/history",
+        &cookie_a,
+        None,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(history["snapshots"].as_array().unwrap().len(), 1);
+
+    // User B must not have access to User A's history.
+    let (status, other_history) = call(
+        &app,
+        "GET",
+        "/api/accounts/net-worth/history",
+        &cookie_b,
+        None,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(other_history["snapshots"].as_array().unwrap().len(), 0);
+
+    // Remove temporary users and their related data.
+    cleanup(&pool, &email_a).await;
+    cleanup(&pool, &email_b).await;
+}
+
 // ─── Data-isolation test ──────────────────────────────────────────────────────
 
 #[tokio::test]
+// The two user IDs are intentionally named symmetrically.
+#[allow(clippy::similar_names, clippy::too_many_lines)]
 async fn get_transactions_data_isolation() {
     let app = test_app().await;
     let pool = test_pool().await;

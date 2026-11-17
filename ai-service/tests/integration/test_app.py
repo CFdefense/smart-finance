@@ -1,3 +1,5 @@
+import json
+
 from fastapi.testclient import TestClient
 
 from agent import AnalysisResult, ChatResponse
@@ -41,9 +43,21 @@ def test_service_starts_without_openai_key(monkeypatch):
 class FakeChatAgent:
     """Stand-in for the real LLM agent so tests never call OpenAI."""
 
+    def __init__(self):
+        self.requests = []
+
     def generate_answer(self, request):
         """Return a fixed answer."""
+        self.requests.append(request)
         return ChatResponse(response="fake answer")
+
+    def generate_stream(self, request):
+        """Yield a fixed sequence of events."""
+        self.requests.append(request)
+        yield {"type": "status", "tool": "web_search"}
+        yield {"type": "token", "text": "fake "}
+        yield {"type": "token", "text": "answer"}
+        yield {"type": "done", "response": "fake answer"}
 
 
 def test_chat_returns_an_answer(monkeypatch):
@@ -66,6 +80,76 @@ def test_chat_returns_503_when_agent_not_configured(monkeypatch):
 
     assert chat_response.status_code == 503
     assert analyzer_response.status_code == 503
+
+
+def test_chat_accepts_history(monkeypatch):
+    """/chat takes earlier messages in `history` and passes them to the agent."""
+    fake = FakeChatAgent()
+    monkeypatch.setattr(app.state, "chat_agent", fake, raising=False)
+    history = [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "hello"}]
+
+    response = client.post("/chat", json={"user_id": 1, "message": "And now?", "history": history})
+
+    assert response.status_code == 200
+    assert [(m.role, m.content) for m in fake.requests[0].history] == [
+        ("user", "hi"),
+        ("assistant", "hello"),
+    ]
+
+
+def test_chat_rejects_more_than_20_history_entries():
+    """History is capped at 20 messages."""
+    history = [{"role": "user", "content": "x"}] * 21
+
+    response = client.post("/chat", json={"user_id": 1, "message": "Hi", "history": history})
+
+    assert response.status_code == 422
+
+
+def test_chat_rejects_a_bad_history_role():
+    """Only user and assistant roles are accepted."""
+    history = [{"role": "system", "content": "x"}]
+
+    response = client.post("/chat", json={"user_id": 1, "message": "Hi", "history": history})
+
+    assert response.status_code == 422
+
+
+def test_chat_stream_returns_one_json_event_per_line(monkeypatch):
+    """/chat/stream is NDJSON: one JSON object per line, in the order the agent yields them."""
+    fake = FakeChatAgent()
+    monkeypatch.setattr(app.state, "chat_agent", fake, raising=False)
+    body = {"user_id": 1, "message": "Hi", "history": [{"role": "user", "content": "earlier"}]}
+
+    response = client.post("/chat/stream", json=body)
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/x-ndjson")
+    lines = response.text.splitlines()
+    assert [json.loads(line) for line in lines] == [
+        {"type": "status", "tool": "web_search"},
+        {"type": "token", "text": "fake "},
+        {"type": "token", "text": "answer"},
+        {"type": "done", "response": "fake answer"},
+    ]
+    assert response.text.endswith("\n")
+    assert fake.requests[0].history[0].content == "earlier"
+
+
+def test_chat_stream_returns_503_when_agent_not_configured(monkeypatch):
+    """Without an AI agent the stream endpoint fails before streaming starts."""
+    monkeypatch.setattr(app.state, "chat_agent", None, raising=False)
+
+    response = client.post("/chat/stream", json={"user_id": 1, "message": "Hi"})
+
+    assert response.status_code == 503
+
+
+def test_chat_stream_rejects_a_bad_body():
+    """The stream endpoint validates its body like /chat."""
+    response = client.post("/chat/stream", json={"user_id": 1})
+
+    assert response.status_code == 422
 
 
 def test_chat_rejects_non_integer_user_id():

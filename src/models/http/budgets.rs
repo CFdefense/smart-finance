@@ -104,6 +104,35 @@ pub fn parse_month(month: Option<&str>, today: NaiveDate) -> Result<MonthWindow,
     Ok(MonthWindow { start, end })
 }
 
+/// Spending total for one transaction category.
+///
+/// The category uses the shared Category enum so the
+/// frontend receives the same names as our budget API.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct CategorySpending {
+    /// The transaction category, e.g. GROCERIES.
+    pub category: Category,
+
+    /// Total positive transaction amounts for the month.
+    pub amount: f64,
+}
+
+/// All expense categories for one calendar month.
+///
+/// Unlike the budgets endpoint, this includes categories
+/// even if the user hasn't created a budget for them.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct CategorySpendingResponse {
+    /// The evaluated month in YYYY-MM format.
+    pub month: String,
+
+    /// Total spending across all categories.
+    pub total: f64,
+
+    /// Categories with positive spending.
+    pub categories: Vec<CategorySpending>,
+}
+
 /// A budget with its computed spending for one month.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct BudgetResponse {

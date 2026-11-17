@@ -4,11 +4,19 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 
+class HistoryMessage(BaseModel):
+    """One earlier message of the conversation."""
+
+    role: Literal["user", "assistant"]
+    content: str
+
+
 class ChatRequest(BaseModel):
     """Represent an incoming chat request."""
 
     user_id: int
     message: str
+    history: list[HistoryMessage] = Field(default_factory=list, max_length=20)
 
 
 class ChatResponse(BaseModel):
@@ -81,4 +89,6 @@ class AnalysisResult(BaseModel):
     status: AnalysisStatus
     assessment: Assessment | None = None
     notified: bool = False
+    anomaly_flagged: bool | None = None  # None = detection failed or didn't run
+    anomaly_reason: str | None = None
     error: str | None = None

@@ -145,7 +145,7 @@ mod test {
     #[test]
     fn account_ids_default_to_empty() {
         let r: RuleRequest = serde_json::from_str(r#"{"description":"d"}"#).unwrap();
-        assert!(r.account_ids.is_empty());
+        assert_eq!(r.account_ids, [] as [String; 0]);
         assert_eq!(r.enabled, None);
     }
 }

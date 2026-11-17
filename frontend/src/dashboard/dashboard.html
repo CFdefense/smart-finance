@@ -39,6 +39,570 @@
     </div>
   </div>
   <div class="parent">
+    <!--
+  Current linked-account net worth.
+  This belongs at the very top of the financial dashboard.
+-->
+    <section class="net-worth-card" aria-labelledby="net-worth-heading">
+      <div class="net-worth-content">
+        <div class="net-worth-label">
+          <span class="material-symbols-outlined" aria-hidden="true">account_balance_wallet</span>
+          <h2 id="net-worth-heading">Total Net Worth</h2>
+        </div>
+
+        @if (accountsLoading()) {
+          <p class="net-worth-value">Loading...</p>
+        } @else if (accountsError()) {
+          <p class="net-worth-value">Unavailable</p>
+        } @else if (netWorthSummary().included === 0) {
+          <p class="net-worth-value">Unavailable</p>
+          <p class="net-worth-note">Connect supported accounts with available USD balances.</p>
+        } @else {
+          <p class="net-worth-value">
+            {{ netWorthSummary().amount | currency: 'USD' }}
+          </p>
+
+          <div class="net-worth-breakdown">
+            <span>
+              Assets:
+              {{ netWorthSummary().assets | currency: 'USD' }}
+            </span>
+
+            <span>
+              Liabilities:
+              {{ netWorthSummary().liabilities | currency: 'USD' }}
+            </span>
+          </div>
+
+          @if (netWorthSummary().excluded > 0) {
+            <p class="net-worth-note">Partial total: some accounts could not be included.</p>
+          }
+        }
+
+        <p class="net-worth-note">Based on your connected financial accounts.</p>
+      </div>
+    </section>
+
+    <section class="dashboard-accounts" aria-labelledby="accounts-heading">
+      <div class="accounts-heading">
+        <div>
+          <h2 id="accounts-heading">Connected Accounts</h2>
+          <p>Select an account to view its transactions.</p>
+        </div>
+
+        <span class="material-symbols-outlined" aria-hidden="true">account_balance</span>
+      </div>
+
+      <!-- Accounts have their own loading and error states. -->
+      @if (accountsLoading()) {
+        <p class="accounts-message">Loading connected accounts...</p>
+      } @else if (accountsError()) {
+        <div class="accounts-message" role="alert">
+          <p>Unable to retrieve connected accounts.</p>
+          <button type="button" (click)="loadAccounts()">Try Again</button>
+        </div>
+      } @else if (accounts().length === 0) {
+        <p class="accounts-message">
+          No bank accounts connected yet. Connect a bank through your Profile page to get started.
+        </p>
+      } @else {
+        <!-- One expandable card for every linked financial account. -->
+        <div class="account-list">
+          @for (account of accounts(); track account.account_id) {
+            <article class="account-card">
+              <!--
+            A real button makes the account selectable using
+            either a mouse or keyboard.
+          -->
+              <button
+                type="button"
+                class="account-select"
+                [attr.aria-expanded]="selectedAccountId() === account.account_id"
+                (click)="selectAccount(account.account_id)">
+                <div class="account-information">
+                  <strong>{{ account.name }}</strong>
+
+                  <span class="account-description">
+                    {{ account.institution_name || 'Connected bank' }}
+
+                    @if (account.mask) {
+                      ·•••• {{ account.mask }}
+                    }
+                  </span>
+                </div>
+
+                <div class="account-value">
+                  <!-- A null balance is not the same as $0. -->
+                  @if (account.current_balance !== null) {
+                    <strong>{{ account.current_balance | currency }}</strong>
+                  } @else {
+                    <strong>Unavailable</strong>
+                  }
+
+                  <span class="material-symbols-outlined" aria-hidden="true">
+                    {{ selectedAccountId() === account.account_id ? 'expand_less' : 'expand_more' }}
+                  </span>
+                </div>
+              </button>
+
+              <!-- Show transactions only for the expanded account. -->
+              @if (selectedAccountId() === account.account_id) {
+                <div class="account-transactions">
+                  <h3>Transactions</h3>
+
+                  @if (transactionsLoading()) {
+                    <p class="accounts-message">Loading transactions...</p>
+                  } @else if (transactionsError()) {
+                    <div role="alert" class="accounts-message">
+                      <p>Unable to load transactions for this account.</p>
+                      <button type="button" (click)="loadTransactions()">Retry</button>
+                    </div>
+                  } @else if (transactions().length === 0) {
+                    <p class="accounts-message">No transactions found for this account.</p>
+                  } @else {
+                    <!--
+                  Display the most useful transaction information.
+                  Positive Plaid amounts represent spending.
+                -->
+                    <div class="transaction-list">
+                      @for (transaction of transactions(); track transaction.transaction_id) {
+                        <div class="transaction-row">
+                          <div class="transaction-details">
+                            <strong>{{ transaction.name }}</strong>
+
+                            <span class="transaction-description">
+                              {{ transaction.date }}
+                              · {{ categoryLabel(transaction.category) }}
+
+                              @if (transaction.pending) {
+                                · Pending
+                              }
+                            </span>
+                          </div>
+
+                          <strong
+                            class="transaction-amount"
+                            [class.incoming]="transaction.amount < 0">
+                            @if (transaction.amount > 0) {
+                              -
+                            } @else if (transaction.amount < 0) {
+                              +
+                            }
+
+                            {{
+                              (transaction.amount < 0 ? -transaction.amount : transaction.amount)
+                                | currency
+                            }}
+                          </strong>
+                        </div>
+                      }
+                    </div>
+
+                    <!-- Pagination controls -->
+                    <div class="transaction-pagination">
+                      <span>Page {{ transactionPage() + 1 }} of {{ totalTransactionPages() }}</span>
+
+                      <div class="pagination-buttons">
+                        <button
+                          type="button"
+                          (click)="previousTransactionPage()"
+                          [disabled]="transactionsLoading() || transactionPage() === 0">
+                          Previous
+                        </button>
+
+                        <button
+                          type="button"
+                          (click)="nextTransactionPage()"
+                          [disabled]="transactionsLoading() || !hasNextTransactionPage()">
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  }
+                </div>
+              }
+            </article>
+          }
+        </div>
+      }
+    </section>
+
+    <!--
+  Financial charts.
+
+  Desktop: two columns side by side.
+  Mobile: charts stack vertically.
+
+  The right panel will become our expenses-by-category
+  chart in the next implementation section.
+-->
+    <section class="dashboard-charts" aria-label="Financial charts">
+      <!-- Historical net-worth chart -->
+      <article class="financial-chart-card">
+        <div class="chart-heading">
+          <div>
+            <h2>Net Worth Over Time</h2>
+            <p>Historical linked-account balances</p>
+
+            <!--
+  Select which period of historical net-worth
+  records should be displayed.
+
+  Changing this updates an Angular signal, causing
+  the graph to recalculate automatically.
+-->
+            <label class="net-worth-range-label" for="net-worth-range">Show history</label>
+
+            <select
+              id="net-worth-range"
+              class="net-worth-range-select"
+              [value]="netWorthRange()"
+              (change)="onNetWorthRangeChange($event)">
+              <option value="1M">Last 1 month</option>
+              <option value="3M">Last 3 months</option>
+              <option value="6M">Last 6 months</option>
+              <option value="1Y">Last 1 year</option>
+              <option value="5Y">Last 5 years</option>
+              <option value="10Y">Last 10 years</option>
+            </select>
+          </div>
+
+          <span class="material-symbols-outlined" aria-hidden="true">show_chart</span>
+        </div>
+
+        @if (netWorthHistoryLoading()) {
+          <p class="chart-message">Loading net-worth history...</p>
+        } @else if (netWorthHistoryError()) {
+          <div class="chart-message" role="alert">
+            <p>Unable to load net-worth history.</p>
+            <button type="button" (click)="loadNetWorthHistory()">Try Again</button>
+          </div>
+        } @else if (visibleNetWorthHistory().length === 0) {
+          <p class="chart-message">
+            No historical data yet. Your history will appear after your connected accounts have been
+            recorded.
+          </p>
+        } @else {
+          @if (visibleNetWorthIncludesDemo()) {
+            <!-- Clearly identify generated sandbox values. -->
+            <p class="net-worth-demo-note">
+              <span class="material-symbols-outlined" aria-hidden="true">science</span>
+              Demo history — includes simulated financial values
+            </p>
+          }
+
+          <!--
+        A responsive SVG chart.
+
+        The viewBox establishes a coordinate system that
+        scales automatically with the card's width.
+      -->
+          <svg
+            class="net-worth-graph"
+            viewBox="0 0 640 250"
+            role="img"
+            aria-label="Line chart showing historical net worth in US dollars">
+            <!-- Horizontal reference lines -->
+            <line x1="50" y1="35" x2="590" y2="35" class="chart-grid-line" />
+            <line x1="50" y1="115" x2="590" y2="115" class="chart-grid-line" />
+            <line x1="50" y1="195" x2="590" y2="195" class="chart-grid-line" />
+
+            <!-- Y-axis labels reflect actual data bounds. -->
+            <text x="45" y="39" class="chart-axis-label" text-anchor="end">
+              {{ netWorthChart().maxValue | currency: 'USD' : 'symbol' : '1.0-0' }}
+            </text>
+
+            <text x="45" y="199" class="chart-axis-label" text-anchor="end">
+              {{ netWorthChart().minValue | currency: 'USD' : 'symbol' : '1.0-0' }}
+            </text>
+
+            <!-- Connect the historical data points. -->
+            @if (visibleNetWorthHistory().length > 1) {
+              <polyline class="chart-line" [attr.points]="netWorthChart().points" />
+            }
+
+            <!-- One circle for every actual recorded snapshot. -->
+            @for (point of netWorthChart().markers; track point.date) {
+              <circle class="chart-point" [attr.cx]="point.x" [attr.cy]="point.y" r="5">
+                <!-- Native SVG tooltip on hover. -->
+                <title>
+                  {{ point.date }}:
+                  {{ point.amount | currency: 'USD' }}
+                </title>
+              </circle>
+            }
+
+            <!-- X-axis date labels -->
+            <text x="50" y="225" class="chart-axis-label">
+              {{ netWorthChart().firstDate }}
+            </text>
+
+            <text x="590" y="225" class="chart-axis-label" text-anchor="end">
+              {{ netWorthChart().lastDate }}
+            </text>
+          </svg>
+
+          @if (visibleNetWorthHistory().length === 1) {
+            <p class="chart-message chart-hint">
+              Only one day of history is available so far. More points will appear as new snapshots
+              are recorded.
+            </p>
+          }
+        }
+      </article>
+
+      <!--
+  Expenses-by-category chart.
+
+  Rust calculates current-month spending across all
+  connected accounts. Angular only renders the results.
+-->
+      <article class="financial-chart-card">
+        <div class="chart-heading">
+          <div>
+            <h2>Expenses by Category</h2>
+            <p>
+              @if (categorySpending()?.month) {
+                Spending for {{ categorySpending()?.month }}
+              } @else {
+                Current month's spending
+              }
+            </p>
+
+            <!--
+  Let users view spending from different calendar months.
+
+  The input automatically displays a native month picker,
+  which is accessible on desktop and mobile devices.
+-->
+            <div class="expense-month-control">
+              <label for="expense-month">Spending month</label>
+              <select
+                id="expense-month"
+                [value]="selectedExpenseMonth()"
+                (change)="onExpenseMonthChange($event)"
+                aria-label="Select expense month">
+                @for (month of expenseMonthOptions; track month.value) {
+                  <option [value]="month.value">{{ month.label }}</option>
+                }
+              </select>
+            </div>
+          </div>
+
+          <span class="material-symbols-outlined" aria-hidden="true">donut_small</span>
+        </div>
+
+        @if (categorySpendingLoading()) {
+          <p class="chart-message">Loading expense categories...</p>
+        } @else if (categorySpendingError()) {
+          <div class="chart-message" role="alert">
+            <p>Unable to load your expense breakdown.</p>
+
+            <button type="button" (click)="loadCategorySpending()">Try Again</button>
+          </div>
+        } @else if (expenseChart().segments.length === 0) {
+          <p class="chart-message">
+            No categorized spending found for this month. Your chart will appear when transactions
+            are available.
+          </p>
+        } @else {
+          <div class="expense-chart-content">
+            <!--
+        SVG donut chart.
+
+        Every circle has the same center and radius.
+        Each segment has a different visible stroke length.
+        SVG rotation makes the chart start at 12 o'clock.
+      -->
+            <div class="expense-donut-container">
+              <svg
+                class="expense-donut"
+                viewBox="0 0 220 220"
+                role="img"
+                aria-label="Donut chart showing monthly spending by category">
+                <!-- Background track -->
+                <circle cx="110" cy="110" r="72" fill="none" stroke="#e2e8f0" stroke-width="30" />
+
+                <!-- Spending categories -->
+                @for (segment of expenseChart().segments; track segment.category) {
+                  <circle
+                    cx="110"
+                    cy="110"
+                    r="72"
+                    fill="none"
+                    stroke-width="30"
+                    [attr.stroke]="segment.color"
+                    [attr.stroke-dasharray]="segment.dasharray"
+                    [attr.stroke-dashoffset]="segment.dashoffset"
+                    transform="rotate(-90 110 110)">
+                    <title>
+                      {{ segment.label }}:
+                      {{ segment.amount | currency: 'USD' }}
+                      ({{ segment.percent | number: '1.1-1' }}%)
+                    </title>
+                  </circle>
+                }
+
+                <!-- Total spending in the center -->
+                <text x="110" y="103" text-anchor="middle" class="expense-donut-label">
+                  Total Spent
+                </text>
+
+                <text x="110" y="125" text-anchor="middle" class="expense-donut-total">
+                  {{ expenseChart().total | currency: 'USD' : 'symbol' : '1.0-0' }}
+                </text>
+              </svg>
+            </div>
+
+            <!--
+        Accessible category legend.
+
+        This also lets users read exact spending amounts
+        without relying entirely on colors.
+      -->
+            <div class="expense-legend">
+              @for (segment of expenseChart().segments; track segment.category) {
+                <div class="expense-legend-row">
+                  <div class="expense-legend-name">
+                    <span
+                      class="expense-color-dot"
+                      [style.background-color]="segment.color"
+                      aria-hidden="true"></span>
+
+                    <span>{{ segment.label }}</span>
+                  </div>
+
+                  <div class="expense-legend-amount">
+                    <strong>{{ segment.amount | currency: 'USD' }}</strong>
+                    <span>{{ segment.percent | number: '1.1-1' }}%</span>
+                  </div>
+                </div>
+              }
+            </div>
+          </div>
+        }
+      </article>
+    </section>
+
+    <!-- =====================================================
+     DASHBOARD PROGRESS OVERVIEW
+
+     This section summarizes budget and savings progress.
+     Detailed editing stays on the Budgets and Goals pages.
+     ===================================================== -->
+    <section class="dashboard-progress-grid" aria-label="Financial progress">
+      <!-- ================= MONTHLY BUDGETS ================= -->
+      <article class="dashboard-progress-card">
+        <div class="dashboard-progress-header">
+          <div>
+            <h2>Monthly Budgets</h2>
+            <p>Spending compared with your monthly limits</p>
+          </div>
+
+          <button type="button" (click)="openBudgets()">Manage</button>
+        </div>
+
+        @if (budgetsLoading()) {
+          <p class="progress-empty">Loading budgets...</p>
+        } @else if (budgetsError()) {
+          <p class="progress-empty">Unable to load budgets.</p>
+        } @else if (dashboardActiveBudgets().length === 0) {
+          <p class="progress-empty">No active budgets yet. Create one to track your spending.</p>
+        } @else {
+          @for (budget of dashboardActiveBudgets(); track budget.id) {
+            <div class="dashboard-progress-item">
+              <div class="dashboard-progress-item-heading">
+                <strong>{{ budget.name }}</strong>
+
+                <span>
+                  {{ progressLabel(budget.percent_used) }}
+                </span>
+              </div>
+
+              <div
+                class="dashboard-progress-track"
+                role="progressbar"
+                [attr.aria-label]="budget.name + ' budget usage'"
+                [attr.aria-valuenow]="progressBarWidth(budget.percent_used)"
+                aria-valuemin="0"
+                aria-valuemax="100">
+                <div
+                  class="dashboard-progress-fill budget-fill"
+                  [class.over-budget]="budget.over_budget || budget.percent_used > 100"
+                  [style.width.%]="progressBarWidth(budget.percent_used)"></div>
+              </div>
+
+              <p class="dashboard-progress-detail">
+                {{ budget.spent | currency }} spent of
+                {{ budget.monthly_limit | currency }}
+              </p>
+
+              @if (budget.over_budget) {
+                <p class="dashboard-progress-warning">
+                  Over budget by {{ -budget.remaining | currency }}
+                </p>
+              }
+            </div>
+          }
+        }
+      </article>
+
+      <!-- ================= FINANCIAL GOALS ================= -->
+      <article class="dashboard-progress-card">
+        <div class="dashboard-progress-header">
+          <div>
+            <h2>Savings Goals</h2>
+            <p>Progress toward your financial targets</p>
+          </div>
+
+          <button type="button" (click)="openGoals()">Manage</button>
+        </div>
+
+        @if (dashboardGoalsLoading()) {
+          <p class="progress-empty">Loading goals...</p>
+        } @else if (dashboardGoalsError()) {
+          <p class="progress-empty">Unable to load goals.</p>
+        } @else if (dashboardVisibleGoals().length === 0) {
+          <p class="progress-empty">No financial goals yet. Create one to track your progress.</p>
+        } @else {
+          @for (goal of dashboardVisibleGoals(); track goal.id) {
+            <div class="dashboard-progress-item">
+              <div class="dashboard-progress-item-heading">
+                <strong>{{ goal.name }}</strong>
+
+                <span>
+                  {{ progressLabel(goal.progress_percent) }}
+                </span>
+              </div>
+
+              <div
+                class="dashboard-progress-track"
+                role="progressbar"
+                [attr.aria-label]="goal.name + ' goal progress'"
+                [attr.aria-valuenow]="progressBarWidth(goal.progress_percent)"
+                aria-valuemin="0"
+                aria-valuemax="100">
+                <div
+                  class="dashboard-progress-fill goal-fill"
+                  [style.width.%]="progressBarWidth(goal.progress_percent)"></div>
+              </div>
+
+              <p class="dashboard-progress-detail">
+                {{ goal.current_balance | currency }} current balance /
+                {{ goal.target_amount | currency }} target
+              </p>
+
+              @if (goal.status === 'COMPLETED') {
+                <p class="dashboard-progress-success">Goal completed!</p>
+              } @else {
+                <p class="dashboard-progress-detail">{{ goal.remaining | currency }} remaining</p>
+              }
+            </div>
+          }
+        }
+      </article>
+    </section>
+
     <div class="budget-buttons">
       <!-- Open the Budgets page to create, edit, or delete budgets. -->
       <button type="button" class="create-budget" (click)="openBudgets()">
@@ -53,6 +617,7 @@
       </button>
     </div>
 
+    <!-- Monthly budget summary, displayed below the charts. -->
     <div class="totals-and-remaining">
       <div class="total-budget">
         <span class="material-symbols-outlined attach-money">attach_money</span>

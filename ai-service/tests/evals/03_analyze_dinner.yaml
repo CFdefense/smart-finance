@@ -1,0 +1,43 @@
+# The old scenario relied on $82 of dining already spent this month (seed_christian.py inserted
+# demo transactions), so a $60 dinner tipped the $100 budget. The framework does not insert
+# transactions and the Plaid sandbox leaves every category as OTHER, so the FOOD_DINING budget
+# shows $0 spent here. The test therefore checks that the dinner is judged against the budget
+# and the other rules, not that it overruns it.
+- description: Nobu dinner is checked against the $100 dining budget
+  vars:
+    persona: christian@test.com
+    agent: analyze
+    budgets:
+      - { name: Eating out, category: FOOD_DINING, monthly_limit: 100 }
+      - { name: Shopping, category: SHOPPING, monthly_limit: 150 }
+      - { name: Fun money, category: ENTERTAINMENT, monthly_limit: 40 }
+      - { name: Groceries, category: GROCERIES, monthly_limit: 300 }
+    rules:
+      - description: Flag any single purchase over $200.
+        account: TD Bank Student Checking
+      - description: No gambling, casinos or betting sites on any account.
+      - description: The Capital One card is for dining and travel only.
+        account: Capital One Quicksilver
+    goals:
+      - name: Spring break trip
+        description: Save for a trip with friends.
+        account: TD Bank Student Checking
+        target_amount: 2500
+        days_until_target: 120
+      - name: Roth IRA contribution
+        description: Add $500 to the Roth IRA.
+        account: Robinhood Roth IRA
+        target_amount: 1000
+        days_until_target: 60
+    transaction:
+      name: Nobu Restaurant
+      amount: 60
+      category: FOOD_DINING
+      account: TD Bank Student Checking
+    expected: >-
+      Verdict OK or REVIEW, not ALERT: no rule is broken. The response weighs the $60 dinner
+      against the $100 Eating out budget and states the spend accurately.
+  assert:
+    - { type: python, value: "file://graders.py:adherence", config: { threshold: 0.7 } }
+    - { type: python, value: "file://graders.py:accuracy", config: { threshold: 0.7 } }
+    - { type: python, value: "file://graders.py:goal", config: { threshold: 0.7 } }
