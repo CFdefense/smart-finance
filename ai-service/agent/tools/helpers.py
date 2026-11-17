@@ -48,9 +48,6 @@ class Refusal(Exception):  # noqa: N818 - a normal tool outcome, not an error
     """A tool declines a request. The message becomes the tool's result for the model."""
 
 
-# --- output -------------------------------------------------------------------------------
-
-
 def today() -> date:
     """Return today's date (tools call this so tests can pin it)."""
     return date.today()
@@ -91,9 +88,6 @@ def safe_tool(fn: Callable[..., str]) -> Callable[..., str]:
     return wrapper
 
 
-# --- calculations -------------------------------------------------------------------------
-
-
 def window(days: int) -> tuple[int, date, date]:
     """Return (days, start, end) for the last `days` days including today; end is exclusive."""
     days = max(1, min(days, 365))
@@ -111,9 +105,6 @@ def spendable(account: Account) -> float:
     if account.available_balance is not None:
         return account.available_balance
     return account.current_balance or 0.0
-
-
-# --- checking what the model asked for ----------------------------------------------------
 
 
 def route_allowed(method: str, path: str) -> bool:
@@ -167,9 +158,6 @@ def future_date(value: str) -> date:
     if parsed <= today():
         raise Refusal("The target date must be in the future.")
     return parsed
-
-
-# --- looking things up in the user's own data ---------------------------------------------
 
 
 def pick_account(accounts: list[Account], wanted: str, offer: str) -> Account:

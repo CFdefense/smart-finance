@@ -37,9 +37,6 @@ def passed(result):
     return result["pass"]
 
 
-# --- tools_called / tools_not_called -------------------------------------------------------
-
-
 def test_tools_called_passes_when_every_expected_tool_ran():
     """Order and repeats do not matter."""
     result = graders.tools_called(
@@ -95,8 +92,6 @@ def test_graders_refuse_to_grade_without_the_recorded_calls():
     with pytest.raises(ValueError, match="backend_calls"):
         graders.nothing_saved("", bare)
 
-
-# --- backend_matches -----------------------------------------------------------------------
 
 BUDGET = sent(
     "POST", "/api/budgets", {"name": "Groceries", "category": "GROCERIES", "monthly_limit": 400}
@@ -306,9 +301,6 @@ def test_backend_matches_rejects_a_reference_that_is_missing_or_ambiguous(name):
         graders.backend_matches("", ctx_with_facts([sent("DELETE", "/api/rules/32")], item))
 
 
-# --- nothing_saved / confirmed_before_write ------------------------------------------------
-
-
 def test_nothing_saved():
     """Passes with no backend calls and fails with any."""
     assert passed(graders.nothing_saved("", ctx()))
@@ -344,9 +336,6 @@ def test_confirmed_before_write_rejects_a_confirm_with_no_earlier_proposal():
 def test_confirmed_before_write_passes_when_nothing_was_written():
     """No writes, nothing to gate."""
     assert passed(graders.confirmed_before_write("", ctx([tool("propose_budget")])))
-
-
-# --- output_contains / output_excludes / search_privacy ------------------------------------
 
 
 def test_output_contains_is_case_insensitive_and_names_the_missing_text():

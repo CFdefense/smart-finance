@@ -111,9 +111,6 @@ def staged(rig):
     return rig.store.take(7, "inspect")
 
 
-# --- shape ---------------------------------------------------------------------------------
-
-
 def test_tool_names_and_order(rig):
     """Six write tools, proposals first and confirm last."""
     assert list(rig.tools) == [
@@ -144,9 +141,6 @@ def test_proposal_descriptions_say_nothing_is_saved(rig):
     ):
         assert "not saved" in rig.tools[name].description.lower()
     assert "agreed" in rig.tools["confirm_action"].description.lower()
-
-
-# --- propose_budget ------------------------------------------------------------------------
 
 
 def test_propose_budget_stages_and_does_not_call_the_backend(rig):
@@ -211,9 +205,6 @@ def test_propose_budget_refuses_a_second_budget_for_a_category(rig):
     assert len(rig.store) == 0
 
 
-# --- propose_rule --------------------------------------------------------------------------
-
-
 def test_propose_rule_for_all_accounts(rig):
     """No account names means every account."""
     text = call(rig, "propose_rule", description="Flag any purchase over $200.")
@@ -274,9 +265,6 @@ def test_propose_rule_preview_is_sanitized(rig):
     """The text shown back to the model has no angle brackets or control characters."""
     text = call(rig, "propose_rule", description="Flag <b>big</b>\x00 buys")
     assert "<b>" not in text and "\x00" not in text
-
-
-# --- propose_goal --------------------------------------------------------------------------
 
 
 def test_propose_goal_full(rig):
@@ -402,9 +390,6 @@ def test_propose_goal_with_no_depository_accounts(monkeypatch, rig):
     assert "no checking or savings" in text.lower()
 
 
-# --- propose_update ------------------------------------------------------------------------
-
-
 def test_update_budget_limit(rig):
     """Only the changed field is sent, to the item's own route."""
     text = call(rig, "propose_update", kind="budget", item_id=3, monthly_limit=500)
@@ -498,9 +483,6 @@ def test_update_rejects_fields_that_do_not_belong_to_the_kind(rig):
     assert "cannot change: description" in text and "monthly_limit" in text
 
 
-# --- propose_delete ------------------------------------------------------------------------
-
-
 @pytest.mark.parametrize(
     ("kind", "item_id", "path", "named"),
     [
@@ -521,9 +503,6 @@ def test_propose_delete_unknown_id(rig):
     """Deleting something that is not there is refused."""
     text = call(rig, "propose_delete", kind="goal", item_id=1234)
     assert "No goal with id 1234" in text and len(rig.store) == 0
-
-
-# --- confirm_action ------------------------------------------------------------------------
 
 
 def stage_and_get_reference(rig):
@@ -647,9 +626,6 @@ def test_database_failure_while_proposing_stages_nothing(monkeypatch, rig):
     text = call(rig, "propose_budget", name="B", category="OTHER", monthly_limit=10)
 
     assert text == UNAVAILABLE and len(rig.store) == 0
-
-
-# --- route allowlist and preview sanitising ----------------------------------------------
 
 
 @pytest.mark.parametrize(
