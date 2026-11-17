@@ -108,7 +108,7 @@ folder is picked up). Name files `NN_<analyze|chat>_<testname>.yaml` (for exampl
 | `seed_transactions` | no (chat) | Extra transactions to insert: `name`, `amount`, `account` (required); `category` (default `OTHER`), `days_ago` (default 0). Positive amounts are money out. Use these for exact totals; the Plaid sandbox puts everything in `OTHER`. |
 | `search_results` | no (chat) | Replace web search with exactly these results (`title`, `content`, optional `url`). `[]` means "found nothing". Omit it to use the real web. |
 | `expect_tools`, `forbid_tools` | for `tools_called`, `tools_not_called` | Tool names the agent must / must not call. Unknown names are rejected. |
-| `expect_backend` | for `backend_matches` | The exact changes the agent must save, in order: `method` (`POST`/`PUT`/`DELETE`), `path` or `path_prefix`, optional `turn` (0 is the first message) and `body` (every listed key must match; `"*"` means any value; `@account:<Account Name>` means that account's id). |
+| `expect_backend` | for `backend_matches` | The exact changes the agent must save, in order: `method` (`POST`/`PUT`/`DELETE`), `path` or `path_prefix`, optional `turn` (0 is the first message) and `body` (every listed key must match; `"*"` means any value; `@account:<Account Name>` means that account's id). A trailing `@budget:<name>`, `@goal:<name>` or `@rule:<text substring>` in `path` is replaced by that item's id; it must match exactly one item. |
 | `must_contain`, `must_not_contain` | for `output_contains`, `output_excludes` | Text (case-insensitive) the reply must / must not contain. |
 | `private_terms` | for `search_privacy` | Terms that must never appear in a web search query. |
 
@@ -138,7 +138,9 @@ that passes.
 | `file://graders.py:search_privacy` | deterministic | no `private_terms` entry was sent to web search |
 
 The judge sees the request, the agent's response, and a snapshot of the persona's data (accounts,
-recent transactions, budgets with spend, rules, goals). Use `npm run view` to read each grader's
+recent transactions, budgets with spend, rules, goals). For chat evals the snapshot covers 365 days and up
+to 500 transactions, matching how far back the agent looks; for analyze evals it uses the analyzer's own
+window. Use `npm run view` to read each grader's
 score and reason.
 
 A bad definition (unknown persona or account, missing field) is reported as an **error**, not a
@@ -149,8 +151,9 @@ failed grade, with a message saying what to fix.
 - The Plaid sandbox puts every transaction in category `OTHER`, so only a budget on `OTHER` ever
   shows real spend. Budgets in other categories always show $0 spent.
 - The chat agent sees the user's rules, so chat tests can expect rule recall.
-- `arthur@test.com` has five accounts and **no** transactions of its own, so with `seed_transactions` every
-  total is exact. Prefer it for numbers. Balances: Plaid Checking 4,200; Plaid Saving 14,500; Plaid Money
+- `arthur@test.com` has five accounts and about 290 Plaid sandbox transactions of its own. When a case uses
+  `seed_transactions`, those rows are set aside (stashed) for the test and restored on the next reset, so
+  every total is exact. Prefer it for numbers. Balances: Plaid Checking 4,200; Plaid Saving 14,500; Plaid Money
   Market 26,500; Plaid 401k 38,500; Plaid Credit Card 1,750 owed.
 - promptfoo would run one test per string in a list var; `promptfooconfig.yaml` turns that off
   (`disableVarExpansion`). Do not remove it.

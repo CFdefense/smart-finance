@@ -102,6 +102,12 @@ it did when it could only read.
   chat session.
 - Confirming only runs a change the user was shown (the staged preview). Staging a revised change for the
   same item replaces the earlier one.
+- The chat history holds only user and assistant text, not tool results, so on the "yes" turn the model
+  cannot see the reference it was given. `confirm_action` therefore treats a missing, wrong or invented
+  `action_id` as "the user's single waiting change". With several waiting, the user must say which. This
+  still cannot happen in the request that made the proposal.
+- `goal_progress` paces each goal by the net deposits into the goal's own account over the last 90 days,
+  not by all accounts together.
 - The model is told to confirm only after an explicit user "yes". That is an instruction to the model, not
   something the service can verify; the service only enforces that confirmation happens in a later request
   than the proposal.
