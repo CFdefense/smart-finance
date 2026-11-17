@@ -13,7 +13,6 @@ from agent.auth_cookie import COOKIE_NAME, mint_auth_cookie
 
 _log = logging.getLogger("agent.run.backend")
 
-DEFAULT_BASE_URL = "http://127.0.0.1:3001"
 CONFLICT_MESSAGE = "That already exists. A budget for that category may already be set."
 UNREACHABLE_MESSAGE = "The budgeting service could not be reached."
 UNAVAILABLE_MESSAGE = "Saving changes is unavailable right now."
@@ -81,13 +80,22 @@ class UnavailableBackendApi:
 
 
 def backend_from_env() -> BackendApi:
-    """Build the HTTP client from `COOKIE_KEY` and `BACKEND_API_URL`, or a refusing stand-in."""
+    """
+    Build the HTTP client from `COOKIE_KEY` and `BIND_ADDRESS`, or a refusing stand-in.
+
+    `BIND_ADDRESS` is the address the Rust server listens on, so it is also where to reach it.
+    Neither has a default; if either is missing, saving changes is switched off.
+    """
     key = os.environ.get("COOKIE_KEY")
     if not key:
         _log.warning("backend.disabled reason=no_cookie_key")
         return UnavailableBackendApi()
+    address = os.environ.get("BIND_ADDRESS")
+    if not address:
+        _log.warning("backend.disabled reason=no_bind_address")
+        return UnavailableBackendApi()
     try:
-        return HttpBackendApi(os.environ.get("BACKEND_API_URL", DEFAULT_BASE_URL), key)
+        return HttpBackendApi(f"http://{address}", key)
     except ValueError:
         _log.warning("backend.disabled reason=bad_cookie_key")
         return UnavailableBackendApi()

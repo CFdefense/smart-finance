@@ -85,7 +85,7 @@ workers do not share them (see "Ideas" below).
 | Variable | Meaning |
 |---|---|
 | `COOKIE_KEY` | **Required for saving.** The same 64-byte hex key the Rust server uses. The service mints a short-lived (5 minute) `auth-token` cookie for the request's verified `user_id` only. Without it, chat still reads and searches, and says saving is unavailable. |
-| `BACKEND_API_URL` | Where the Rust API runs. Default `http://127.0.0.1:3001`. |
+| `BIND_ADDRESS` | **Required for saving.** The address the Rust server listens on (for example `127.0.0.1:3001`); the service calls the API there. It is the Rust server's own setting from the shared `.env`, with no default. Without it saving is switched off, as without `COOKIE_KEY`. It must be an address you can connect to, so not `0.0.0.0`. |
 
 `COOKIE_KEY` lets the holder sign in as any user. Keep it out of logs and version control, and give it to the
 ai-service only in environments where the service itself is trusted. This is an interim design; see the first

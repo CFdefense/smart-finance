@@ -138,10 +138,11 @@ def test_unavailable_api_always_refuses():
 
 
 def test_backend_from_env_uses_the_environment(monkeypatch):
-    """A valid COOKIE_KEY and BACKEND_API_URL give a working HTTP client."""
+    """A valid COOKIE_KEY and the server's BIND_ADDRESS give a working HTTP client."""
     monkeypatch.setenv("COOKIE_KEY", KEY_HEX)
-    monkeypatch.setenv("BACKEND_API_URL", "http://example.test")
-    assert isinstance(backend_from_env(), HttpBackendApi)
+    monkeypatch.setenv("BIND_ADDRESS", "127.0.0.1:3001")
+    api = backend_from_env()
+    assert isinstance(api, HttpBackendApi) and api._base == "http://127.0.0.1:3001"
 
 
 def test_backend_from_env_without_a_key_is_unavailable(monkeypatch):
@@ -153,15 +154,17 @@ def test_backend_from_env_without_a_key_is_unavailable(monkeypatch):
 def test_backend_from_env_with_a_bad_key_is_unavailable(monkeypatch, caplog):
     """A malformed key disables writes and never logs the key."""
     monkeypatch.setenv("COOKIE_KEY", "not-hex-secret")
+    monkeypatch.setenv("BIND_ADDRESS", "127.0.0.1:3001")
     assert isinstance(backend_from_env(), UnavailableBackendApi)
     assert "not-hex-secret" not in caplog.text
 
 
-def test_default_base_url_is_local(monkeypatch):
-    """Without BACKEND_API_URL the local Rust address is used."""
+def test_backend_from_env_without_a_bind_address_is_unavailable(monkeypatch, caplog):
+    """There is no default address: without BIND_ADDRESS writes are disabled, not guessed."""
     monkeypatch.setenv("COOKIE_KEY", KEY_HEX)
-    monkeypatch.delenv("BACKEND_API_URL", raising=False)
-    assert backend_from_env()._base == "http://127.0.0.1:3001"
+    monkeypatch.delenv("BIND_ADDRESS", raising=False)
+    assert isinstance(backend_from_env(), UnavailableBackendApi)
+    assert "no_bind_address" in caplog.text
 
 
 def test_recording_backend_records_and_succeeds():
