@@ -5,18 +5,22 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 COMPOSE="compose -f deploy/docker-compose.yml --env-file .env"
+BRANCH="${1:-main}"
 
-echo "==> Switching to main"
-git switch main
+echo "==> Switching to $BRANCH"
+git switch $BRANCH
 
 echo "==> Pulling latest changes"
-git pull --ff-only origin main
+git pull --ff-only origin $BRANCH
 
 echo "==> Starting the database and waiting until it is healthy"
 docker $COMPOSE up -d --wait db
 
 echo "==> Running database migrations"
 sqlx migrate run
+
+echo "==> Seeding database"
+cargo run --bin seed-sandbox
 
 echo "==> Building the backend (compiles against the migrated database)"
 # The backend build uses host networking to reach Postgres on 127.0.0.1:5432.
