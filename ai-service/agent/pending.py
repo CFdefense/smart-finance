@@ -12,7 +12,6 @@ DEFAULT_CAPACITY = 200
 
 _NOTHING = "There is nothing waiting for confirmation. Propose the change first."
 _SEVERAL = "Several changes are waiting: {refs}. Ask the user which one, then use its reference."
-_UNKNOWN = "There is no pending change with that reference. It may have expired; propose it again."
 _EXPIRED = "That change expired. Propose it again."
 _SAME_REQUEST = (
     "A change cannot be confirmed in the same turn it was proposed. "
@@ -111,24 +110,32 @@ class PendingActionStore:
         with self._lock:
             expired = self._purge()
             mine = [a for a in self._items.values() if a.user_id == user_id]
-            if action_id is None:
-                if not mine:
-                    # Only the caller's own expiry is reported; never hint at other users'.
-                    raise PendingError(_EXPIRED if user_id in expired else _NOTHING)
-                if len(mine) > 1:
-                    refs = "; ".join(f"{a.action_id} = {a.preview}" for a in mine)
-                    raise PendingError(_SEVERAL.format(refs=refs))
-                action = mine[0]
-            else:
-                wanted = action_id.strip()
-                found = next((a for a in mine if a.action_id == wanted), None)
-                if found is None:
-                    raise PendingError(_UNKNOWN)
-                action = found
+            if not mine:
+                # Only the caller's own expiry is reported; never hint at other users'.
+                raise PendingError(_EXPIRED if user_id in expired else _NOTHING)
+            action = self._choose(mine, action_id)
             if action.request_id == request_id:
                 raise PendingError(_SAME_REQUEST)
             del self._items[action.action_id]
             return action
+
+    @staticmethod
+    def _choose(mine: list[PendingAction], action_id: str | None) -> PendingAction:
+        """
+        Pick which of the user's waiting changes to run.
+
+        A matching reference wins. Otherwise a single waiting change is the one: the model cannot
+        see references from earlier turns (history holds no tool results) and often invents one,
+        and with one change there is nothing to choose between. With several, the user decides.
+        """
+        wanted = (action_id or "").strip()
+        exact = next((a for a in mine if wanted and a.action_id == wanted), None)
+        if exact is not None:
+            return exact
+        if len(mine) == 1:
+            return mine[0]
+        refs = "; ".join(f"{a.action_id} = {a.preview}" for a in mine)
+        raise PendingError(_SEVERAL.format(refs=refs))
 
     def clear(self) -> None:
         """Forget every pending action."""

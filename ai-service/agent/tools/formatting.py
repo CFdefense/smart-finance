@@ -20,7 +20,7 @@ State = Annotated[dict[str, Any], InjectedState]
 _log = logging.getLogger(TOOL)
 
 
-class Refusal(Exception):  # noqa: N818 - plan-mandated name
+class Refusal(Exception):  # noqa: N818 - a normal tool outcome, not an error
     """A tool declines a request. The message becomes the tool's result for the model."""
 
 

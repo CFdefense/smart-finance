@@ -84,7 +84,8 @@ def list_goals(state: State) -> str:
         span = g.target_amount - g.baseline_balance
         done = 100 if span <= 0 else max(0, min(100, (current - g.baseline_balance) / span * 100))
         lines.append(
-            f"- [id={g.id if g.id is not None else '?'}] {_name(g.name)} on {_name(g.account_name)}: "
+            f"- [id={g.id if g.id is not None else '?'}] {_name(g.name)} on "
+            f"{_name(g.account_name)}: "
             f"balance {money(g.current_balance)}, started at {money(g.baseline_balance)}, "
             f"target {money(g.target_amount)}"
             + (f" by {g.target_date.isoformat()}" if g.target_date else "")

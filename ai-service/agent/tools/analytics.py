@@ -11,6 +11,8 @@ from agent.formatting import money, section
 from agent.safety import sanitize
 from agent.tools.formatting import MAX_AMOUNT, Refusal, State, cap, safe_tool, today
 from db import (
+    Account,
+    Goal,
     category_totals,
     load_accounts,
     load_budgets,
@@ -83,7 +85,7 @@ def compare_periods(state: State, days: int = 30) -> str:
 @tool
 @safe_tool
 def budget_status(state: State) -> str:
-    """Show each budget's spend this month, what is left, the projected month-end spend and status."""
+    """Show each budget's spend this month, what is left, the month-end projection and status."""
     now = today()
     lines = [
         f"- {sanitize(s.name, _NAME_MAX)[0]} [{s.category}]: {money(s.spent)} of {money(s.limit)}, "
@@ -93,31 +95,45 @@ def budget_status(state: State) -> str:
     return cap(section(f"Budget status for {now:%B %Y}", lines))
 
 
+def _balance(goal: Goal) -> float:
+    """Return the goal account's current balance, or its starting balance if unknown."""
+    return goal.baseline_balance if goal.current_balance is None else goal.current_balance
+
+
+def _spendable(account: Account) -> float:
+    """Return what can be spent from an account: its available balance, else its current one."""
+    if account.available_balance is not None:
+        return account.available_balance
+    return account.current_balance or 0.0
+
+
 @tool
 @safe_tool
 def goal_progress(state: State) -> str:
-    """Show each savings goal's progress and an estimated finish date from recent savings."""
+    """Show each savings goal's progress and a finish date from its account's net deposits."""
     uid = state["user_id"]
     now = today()
-    goals = load_goals(uid)
-    flow = (
-        net_flow(uid, now - timedelta(days=_SAVINGS_WINDOW_DAYS), now + timedelta(days=1))
-        if goals
-        else 0.0
-    )
-    monthly = flow / _SAVINGS_MONTHS
+    start, end = now - timedelta(days=_SAVINGS_WINDOW_DAYS), now + timedelta(days=1)
     lines = []
-    for goal in goals:
+    for goal in load_goals(uid):
+        # A goal tracks one account's balance, so its pace is that account's net deposits.
+        monthly = net_flow(uid, start, end, goal.account_id) / _SAVINGS_MONTHS
         p = calc.goal_progress(goal, now, monthly)
         if p.eta is None:
-            pace = "finish date unknown (no positive savings rate lately)"
+            pace = "finish date unknown (no net deposits into this account lately)"
         else:
-            pace = f"saving about {money(monthly)}/month, finishing around {p.eta.isoformat()}"
+            pace = (
+                f"net deposits into this account about {money(monthly)}/month "
+                f"(last {_SAVINGS_WINDOW_DAYS} days), finishing around {p.eta.isoformat()}"
+            )
         verdict = {True: " - on track", False: " - behind", None: ""}[p.on_track]
         due = f" (target {goal.target_date.isoformat()})" if goal.target_date else ""
+        goal_id = goal.id if goal.id is not None else "?"
         lines.append(
-            f"- [id={goal.id if goal.id is not None else '?'}] {sanitize(goal.name, _NAME_MAX)[0]}: "
-            f"{p.percent:.0f}% done, {money(p.remaining)} to go; {pace}{due}{verdict}"
+            f"- [id={goal_id}] {sanitize(goal.name, _NAME_MAX)[0]}: "
+            f"{p.percent:.0f}% done, {money(p.remaining)} to go of {money(goal.target_amount)} "
+            f"(balance {money(_balance(goal))}, {money(goal.baseline_balance)} when the goal was "
+            f"set); {pace}{due}{verdict}"
         )
     return cap(section("Goal progress", lines))
 
@@ -153,20 +169,19 @@ def can_i_afford(state: State, amount: float, category: Category | None = None) 
     uid = state["user_id"]
     accounts = [a for a in load_accounts(uid) if a.account_type == "depository"]
     if not accounts:
-        raise Refusal(
-            "The user has no checking or savings account linked, so affordability cannot be checked."
-        )
-    balance = sum(
-        a.available_balance if a.available_balance is not None else (a.current_balance or 0.0)
-        for a in accounts
-    )
+        raise Refusal("The user has no checking or savings account, so affordability is unknown.")
+    balance = sum(_spendable(a) for a in accounts)
     remaining = None
     if category is not None:
         budget = next((b for b in load_budgets(uid, today()) if b.category == category), None)
         if budget is not None:
             remaining = budget.monthly_limit - budget.spent_this_month
     result = calc.can_afford(amount, balance, remaining, category)
-    return cap("\n".join([f"Verdict: {result.verdict}", *result.reasons]))
+    counted = ", ".join(
+        f"{sanitize(a.name, _NAME_MAX)[0]} {money(_spendable(a))}" for a in accounts
+    )
+    note = f"Spendable balance is the available balance of these accounts: {counted}."
+    return cap("\n".join([f"Verdict: {result.verdict}", *result.reasons, note]))
 
 
 ANALYTICS_TOOLS = [

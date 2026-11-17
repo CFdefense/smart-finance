@@ -51,8 +51,12 @@ def merchant_totals(user_id: int, start: date, end: date, limit: int) -> list[Me
     return [MerchantTotal(name=r[0], total=float(r[1]), count=r[2]) for r in rows]
 
 
-def net_flow(user_id: int, start: date, end: date) -> float:
-    """Return deposits minus withdrawals on the user's checking and savings accounts."""
+def net_flow(user_id: int, start: date, end: date, account_id: str | None = None) -> float:
+    """
+    Return deposits minus withdrawals on the user's deposit accounts (checking, savings, etc.).
+
+    With `account_id` only that account counts, which is how a goal's own saving pace is measured.
+    """
     with get_connection() as conn:
         row = conn.execute(
             f"""
@@ -61,7 +65,8 @@ def net_flow(user_id: int, start: date, end: date) -> float:
             JOIN {_USER_ACCOUNTS} ON a.account_id = t.account_id
             WHERE l.user_id = %s AND a.account_type = 'depository'
               AND t.date >= %s AND t.date < %s
+              AND (%s::text IS NULL OR a.account_id = %s)
             """,
-            (user_id, start, end),
+            (user_id, start, end, account_id, account_id),
         ).fetchone()
     return float(row[0])

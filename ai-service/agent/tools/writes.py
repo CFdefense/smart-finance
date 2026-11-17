@@ -172,7 +172,9 @@ def make_write_tools(store: PendingActionStore, backend: BackendApi) -> list[Bas
         """
         Propose a new rule written in the user's own words. It is not saved yet.
 
-        Leave `account_names` empty for a rule that covers every account. The user must confirm.
+        Leave `account_names` empty for a rule that covers every account. List several accounts
+        only when the user named each of them. If a name could mean more than one account, ask
+        the user which one instead of listing them all. The user must confirm.
         """
         text = _text(description, "rule description", RULE_MAX)
         accounts = _accounts_named(state["user_id"], account_names or [])
@@ -207,7 +209,8 @@ def make_write_tools(store: PendingActionStore, backend: BackendApi) -> list[Bas
         balance = account.current_balance or 0.0
         if target_amount <= balance:
             raise Refusal(
-                f"The target must be more than the current balance {money(balance)} of that account."
+                f"The target must be more than the current balance {money(balance)} "
+                "of that account."
             )
         body: dict[str, Any] = {
             "name": clean,
@@ -332,6 +335,8 @@ def make_write_tools(store: PendingActionStore, backend: BackendApi) -> list[Bas
 
         Call this only when the user's latest message clearly agrees to the exact change that was
         proposed earlier in the conversation. Never call it in the same turn as a proposal.
+        Leave `action_id` empty unless a tool result listed several waiting changes. Never invent
+        a reference.
         """
         try:
             action = store.take(state["user_id"], state["request_id"], action_id)

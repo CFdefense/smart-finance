@@ -1,4 +1,4 @@
-"""Tools the agents' LLMs may call. The analyzer reads one transaction; chat reads, searches and writes."""
+"""Tools the agents' LLMs may call: the analyzer reads one transaction, chat does much more."""
 
 from agent.tools.analytics import ANALYTICS_TOOLS
 from agent.tools.reads import READ_TOOLS
