@@ -81,7 +81,7 @@ def test_action_is_single_use(store):
     """Taking an action removes it, so it cannot be replayed."""
     action = add(store)
     store.take(7, "r2", action.action_id)
-    with pytest.raises(PendingError, match="no pending change"):
+    with pytest.raises(PendingError, match="nothing waiting"):
         store.take(7, "r3", action.action_id)
 
 
@@ -103,7 +103,7 @@ def test_same_request_is_refused_without_an_id_too(store):
 def test_other_users_cannot_take_an_action(store):
     """An action belongs to the user who proposed it and looks unknown to everyone else."""
     action = add(store, user_id=7)
-    with pytest.raises(PendingError, match="no pending change"):
+    with pytest.raises(PendingError, match="nothing waiting"):
         store.take(8, "r2", action.action_id)
     assert len(store) == 1
 
@@ -115,9 +115,9 @@ def test_other_users_do_not_see_each_others_pending_without_an_id(store):
         store.take(8, "r2")
 
 
-def test_unknown_id(store):
-    """A made-up reference is refused."""
-    with pytest.raises(PendingError, match="no pending change"):
+def test_a_reference_with_nothing_pending_says_nothing_is_waiting(store):
+    """A made-up reference when nothing is staged tells the model to propose first."""
+    with pytest.raises(PendingError, match="nothing waiting"):
         store.take(7, "r2", "deadbeef")
 
 
@@ -258,3 +258,48 @@ def test_a_collision_on_the_action_id_is_regenerated(store, monkeypatch):
     second = add(store)
     assert (first.action_id, second.action_id) == ("aaaaaaaa", "bbbbbbbb")
     assert len(store) == 2
+
+
+def test_an_invented_reference_confirms_the_only_waiting_change(store):
+    """The model cannot see old references; with one change waiting, a wrong one still works."""
+    action = add(store)
+    assert store.take(7, "r2", "propose_budget-made-up") == action
+
+
+def test_an_invented_reference_lists_the_choices_when_several_wait(store):
+    """With several changes waiting, a wrong reference is not guessed; the user picks."""
+    first = add(store, preview="Create budget A")
+    add(store, preview="Create budget B", request_id="r1")
+    with pytest.raises(PendingError, match="Several") as error:
+        store.take(7, "r2", "made-up")
+    assert first.action_id in str(error.value)
+    assert len(store) == 2
+
+
+def test_an_invented_reference_never_reaches_another_users_change(store):
+    """Falling back to the single waiting change only ever considers the caller's own."""
+    add(store, user_id=7)
+    with pytest.raises(PendingError, match="nothing waiting"):
+        store.take(8, "r2", "made-up")
+    assert len(store) == 1
+
+
+def test_an_invented_reference_still_cannot_confirm_in_the_proposing_request(store):
+    """The same-turn gate applies to the single-change fallback too."""
+    add(store, request_id="r1")
+    with pytest.raises(PendingError, match="same turn"):
+        store.take(7, "r1", "made-up")
+    assert len(store) == 1
+
+
+def test_an_empty_reference_is_treated_as_no_reference(store):
+    """The model sometimes passes an empty string; that must behave like leaving it out."""
+    action = add(store)
+    assert store.take(7, "r2", "  ") == action
+
+
+def test_a_correct_reference_wins_over_the_single_change_fallback(store):
+    """When several are waiting, the matching reference picks its own change."""
+    add(store, preview="Create budget A")
+    second = add(store, preview="Create budget B")
+    assert store.take(7, "r2", second.action_id) == second

@@ -5,18 +5,18 @@
     goals:
       - { name: Rainy day, description: Emergency cushion., account: Plaid Saving, target_amount: 20000, days_until_target: 300 }
     seed_transactions:
-      - { name: Payroll, amount: -3000, account: Plaid Checking, days_ago: 15 }
-      - { name: Payroll, amount: -3000, account: Plaid Checking, days_ago: 45 }
-      - { name: Payroll, amount: -3000, account: Plaid Checking, days_ago: 75 }
-      - { name: Rent, amount: 1800, account: Plaid Checking, days_ago: 12 }
-      - { name: Rent, amount: 1800, account: Plaid Checking, days_ago: 42 }
-      - { name: Rent, amount: 1800, account: Plaid Checking, days_ago: 72 }
+      - { name: Transfer from checking, amount: -1200, account: Plaid Saving, days_ago: 15 }
+      - { name: Transfer from checking, amount: -1200, account: Plaid Saving, days_ago: 45 }
+      - { name: Transfer from checking, amount: -1200, account: Plaid Saving, days_ago: 75 }
+      - { name: Transfer to savings, amount: 1200, account: Plaid Checking, days_ago: 15 }
+      - { name: Transfer to savings, amount: 1200, account: Plaid Checking, days_ago: 45 }
+      - { name: Transfer to savings, amount: 1200, account: Plaid Checking, days_ago: 75 }
     message: How are my savings goals going, and when will I get there?
     expect_tools: [goal_progress]
     must_contain: ["Rainy day", "1,200"]
     expected: >-
-      Reports the Rainy day goal at 0% with $5,500 to go, a saving pace of about $1,200 per month,
-      and a finish date roughly four to five months out.
+      Reports the Rainy day goal at 0% with $5,500 to go, a saving pace of about $1,200 per month
+      into the Plaid Saving account, and a finish date roughly four to five months out.
   assert:
     - { type: python, value: "file://graders.py:tools_called" }
     - { type: python, value: "file://graders.py:output_contains" }

@@ -73,14 +73,14 @@ def test_snapshot_collects_everything_a_grader_needs(monkeypatch):
     assert snap["today"] == "2026-11-10"
     assert [a["name"] for a in snap["accounts"]] == ["Checking", "Card"]
     assert snap["rules"] == [
-        {"description": "No gambling.", "applies_to": "all accounts"},
-        {"description": "Over $200.", "applies_to": ["Checking"]},
+        {"id": 1, "description": "No gambling.", "applies_to": "all accounts"},
+        {"id": 2, "description": "Over $200.", "applies_to": ["Checking"]},
     ]
     assert snap["budgets"][0]["spent_this_month"] == 82
     assert snap["goals"][0]["name"] == "Trip"
     assert snap["transactions"][0]["name"] == "Chipotle"
-    assert seen["since"] == today - timedelta(days=facts.RECENT_DAYS)
-    assert seen["limit"] == facts.MAX_TRANSACTIONS
+    assert seen["since"] == today - timedelta(days=facts.SNAPSHOT_DAYS)
+    assert seen["limit"] == facts.SNAPSHOT_LIMIT
 
 
 class FakeAnalyzer:
@@ -351,3 +351,24 @@ def test_search_stub_is_applied_around_every_turn(monkeypatch):
     runner.run(case, "u", 7, ACCOUNTS)
 
     assert seen == ["eval-stub", "eval-stub"]
+
+
+def test_the_analyzer_is_judged_against_the_window_it_actually_saw(monkeypatch):
+    """Chat gets a year of ground truth; the analyzer only its own recent window."""
+    today = date(2026, 11, 10)
+    seen = {}
+    monkeypatch.setattr(facts, "load_accounts", lambda uid: [])
+    monkeypatch.setattr(facts, "load_budgets", lambda uid, today: [])
+    monkeypatch.setattr(facts, "load_goals", lambda uid: [])
+    monkeypatch.setattr(
+        facts,
+        "load_transactions",
+        lambda uid, since=None, limit=None: seen.update(since=since, limit=limit) or [],
+    )
+
+    facts.snapshot(7, today, agent="analyze")
+
+    assert seen == {
+        "since": today - timedelta(days=facts.RECENT_DAYS),
+        "limit": facts.MAX_TRANSACTIONS,
+    }

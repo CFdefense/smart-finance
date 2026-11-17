@@ -10,7 +10,7 @@
       - { name: Chipotle, amount: 40.00, account: Plaid Credit Card, category: FOOD_DINING, days_ago: 0 }
     message: How am I doing on my budgets this month?
     expect_tools: [budget_status]
-    must_contain: ["Groceries", "280", "Eating out", "40"]
+    must_contain: ["Groceries", "$280", "Eating out", "$40"]
     expected: >-
       Says Groceries has $280 spent of $300 with only $20 left (nearly used up) and Eating out has
       $40 spent of $100 with $60 left.

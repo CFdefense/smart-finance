@@ -556,7 +556,7 @@ def test_confirm_twice_does_not_repeat_the_change(rig):
 
     text = call(rig, "confirm_action", state={"user_id": 7, "request_id": "r3"}, action_id=ref)
 
-    assert "no pending change" in text and len(rig.backend.calls) == 1
+    assert "nothing waiting" in text and len(rig.backend.calls) == 1
 
 
 def test_confirm_with_nothing_pending(rig):
@@ -571,7 +571,7 @@ def test_another_user_cannot_confirm(rig):
 
     text = call(rig, "confirm_action", state={"user_id": 8, "request_id": "r2"}, action_id=ref)
 
-    assert "no pending change" in text and rig.backend.calls == []
+    assert "nothing waiting" in text and rig.backend.calls == []
     assert len(rig.store) == 1
 
 
@@ -632,7 +632,7 @@ def test_database_failure_while_proposing_stages_nothing(monkeypatch, rig):
     assert text == UNAVAILABLE and len(rig.store) == 0
 
 
-# --- guards added beyond the plan ---------------------------------------------------------
+# --- route allowlist and preview sanitising ----------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -706,3 +706,21 @@ def test_an_oversized_refusal_is_capped(rig, monkeypatch):
     monkeypatch.setattr(writes, "_accounts_named", too_long)
     text = call(rig, "propose_rule", description="No gambling", account_names=["x"])
     assert len(text) <= MAX_TOOL_CHARS + 30 and text.endswith("(truncated)")
+
+
+def test_confirm_with_an_invented_reference_saves_the_only_waiting_change(rig):
+    """The model cannot see old references, so a made-up one must still confirm a lone change."""
+    stage_and_get_reference(rig)
+
+    text = call(rig, "confirm_action", state=LATER, action_id="propose_budget-1234")
+
+    assert text.startswith("Saved:") and len(rig.backend.calls) == 1
+
+
+def test_confirm_with_an_invented_reference_is_still_refused_in_the_same_request(rig):
+    """The fallback never lets a proposal be confirmed in the turn that created it."""
+    stage_and_get_reference(rig)
+
+    text = call(rig, "confirm_action", state=PROPOSE, action_id="made-up")
+
+    assert "same turn" in text and rig.backend.calls == []

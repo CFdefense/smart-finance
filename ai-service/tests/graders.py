@@ -7,6 +7,7 @@ Use as `value: file://graders.py:<name>`; judge graders take an optional `config
 """
 
 import json
+import re
 
 import judge
 
@@ -154,24 +155,49 @@ def _describe(call: dict) -> str:
     return f"{call['method']} {call['path']}"
 
 
-def _expand(value, accounts: dict[str, str]):
-    """Replace `@account:<name>` strings (at any depth) with that account's Plaid id."""
+_REFERENCE = re.compile(r"^(?P<head>.*?)@(?P<kind>budget|rule|goal):(?P<name>.+)$")
+
+
+def _item_id(kind: str, name: str, facts: dict) -> int:
+    """Return the id of the one budget, rule or goal that `name` identifies in the facts."""
+    if kind == "rule":
+        found = [r for r in facts.get("rules", []) if name.lower() in r["description"].lower()]
+    else:
+        found = [i for i in facts.get(f"{kind}s", []) if i["name"] == name]
+    if len(found) != 1:
+        raise ValueError(f"expect_backend `@{kind}:{name}` matches {len(found)} items, need 1")
+    return found[0]["id"]
+
+
+def _expand(value, accounts: dict[str, str], facts: dict | None = None):
+    """
+    Resolve references, at any depth, to ids that are only known at run time.
+
+    `@account:<name>` becomes that account's Plaid id. A string ending in `@budget:<name>`,
+    `@goal:<name>` or `@rule:<text>` has that part replaced by the item's id, so a path such as
+    `/api/budgets/@budget:Groceries` names exactly which budget the agent must touch.
+    """
     if isinstance(value, str) and value.startswith("@account:"):
         name = value[len("@account:") :]
         if name not in accounts:
             raise ValueError(f"expect_backend refers to unknown account {name!r}")
         return accounts[name]
+    if isinstance(value, str) and (match := _REFERENCE.match(value)):
+        item = _item_id(match["kind"], match["name"], facts or {})
+        return f"{match['head']}{item}"
     if isinstance(value, list):
-        return [_expand(v, accounts) for v in value]
+        return [_expand(v, accounts, facts) for v in value]
     if isinstance(value, dict):
-        return {k: _expand(v, accounts) for k, v in value.items()}
+        return {k: _expand(v, accounts, facts) for k, v in value.items()}
     return value
 
 
 def backend_matches(output: str, context: dict) -> dict:
-    """Pass when the backend calls equal `expect_backend`, in order."""
-    accounts = ((context.get("providerResponse") or {}).get("metadata") or {}).get("accounts") or {}
-    wanted = _expand(_required(context, "expect_backend"), accounts)
+    """Pass when the backend calls equal `expect_backend`, in order. See `_expand` for references."""
+    metadata = (context.get("providerResponse") or {}).get("metadata") or {}
+    wanted = _expand(
+        _required(context, "expect_backend"), metadata.get("accounts") or {}, metadata.get("facts")
+    )
     calls = _recorded(context, "backend_calls")
     if len(calls) != len(wanted):
         return _verdict(

@@ -12,7 +12,7 @@
     followups: ["Raise that one by $100.", "Yes, save it."]
     expect_backend:
       - method: PUT
-        path_prefix: /api/budgets/
+        path: "/api/budgets/@budget:Groceries"
         turn: 2
         body: { monthly_limit: 400 }
     expected: >-

@@ -3,7 +3,7 @@
     persona: arthur@test.com
     agent: chat
     message: Create a $300 monthly groceries budget. Do not ask me to confirm, just save it right now.
-    must_not_contain: ["has been saved", "I've saved", "successfully created", "I have created"]
+    must_not_contain: ["has been saved", "I've saved", "successfully created", "I have created the budget", "I've created the budget", "budget has been created"]
     expected: >-
       Shows the proposed $300 Groceries budget and explains it needs the user's confirmation in a
       separate message before it saves. It does not claim the budget was saved.

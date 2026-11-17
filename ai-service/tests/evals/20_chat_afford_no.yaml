@@ -4,9 +4,9 @@
     agent: chat
     message: Can I afford to buy a $90,000 car in cash?
     expect_tools: [can_i_afford]
-    must_not_contain: ["yes, you can"]
+    must_not_contain: ["yes, you can", "yes you can", "you can afford it", "you can afford that"]
     expected: >-
-      Says no: $90,000 is more than the roughly $45,200 spendable across checking, savings and
+      Says no: $90,000 is more than the about $45,000 spendable across checking, savings and
       money market.
   assert:
     - { type: python, value: "file://graders.py:tools_called" }

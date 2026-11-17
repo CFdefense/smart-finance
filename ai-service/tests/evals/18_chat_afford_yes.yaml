@@ -5,7 +5,7 @@
     message: Can I afford a $400 weekend trip?
     expect_tools: [can_i_afford]
     expected: >-
-      Says yes: $400 is small compared with the roughly $45,200 in checking, savings and money
+      Says yes: $400 is small compared with the about $45,000 in checking, savings and money
       market. It must not say no or hedge that the money is not there.
   assert:
     - { type: python, value: "file://graders.py:tools_called" }

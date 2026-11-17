@@ -181,6 +181,7 @@ def test_goal_progress_tool_uses_the_trailing_savings_rate(monkeypatch):
         lambda uid: [
             Goal(
                 id=1,
+                account_id="sav-1",
                 name="Trip",
                 account_name="Savings",
                 target_amount=3000,
@@ -190,13 +191,19 @@ def test_goal_progress_tool_uses_the_trailing_savings_rate(monkeypatch):
             )
         ],
     )
-    monkeypatch.setattr(tools, "net_flow", lambda uid, s, e: seen.update(s=s, e=e) or 1500.0)
+    monkeypatch.setattr(
+        tools, "net_flow", lambda uid, s, e, acct=None: seen.update(s=s, e=e, acct=acct) or 1500.0
+    )
 
     text = call(tools.goal_progress)
 
-    assert seen == {"s": TODAY - timedelta(days=90), "e": TODAY + timedelta(days=1)}
-    assert "[id=1] Trip: 50% done, $1,000.00 to go" in text
-    assert "saving about $500.00/month" in text
+    assert seen == {
+        "s": TODAY - timedelta(days=90),
+        "e": TODAY + timedelta(days=1),
+        "acct": "sav-1",
+    }
+    assert "[id=1] Trip: 50% done, $1,000.00 to go of $3,000.00" in text
+    assert "net deposits into this account about $500.00/month" in text
     assert "on track" in text and "2027-01-16" in text
 
 
@@ -215,7 +222,7 @@ def test_goal_progress_tool_without_a_positive_rate(monkeypatch):
             )
         ],
     )
-    monkeypatch.setattr(tools, "net_flow", lambda uid, s, e: -300.0)
+    monkeypatch.setattr(tools, "net_flow", lambda uid, s, e, acct=None: -300.0)
 
     text = call(tools.goal_progress)
 
@@ -351,3 +358,72 @@ def test_can_i_afford_rejects_non_finite_or_huge_amounts(monkeypatch, amount):
     """NaN, infinity and absurd amounts are refused before any lookup."""
     monkeypatch.setattr(tools, "load_accounts", lambda uid: [checking()])
     assert "amount must be" in call(tools.can_i_afford, amount=amount)
+
+
+def test_can_i_afford_says_which_accounts_make_up_the_spendable_balance(monkeypatch):
+    """The model is told what 'spendable' means so it does not invent a definition."""
+    monkeypatch.setattr(
+        tools,
+        "load_accounts",
+        lambda uid: [
+            Account(
+                account_id="a1",
+                name="Checking",
+                account_type="depository",
+                current_balance=1000,
+                available_balance=900,
+            ),
+            Account(account_id="a2", name="Card", account_type="credit", current_balance=50),
+        ],
+    )
+
+    text = call(tools.can_i_afford, amount=100)
+
+    assert "Spendable balance is the available balance of these accounts" in text
+    assert "Checking $900.00" in text and "Card" not in text
+
+
+def test_each_goal_is_paced_by_its_own_account(monkeypatch):
+    """Two goals on two accounts get two different rates, never one shared total."""
+    goals = [
+        Goal(
+            id=1,
+            account_id="a1",
+            name="One",
+            account_name="A",
+            target_amount=2000,
+            baseline_balance=0,
+            current_balance=1000,
+        ),
+        Goal(
+            id=2,
+            account_id="a2",
+            name="Two",
+            account_name="B",
+            target_amount=2000,
+            baseline_balance=0,
+            current_balance=1000,
+        ),
+    ]
+    monkeypatch.setattr(tools, "load_goals", lambda uid: goals)
+    flows = {"a1": 600.0, "a2": 0.0}
+    monkeypatch.setattr(tools, "net_flow", lambda uid, s, e, acct=None: flows[acct])
+
+    text = call(tools.goal_progress)
+
+    one = next(line for line in text.splitlines() if "One" in line)
+    two = next(line for line in text.splitlines() if "Two" in line)
+    assert "about $200.00/month" in one
+    assert "finish date unknown" in two
+
+
+def test_goal_progress_with_no_goals_does_not_query_the_database(monkeypatch):
+    """No goals means nothing to pace, so no savings query is made."""
+    monkeypatch.setattr(tools, "load_goals", lambda uid: [])
+
+    def fail(*args, **kwargs):
+        raise AssertionError("net_flow must not be called without goals")
+
+    monkeypatch.setattr(tools, "net_flow", fail)
+
+    assert "Goal progress" in call(tools.goal_progress)

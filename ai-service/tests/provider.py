@@ -23,7 +23,7 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
         evaldb.reset(persona_db.url, persona_db.user_id, case, accounts)
         result = runner.run(case, persona_db.url, persona_db.user_id, accounts)
         with runner.database(persona_db.url):
-            snapshot = facts.snapshot(persona_db.user_id)
+            snapshot = facts.snapshot(persona_db.user_id, agent=case.agent)
     except DefinitionError as exc:
         return {"error": f"invalid test definition: {exc}"}
     return {

@@ -127,6 +127,29 @@ def test_confirming_in_the_next_request_saves_once_as_the_user(monkeypatch):
     assert len(agent.pending) == 0
 
 
+def test_confirming_with_an_invented_reference_still_saves_the_one_waiting_change(monkeypatch):
+    """History holds no tool results, so the model invents a reference; that must still work."""
+    agent, llm, backend = make(
+        monkeypatch,
+        [
+            calls(PROPOSE_BUDGET),
+            say("Create budget 'Fun money' ($40/month)? Reply yes to save."),
+            calls(("confirm_action", {"action_id": "propose_budget-82f98b92"})),
+            say("Done, it is saved."),
+        ],
+    )
+
+    first = ask(agent, "Add a $40 entertainment budget.")
+    history = [
+        HistoryMessage(role="user", content="Add a $40 entertainment budget."),
+        HistoryMessage(role="assistant", content=first),
+    ]
+    ask(agent, "Yes, save it.", history=history)
+
+    assert len(backend.calls) == 1 and backend.calls[0]["path"] == "/api/budgets"
+    assert llm.tool_results()[-1].startswith("Saved:")
+
+
 def test_a_confirmation_cannot_be_replayed(monkeypatch):
     """After a successful save, confirming again sends nothing."""
     agent, llm, backend = make(

@@ -9,7 +9,7 @@
     followups: ["Yes, delete it."]
     expect_tools: [propose_delete, confirm_action]
     expect_backend:
-      - { method: DELETE, path_prefix: /api/rules/, turn: 1 }
+      - { method: DELETE, path: "/api/rules/@rule:gambling", turn: 1 }
     expected: >-
       Proposes deleting the no-gambling rule, then reports it deleted. The $200 rule is untouched.
   assert:

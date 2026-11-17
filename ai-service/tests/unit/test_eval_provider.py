@@ -55,7 +55,9 @@ def calls(monkeypatch):
 
     monkeypatch.setattr(provider.runner, "database", FakeDatabase)
     monkeypatch.setattr(
-        provider.facts, "snapshot", lambda uid: log.append(("facts", uid)) or {"rules": []}
+        provider.facts,
+        "snapshot",
+        lambda uid, agent="chat": log.append(("facts", uid)) or {"rules": []},
     )
     return log
 

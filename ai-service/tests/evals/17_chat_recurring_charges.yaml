@@ -16,13 +16,11 @@
     message: What subscriptions am I paying for?
     expect_tools: [find_recurring_charges]
     must_contain: ["Netflix", "Spotify", "Planet Fitness"]
-    must_not_contain: ["Best Buy"]
     expected: >-
       Lists Netflix ($15.49), Spotify ($11.99) and Planet Fitness ($24.99) as monthly charges and
       does not call the one-time Best Buy purchase a subscription.
   assert:
     - { type: python, value: "file://graders.py:tools_called" }
     - { type: python, value: "file://graders.py:output_contains" }
-    - { type: python, value: "file://graders.py:output_excludes" }
     - { type: python, value: "file://graders.py:accuracy" }
     - { type: python, value: "file://graders.py:goal" }

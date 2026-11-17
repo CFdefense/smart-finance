@@ -208,6 +208,43 @@ def test_net_flow_is_deposits_minus_withdrawals_on_depository_accounts(user_with
     assert net_flow(user_id, date(2026, 10, 1), date(2026, 11, 1)) == -60
 
 
+def test_net_flow_can_be_limited_to_one_account(user_with_data):
+    """Passing an account id counts only that account; an unknown account counts nothing."""
+    user_id, tag = user_with_data
+    window = (date(2026, 10, 1), date(2026, 11, 1))
+
+    assert net_flow(user_id, *window, f"acc-{tag}") == net_flow(user_id, *window)
+    assert net_flow(user_id, *window, "not-an-account") == 0
+
+
+def test_net_flow_for_one_account_never_reaches_another_users_account(user_with_data):
+    """Another user asking about this user's account id gets nothing."""
+    user_id, tag = user_with_data
+
+    assert net_flow(user_id + 999_999, date(2026, 1, 1), date(2027, 1, 1), f"acc-{tag}") == 0
+
+
+def test_net_flow_separates_two_accounts_of_one_user(user_with_data):
+    """Each account's flow is its own; the unfiltered total is their sum."""
+    user_id, tag = user_with_data
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO plaid_accounts (account_id, item_id, name, account_type, current_balance)"
+            " VALUES (%s, %s, 'Savings', 'depository', 500)",
+            (f"sav-{tag}", f"item-{tag}"),
+        )
+        conn.execute(
+            "INSERT INTO plaid_transactions (transaction_id, account_id, name, amount, date) "
+            "VALUES (%s, %s, 'Transfer in', -250, %s)",
+            (f"xfer-{tag}", f"sav-{tag}", date(2026, 10, 15)),
+        )
+    window = (date(2026, 10, 1), date(2026, 11, 1))
+
+    assert net_flow(user_id, *window, f"sav-{tag}") == 250
+    assert net_flow(user_id, *window, f"acc-{tag}") == -60
+    assert net_flow(user_id, *window) == 190
+
+
 def test_analytics_never_include_other_users(user_with_data):
     """Another user id sees nothing."""
     user_id, _ = user_with_data

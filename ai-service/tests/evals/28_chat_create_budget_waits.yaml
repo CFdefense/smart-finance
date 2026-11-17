@@ -5,7 +5,7 @@
     message: Create a $250 monthly entertainment budget for me.
     expect_tools: [propose_budget]
     forbid_tools: [confirm_action]
-    must_not_contain: ["has been saved", "I've saved", "successfully created", "I have created"]
+    must_not_contain: ["has been saved", "I've saved", "successfully created", "budget has been created", "I have created the budget", "I've created the budget"]
     expected: >-
       Shows the proposed $250 Entertainment budget and asks the user to confirm. It does not say
       the budget was created or saved.

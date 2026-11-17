@@ -189,6 +189,28 @@ def resolve_account(accounts: dict[str, str], name: str) -> str:
         ) from None
 
 
+def _restore_stashed_transactions(conn: psycopg.Connection) -> None:
+    """Put back the persona transactions that an earlier seeded test set aside."""
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS eval_stashed_transactions "
+        "(LIKE plaid_transactions INCLUDING DEFAULTS)"
+    )
+    conn.execute(
+        "WITH moved AS (DELETE FROM eval_stashed_transactions RETURNING *) "
+        "INSERT INTO plaid_transactions SELECT * FROM moved"
+    )
+
+
+def _stash_transactions(conn: psycopg.Connection, account_ids: list[str]) -> None:
+    """Move the accounts' non-seeded transactions out of the way until the next reset."""
+    conn.execute(
+        "WITH moved AS (DELETE FROM plaid_transactions "
+        "WHERE account_id = ANY(%s) AND transaction_id NOT LIKE %s RETURNING *) "
+        "INSERT INTO eval_stashed_transactions SELECT * FROM moved",
+        (account_ids, SEED_PREFIX + "%"),
+    )
+
+
 def reset(url: str, user_id: int, case: EvalCase, accounts: dict[str, str]) -> None:
     """Replace the user's goals, budgets, rules, analyses and seeded transactions."""
     _check_url(url)
@@ -199,6 +221,10 @@ def reset(url: str, user_id: int, case: EvalCase, accounts: dict[str, str]) -> N
         conn.execute(
             "DELETE FROM plaid_transactions WHERE transaction_id LIKE %s", (SEED_PREFIX + "%",)
         )
+        _restore_stashed_transactions(conn)
+        if case.seed_transactions:
+            # Seeded totals must be exact, so the persona's own Plaid rows sit out this test.
+            _stash_transactions(conn, list(accounts.values()))
 
         for budget in case.budgets:
             conn.execute(

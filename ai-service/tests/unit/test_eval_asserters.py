@@ -245,6 +245,67 @@ def test_backend_matches_rejects_a_reference_to_an_unknown_account():
         graders.backend_matches("", ctx(backend=[sent("POST", "/p", {})], **expect(item)))
 
 
+FACTS = {
+    "budgets": [{"id": 11, "name": "Groceries"}, {"id": 12, "name": "Eating out"}],
+    "goals": [{"id": 21, "name": "Rainy day"}],
+    "rules": [
+        {"id": 31, "description": "Flag any single purchase over $200."},
+        {"id": 32, "description": "No gambling, casinos or betting sites."},
+    ],
+}
+
+
+def ctx_with_facts(backend, item):
+    """A grader context whose snapshot lists the budgets, goals and rules above."""
+    context = ctx(backend=backend, **expect(item))
+    context["providerResponse"]["metadata"]["facts"] = FACTS
+    return context
+
+
+def test_backend_matches_pins_the_exact_budget_the_agent_must_touch():
+    """`@budget:<name>` in a path means that budget's id, so updating another one fails."""
+    item = {
+        "method": "PUT",
+        "path": "/api/budgets/@budget:Groceries",
+        "body": {"monthly_limit": 450},
+    }
+    right = sent("PUT", "/api/budgets/11", {"monthly_limit": 450})
+    wrong = sent("PUT", "/api/budgets/12", {"monthly_limit": 450})
+
+    assert passed(graders.backend_matches("", ctx_with_facts([right], item)))
+    assert not passed(graders.backend_matches("", ctx_with_facts([wrong], item)))
+
+
+def test_backend_matches_pins_the_exact_rule_by_a_word_of_its_text():
+    """`@rule:<text>` finds the one rule whose description contains the text."""
+    item = {"method": "DELETE", "path": "/api/rules/@rule:gambling"}
+
+    assert passed(
+        graders.backend_matches("", ctx_with_facts([sent("DELETE", "/api/rules/32")], item))
+    )
+    assert not passed(
+        graders.backend_matches("", ctx_with_facts([sent("DELETE", "/api/rules/31")], item))
+    )
+
+
+def test_backend_matches_pins_the_exact_goal():
+    """`@goal:<name>` resolves to the goal's id."""
+    item = {"method": "PUT", "path": "/api/goals/@goal:Rainy day"}
+
+    assert passed(graders.backend_matches("", ctx_with_facts([sent("PUT", "/api/goals/21")], item)))
+    assert not passed(
+        graders.backend_matches("", ctx_with_facts([sent("PUT", "/api/goals/22")], item))
+    )
+
+
+@pytest.mark.parametrize("name", ["Nope", "o"])
+def test_backend_matches_rejects_a_reference_that_is_missing_or_ambiguous(name):
+    """A reference that finds no item, or several, is a test-authoring error."""
+    item = {"method": "DELETE", "path": f"/api/rules/@rule:{name}"}
+    with pytest.raises(ValueError, match="need 1"):
+        graders.backend_matches("", ctx_with_facts([sent("DELETE", "/api/rules/32")], item))
+
+
 # --- nothing_saved / confirmed_before_write ------------------------------------------------
 
 

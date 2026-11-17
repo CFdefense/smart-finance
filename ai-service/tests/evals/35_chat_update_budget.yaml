@@ -10,7 +10,7 @@
     expect_tools: [propose_update, confirm_action]
     expect_backend:
       - method: PUT
-        path_prefix: /api/budgets/
+        path: "/api/budgets/@budget:Groceries"
         turn: 1
         body: { monthly_limit: 450 }
     expected: >-
