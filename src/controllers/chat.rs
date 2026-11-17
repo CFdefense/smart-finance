@@ -273,6 +273,81 @@ pub async fn api_get_session(
     Ok(Json(SessionWithMessages::new(&session, &messages)))
 }
 
+/// Permanently delete one of the authenticated user's chat sessions.
+///
+/// The database has ON DELETE CASCADE on `chat_messages.session_id`,
+/// so removing the session also removes its entire message history.
+///
+/// A session belonging to another user is indistinguishable from
+/// a nonexistent session: both return HTTP 404.
+///
+/// DELETE /api/chat/sessions/{id}
+#[utoipa::path(
+    delete,
+    path = "/sessions/{id}",
+    summary = "Delete a chat session and its messages",
+    params(("id" = i32, Path, description = "Session ID")),
+    responses(
+        (status = 204, description = "Session and messages deleted"),
+        (status = 400, description = "Session ID is not an integer"),
+        (status = 401, description = "Not authenticated"),
+        (status = 404, description = "Session not found"),
+        (status = 409, description = "A reply is still being generated")
+    ),
+    security(("auth-token" = [])),
+    tag = "Chat"
+)]
+pub async fn api_delete_session(
+    Extension(user): Extension<AuthUser>,
+    Extension(pool): Extension<PgPool>,
+    Extension(in_flight): Extension<InFlight>,
+    Path(id): Path<i32>,
+) -> ApiResult<StatusCode> {
+    debug!(
+        "HANDLER ->> DELETE /api/chat/sessions/{id} user_id={}",
+        user.id
+    );
+
+    // Verify ownership before doing anything destructive.
+    // Foreign sessions and nonexistent sessions both return 404.
+    let session = owned_session(&pool, user.id, id).await?;
+
+    // Avoid deleting a session while its AI response is streaming.
+    let is_streaming = in_flight
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .contains(&session.id);
+
+    if is_streaming {
+        return Err(AppError::Conflict(
+            "a reply is still being generated in this session".to_string(),
+        ));
+    }
+
+    // Include the user ID in the DELETE itself for defense in depth.
+    // The foreign key removes associated chat_messages automatically.
+    let result = sqlx::query!(
+        "DELETE FROM chat_sessions WHERE id = $1 AND user_id = $2",
+        session.id,
+        user.id
+    )
+    .execute(&pool)
+    .await
+    .map_err(AppError::from)?;
+
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
+
+    info!(
+        session_id = session.id,
+        user_id = user.id,
+        "chat session deleted"
+    );
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
 /// State carried through the SSE stream for one reply.
 struct ReplyState {
     ai: AiStream,
@@ -447,7 +522,8 @@ pub async fn api_send_message(
         api_list_sessions,
         api_create_session,
         api_get_session,
-        api_send_message
+        api_send_message,
+        api_delete_session
     ),
     components(schemas(
         SendMessageRequest,
@@ -466,7 +542,10 @@ pub struct ChatApiDoc;
 pub fn chat_routes() -> AxumRouter {
     AxumRouter::new()
         .route("/sessions", get(api_list_sessions).post(api_create_session))
-        .route("/sessions/{id}", get(api_get_session))
+        .route(
+            "/sessions/{id}",
+            get(api_get_session).delete(api_delete_session),
+        )
         .route("/sessions/{id}/messages", post(api_send_message))
         .route_layer(axum::middleware::from_fn(middleware_auth))
 }
