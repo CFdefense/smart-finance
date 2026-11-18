@@ -256,34 +256,79 @@
 
             <form (ngSubmit)="updatePassword()">
               <label for="currentPassword" class="profile">Current Password</label>
-              <input
-                id="currentPassword"
-                name="currentPassword"
-                type="password"
-                class="passwordInput"
-                [(ngModel)]="currentPassword"
-                placeholder="Current password"
-                required />
+              <div class="password-wrapper">
+                <input
+                  matInput [type]="hideCurrent ? 'password' : 'text'"
+                  id="currentPassword"
+                  name="currentPassword"
+                  type="password"
+                  class="passwordInput"
+                  [(ngModel)]="currentPassword"
+                  placeholder="Current password"
+                  required />
+                <button
+                  type="button"
+                  class="password-visibility"
+                  (click)="hideCurrent = !hideCurrent"
+                  [attr.aria-label]="hideCurrent ? 'Hide password' : 'Show password'"
+                >
+                  @if (hideCurrent) {
+                    <span class="material-symbols-outlined visibility_off" [class]="hideCurrent ? 'visibility_off' : 'visibility_off'">visibility_off</span>
+                  } @else {
+                    <span class="material-symbols-outlined visibility" [class]="hideCurrent ? 'visibility_off' : 'visibility'">visibility</span>
+                  }
+                </button>
+              </div>
 
               <label for="newPassword" class="profile">New Password</label>
-              <input
-                id="newPassword"
-                name="newPassword"
-                type="password"
-                class="passwordInput"
-                [(ngModel)]="newPassword"
-                placeholder="Create a new password"
-                required />
+              <div class="password-wrapper">
+                <input
+                  matInput [type]="hideNew ? 'password' : 'text'"
+                  id="newPassword"
+                  name="newPassword"
+                  type="password"
+                  class="passwordInput"
+                  [(ngModel)]="newPassword"
+                  placeholder="Create a new password"
+                  required />
+                <button
+                  type="button"
+                  class="password-visibility"
+                  (click)="hideNew = !hideNew"
+                  [attr.aria-label]="hideNew ? 'Hide password' : 'Show password'"
+                >
+                  @if (hideNew) {
+                    <span class="material-symbols-outlined visibility_off" [class]="hideNew ? 'visibility_off' : 'visibility_off'">visibility_off</span>
+                  } @else {
+                    <span class="material-symbols-outlined visibility" [class]="hideNew ? 'visibility_off' : 'visibility'">visibility</span>
+                  }
+                </button>
+              </div>
 
               <label for="confirmPassword" class="profile">Confirm New Password</label>
-              <input
-                id="confirmPassword"
-                name="confirmPassword"
-                type="password"
-                class="passwordInput"
-                [(ngModel)]="confirmPassword"
-                placeholder="Confirm password"
-                required />
+              <div class="password-wrapper">
+                <input
+                  matInput [type]="hideConfirm ? 'password' : 'text'"
+                  id="confirmPassword"
+                  name="confirmPassword"
+                  type="password"
+                  class="passwordInput"
+                  [(ngModel)]="confirmPassword"
+                  placeholder="Confirm password"
+                  required />
+                <button
+                  type="button"
+                  class="password-visibility"
+                  (click)="hideConfirm = !hideConfirm"
+                  [attr.aria-label]="hideConfirm ? 'Hide password' : 'Show password'"
+                >
+                  @if (hideConfirm) {
+                    <span class="material-symbols-outlined visibility_off" [class]="hideConfirm ? 'visibility_off' : 'visibility_off'">visibility_off</span>
+                  } @else {
+                    <span class="material-symbols-outlined visibility" [class]="hideConfirm ? 'visibility_off' : 'visibility'">visibility</span>
+                  }
+                </button>
+              </div>
 
               <button type="submit" [disabled]="changingPassword()" class="save">
                 {{ changingPassword() ? 'Updating...' : 'Change Password' }}

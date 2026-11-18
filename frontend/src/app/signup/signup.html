@@ -75,17 +75,17 @@
             autocomplete="new-password"
             required />
             <button
-            type="button"
-            class="password-visibility"
-            (click)="hide = !hide"
-            [attr.aria-label]="hide ? 'Hide password' : 'Show password'"
-          >
-          @if (hide) {
-            <span class="material-symbols-outlined visibility_off" [class]="hide ? 'visibility_off' : 'visibility_off'">visibility_off</span>
-          } @else {
-            <span class="material-symbols-outlined visibility" [class]="hide ? 'visibility_off' : 'visibility'">visibility</span>
-          }
-          </button>
+              type="button"
+              class="password-visibility"
+              (click)="hide = !hide"
+              [attr.aria-label]="hide ? 'Hide password' : 'Show password'"
+            >
+              @if (hide) {
+                <span class="material-symbols-outlined visibility_off" [class]="hide ? 'visibility_off' : 'visibility_off'">visibility_off</span>
+              } @else {
+                <span class="material-symbols-outlined visibility" [class]="hide ? 'visibility_off' : 'visibility'">visibility</span>
+              }
+            </button>
         </div>
         <br />
         <div class="password-wrapper">
@@ -105,11 +105,11 @@
             (click)="hideConfirm = !hideConfirm"
             [attr.aria-label]="hideConfirm ? 'Hide password' : 'Show password'"
           >
-          @if (hideConfirm) {
-            <span class="material-symbols-outlined visibility_off" [class]="hideConfirm ? 'visibility_off' : 'visibility_off'">visibility_off</span>
-          } @else {
-            <span class="material-symbols-outlined visibility" [class]="hideConfirm ? 'visibility_off' : 'visibility'">visibility</span>
-          }
+            @if (hideConfirm) {
+              <span class="material-symbols-outlined visibility_off" [class]="hideConfirm ? 'visibility_off' : 'visibility_off'">visibility_off</span>
+            } @else {
+              <span class="material-symbols-outlined visibility" [class]="hideConfirm ? 'visibility_off' : 'visibility'">visibility</span>
+            }
           </button>
         </div>
       </div>

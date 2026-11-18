@@ -163,6 +163,8 @@ button:disabled {
 .profile {
   display: flex;
   gap: 15px;
+  padding-top: 5px;
+  padding-bottom: 5px;
 }
 
 /* Sidebar Styling */
@@ -473,4 +475,26 @@ button:disabled {
 
 .bank-account p {
   margin: 4px 0;
+}
+
+.password-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.password-visibility {
+  position: absolute;
+  right: 10px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #666;
+  transition: color 0.2s ease;
+  padding-right: 30px;
 }
