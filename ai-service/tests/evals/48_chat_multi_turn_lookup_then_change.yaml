@@ -1,0 +1,25 @@
+- description: Chat looks something up, then changes it based on the earlier answer
+  vars:
+    persona: arthur@test.com
+    agent: chat
+    budgets:
+      - { name: Groceries, category: GROCERIES, monthly_limit: 300 }
+      - { name: Eating out, category: FOOD_DINING, monthly_limit: 100 }
+    seed_transactions:
+      - { name: Whole Foods, amount: 280.00, account: Plaid Credit Card, category: GROCERIES, days_ago: 0 }
+      - { name: Chipotle, amount: 40.00, account: Plaid Credit Card, category: FOOD_DINING, days_ago: 0 }
+    message: Which of my budgets is closest to its limit this month?
+    followups: ["Raise that one by $100.", "Yes, save it."]
+    expect_backend:
+      - method: PUT
+        path: "/api/budgets/@budget:Groceries"
+        turn: 2
+        body: { monthly_limit: 400 }
+    expected: >-
+      First names Groceries ($280 of $300). Then proposes raising Groceries from $300 to $400, and
+      finally reports it updated.
+  assert:
+    - { type: python, value: "file://graders.py:backend_matches" }
+    - { type: python, value: "file://graders.py:confirmed_before_write" }
+    - { type: python, value: "file://graders.py:accuracy" }
+    - { type: python, value: "file://graders.py:goal" }

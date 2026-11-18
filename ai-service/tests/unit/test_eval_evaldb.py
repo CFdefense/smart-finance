@@ -349,3 +349,92 @@ def test_ensure_persona_checks_the_url_before_updating_users(monkeypatch):
 
     with pytest.raises(ValueError, match="eval database"):
         evaldb.ensure_persona(ADMIN, "eval-1", PERSONA)
+
+
+def test_reset_removes_old_seeded_transactions_after_the_four_standard_deletes(conn):
+    """Seeded rows from a previous test are deleted; the first four deletes are unchanged."""
+    evaldb.reset(EVAL_URL, 7, make_case(rules=[], goals=[]), ACCOUNTS)
+
+    deletes = [(t, p) for t, p in conn.calls if t.startswith("DELETE FROM plaid_transactions")]
+    assert deletes == [
+        ("DELETE FROM plaid_transactions WHERE transaction_id LIKE %s", (evaldb.SEED_PREFIX + "%",))
+    ]
+    texts = [t for t, _ in conn.calls]
+    assert texts.index(deletes[0][0]) == 4
+
+
+def test_reset_inserts_seeded_transactions_with_dates_and_categories(conn):
+    """Each seed becomes a plaid_transactions row dated `days_ago` days back."""
+    case = make_case(
+        rules=[],
+        goals=[],
+        seed_transactions=[
+            {
+                "name": "Chipotle",
+                "amount": 14.5,
+                "account": "Discover it Student",
+                "category": "FOOD_DINING",
+                "days_ago": 2,
+            },
+            {"name": "Payroll", "amount": -1500, "account": "TD Bank Student Checking"},
+        ],
+    )
+
+    evaldb.reset(EVAL_URL, 7, case, ACCOUNTS)
+
+    inserts = [p for t, p in conn.calls if t.startswith("INSERT INTO plaid_transactions")]
+    assert inserts == [
+        (
+            f"{evaldb.SEED_PREFIX}0",
+            "acc_2",
+            "Chipotle",
+            14.5,
+            date.today() - timedelta(days=2),
+            "FOOD_DINING",
+        ),
+        (f"{evaldb.SEED_PREFIX}1", "acc_1", "Payroll", -1500.0, date.today(), "OTHER"),
+    ]
+
+
+def test_reset_rejects_a_seed_on_an_unknown_account(conn):
+    """A typo in the account name is a definition error, not a database error."""
+    case = make_case(
+        rules=[],
+        goals=[],
+        seed_transactions=[{"name": "x", "amount": 1, "account": "Nope"}],
+    )
+
+    with pytest.raises(DefinitionError, match="unknown account"):
+        evaldb.reset(EVAL_URL, 7, case, ACCOUNTS)
+
+
+def test_reset_always_restores_stashed_transactions_first(conn):
+    """Rows set aside by an earlier seeded test come back before anything else is inserted."""
+    evaldb.reset(EVAL_URL, 7, make_case(rules=[], goals=[]), ACCOUNTS)
+
+    texts = [t for t, _ in conn.calls]
+    restore = next(i for i, t in enumerate(texts) if "INSERT INTO plaid_transactions SELECT" in t)
+    assert "eval_stashed_transactions" in texts[restore]
+    assert restore > texts.index("DELETE FROM plaid_transactions WHERE transaction_id LIKE %s")
+    assert not any("INSERT INTO eval_stashed_transactions" in t for t in texts)
+
+
+def test_reset_stashes_the_persona_transactions_only_when_a_case_seeds_some(conn):
+    """A seeded case sets aside the accounts' own rows so its totals are exact."""
+    case = make_case(
+        rules=[],
+        goals=[],
+        seed_transactions=[
+            {"name": "Payroll", "amount": -1500, "account": "TD Bank Student Checking"}
+        ],
+    )
+
+    evaldb.reset(EVAL_URL, 7, case, ACCOUNTS)
+
+    stash = [(t, p) for t, p in conn.calls if "INSERT INTO eval_stashed_transactions" in t]
+    assert len(stash) == 1
+    assert stash[0][1] == (["acc_1", "acc_2"], evaldb.SEED_PREFIX + "%")
+    texts = [t for t, _ in conn.calls]
+    assert texts.index(stash[0][0]) < texts.index(
+        next(t for t in texts if t.startswith("INSERT INTO plaid_transactions ("))
+    )

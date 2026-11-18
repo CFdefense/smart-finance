@@ -1,0 +1,13 @@
+- description: Chat admits it found nothing instead of inventing an answer
+  vars:
+    persona: arthur@test.com
+    agent: chat
+    search_results: []
+    message: What is the current interest rate on the Zorbex Platinum Savings Bond?
+    expect_tools: [web_search]
+    expected: >-
+      Says it could not find information about the Zorbex Platinum Savings Bond and does not state
+      an interest rate.
+  assert:
+    - { type: python, value: "file://graders.py:tools_called" }
+    - { type: python, value: "file://graders.py:goal" }

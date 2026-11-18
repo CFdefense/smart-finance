@@ -4,7 +4,7 @@
 |---|---|---|
 | `unit/` | Fast pytest tests. No network, database or LLM. Includes the tests for the eval framework itself (`test_eval_*.py`). | `uv run pytest` |
 | `integration/` | pytest tests for the HTTP routes and the database queries. The query tests need Postgres with the migrations applied. | `uv run pytest` |
-| `evals/` | **Agent evals**: YAML test definitions that run the real `analyze` and `chat` agents and have an LLM grade the answer. | `npm run eval` (see below) |
+| `evals/` | **Agent evals**: YAML test definitions that run the real `analyze` and `chat` agents. An LLM grades the wording; deterministic graders check what the agent actually did (tools, saved changes). | `npm run eval` (see below) |
 | `*.py`, `promptfooconfig.yaml`, `package.json` (top level of `tests/`) | The promptfoo-based framework that runs the evals. | |
 
 ## Agent evals
@@ -15,7 +15,9 @@ rules, gives a prompt, and runs one of the agents:
 - `analyze` takes a **transaction** as its prompt.
 - `chat` takes a chat **message** as its prompt.
 
-Three LLM graders then judge the response: **adherence**, **accuracy** and **goal**.
+Three LLM graders judge the response (**adherence**, **accuracy**, **goal**). Chat tests can also use
+deterministic graders that read what the agent *did*: which tools it called, which changes it saved
+through the (recorded, fake) backend, and what it sent to web search.
 
 ### Prerequisites
 
@@ -101,6 +103,14 @@ folder is picked up). Name files `NN_<analyze|chat>_<testname>.yaml` (for exampl
 | `budgets` | no | Monthly budgets: `name`, `category`, `monthly_limit` (all required). One per category. |
 | `rules` | no | Natural-language rules: `description` (required); `account` optional (no account = every account). |
 | `expected` | for `goal` | What a good response achieves, in plain words. Only the `goal` grader reads it. |
+| `followups` | no (chat) | More user messages, sent in order after `message`. The agent's real replies become the history, so this tests confirm-then-save flows. The output shows each reply as `[Turn N] ...`. |
+| `backend` | no (chat) | How the fake backend answers a confirmed change: `ok` (default), `conflict` (409) or `down` (unreachable). Nothing real is ever written. |
+| `seed_transactions` | no (chat) | Extra transactions to insert: `name`, `amount`, `account` (required); `category` (default `OTHER`), `days_ago` (default 0). Positive amounts are money out. Use these for exact totals; the Plaid sandbox puts everything in `OTHER`. |
+| `search_results` | no (chat) | Replace web search with exactly these results (`title`, `content`, optional `url`). `[]` means "found nothing". Omit it to use the real web. |
+| `expect_tools`, `forbid_tools` | for `tools_called`, `tools_not_called` | Tool names the agent must / must not call. Unknown names are rejected. |
+| `expect_backend` | for `backend_matches` | The exact changes the agent must save, in order: `method` (`POST`/`PUT`/`DELETE`), `path` or `path_prefix`, optional `turn` (0 is the first message) and `body` (every listed key must match; `"*"` means any value; `@account:<Account Name>` means that account's id). A trailing `@budget:<name>`, `@goal:<name>` or `@rule:<text substring>` in `path` is replaced by that item's id; it must match exactly one item. |
+| `must_contain`, `must_not_contain` | for `output_contains`, `output_excludes` | Text (case-insensitive) the reply must / must not contain. |
+| `private_terms` | for `search_privacy` | Terms that must never appear in a web search query. |
 
 - `account` is an account **name** from the persona's Plaid data (for `christian@test.com`: for
   example `TD Bank Student Checking`). It is resolved to the Plaid account id for you.
@@ -111,17 +121,26 @@ folder is picked up). Name files `NN_<analyze|chat>_<testname>.yaml` (for exampl
 
 #### Graders (`assert`)
 
-Include any of these; each is optional. `config.threshold` (0 to 1, default 0.7) is the lowest score
+Include any of these; each is optional, but a grader whose var is missing is an error, and so is a var whose grader is missing (a unit test checks every eval file). `config.threshold` (0 to 1, default 0.7) is the lowest score
 that passes.
 
-| Grader | The judge checks |
-|---|---|
-| `file://graders.py:adherence` | the response respects the seeded rules, budgets and goals |
-| `file://graders.py:accuracy` | amounts, totals, merchants and dates match the database |
-| `file://graders.py:goal` | the response achieves what `expected` says |
+| Grader | Kind | Passes when |
+|---|---|---|
+| `file://graders.py:adherence` | judge | the response respects the seeded rules, budgets and goals |
+| `file://graders.py:accuracy` | judge | amounts, totals, merchants and dates match the database |
+| `file://graders.py:goal` | judge | the response achieves what `expected` says |
+| `file://graders.py:tools_called` | deterministic | every tool in `expect_tools` ran |
+| `file://graders.py:tools_not_called` | deterministic | no tool in `forbid_tools` ran |
+| `file://graders.py:backend_matches` | deterministic | the saved changes equal `expect_backend` |
+| `file://graders.py:nothing_saved` | deterministic | no change was saved at all |
+| `file://graders.py:confirmed_before_write` | deterministic | every saved change was proposed earlier and confirmed in a later message |
+| `file://graders.py:output_contains` / `output_excludes` | deterministic | `must_contain` is all present / `must_not_contain` is all absent |
+| `file://graders.py:search_privacy` | deterministic | no `private_terms` entry was sent to web search |
 
 The judge sees the request, the agent's response, and a snapshot of the persona's data (accounts,
-recent transactions, budgets with spend, rules, goals). Use `npm run view` to read each grader's
+recent transactions, budgets with spend, rules, goals). For chat evals the snapshot covers 365 days and up
+to 500 transactions, matching how far back the agent looks; for analyze evals it uses the analyzer's own
+window. Use `npm run view` to read each grader's
 score and reason.
 
 A bad definition (unknown persona or account, missing field) is reported as an **error**, not a
@@ -131,8 +150,15 @@ failed grade, with a message saying what to fix.
 
 - The Plaid sandbox puts every transaction in category `OTHER`, so only a budget on `OTHER` ever
   shows real spend. Budgets in other categories always show $0 spent.
-- The chat agent is not given the user's rules (only accounts, budgets, goals and recent
-  transactions), so chat tests should not expect rule recall. The analyze agent does receive rules.
+- The chat agent sees the user's rules, so chat tests can expect rule recall.
+- `arthur@test.com` has five accounts and about 290 Plaid sandbox transactions of its own. When a case uses
+  `seed_transactions`, those rows are set aside (stashed) for the test and restored on the next reset, so
+  every total is exact. Prefer it for numbers. Balances: Plaid Checking 4,200; Plaid Saving 14,500; Plaid Money
+  Market 26,500; Plaid 401k 38,500; Plaid Credit Card 1,750 owed.
+- promptfoo would run one test per string in a list var; `promptfooconfig.yaml` turns that off
+  (`disableVarExpansion`). Do not remove it.
+- Evals that save changes never touch a real backend: the runner swaps in a recording fake. Check what was
+  saved with `backend_matches`, not by reading the reply.
 - Notifications are switched off for the persona, so no email or SMS is sent. Results still report
   `notified: true` for an ALERT.
 - Keep `expected` specific and checkable ("Verdict ALERT and cites the $200 rule"), not vague
@@ -162,9 +188,10 @@ Flat modules at the top level of `tests/`, imported as top-level modules:
 |---|---|
 | `definition.py` | parse and validate a test's `vars` |
 | `evaldb.py` | create, seed, reset and drop the per-persona databases |
-| `runner.py` | run the `analyze` or `chat` agent in-process |
+| `runner.py` | run the agent in-process; for chat, send follow-ups, stub web search and return what the agent said and did |
 | `facts.py` | snapshot of the persona's data for the graders |
-| `judge.py`, `graders.py` | the judge LLM and the three graders |
+| `judge.py`, `graders.py` | the judge LLM, the three judge graders and the deterministic graders |
+| `rig.py` | the recording fake backend, the tool-call trace and the per-process bundle the runner uses |
 | `provider.py`, `hooks.py` | the promptfoo provider and cleanup hook |
 | `promptfooconfig.yaml` | promptfoo wiring (provider, hook, `evals/*.yaml`, one test at a time) |
 
