@@ -84,11 +84,10 @@ pub async fn middleware_auth(cookies: Cookies, mut req: Request, next: Next) -> 
     if exp - now < session_secs {
         let new_exp = now + session_secs;
         let new_token = format!("user-{user_id}.{new_exp}.sign");
-        let domain = option_env!("DOMAIN").unwrap_or("localhost");
         let on_production = option_env!("APP_ENV").unwrap_or("development") == "production";
 
+        // Host-only, like the login cookie (see set_cookie in controllers/user.rs).
         let new_cookie = Cookie::build(("auth-token", new_token))
-            .domain(domain.to_string())
             .path("/")
             .secure(on_production)
             .http_only(true)

@@ -5,6 +5,7 @@ import { Router } from '@angular/router';
 import { finalize, Observable } from 'rxjs';
 
 import { Goal, GoalsService, GoalStatus } from '../app/services/goals.service';
+import { API_BASE_URL } from '../app/api-config';
 
 /** Only the Plaid fields needed to choose an eligible checking/savings account. */
 interface GoalAccount {
@@ -78,7 +79,7 @@ export class GoalsPage implements OnInit {
     this.accountsLoading.set(true);
     this.accountError.set('');
     this.http
-      .get<AccountsResponse>('http://localhost:3001/api/plaid/accounts', {
+      .get<AccountsResponse>(`${API_BASE_URL}/plaid/accounts`, {
         withCredentials: true,
       })
       .pipe(finalize(() => this.accountsLoading.set(false)))
