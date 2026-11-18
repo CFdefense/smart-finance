@@ -4,14 +4,19 @@ This is the ai agent service. It takes http requests and returns LLM responses.
 
 ## Run Instructions
 
-1. Setup folder
+1. Install dependencies:
 
 ```bash
 cd ai-service
 uv sync
 ```
 
-2. Start the HTTP service: `uvicorn main:app --reload`
+2. Start the service (always put `uv run` in front, or the command is not found):
+
+```bash
+uv run uvicorn main:app --reload
+```
+
 3. View the service by typing the following into your browser's address bar: `http://127.0.0.1:8000/<route>`
    1. Valid routes:
       1. `/health` - Get HTTP API and database health.
@@ -19,7 +24,7 @@ uv sync
       3. `/analyze` - POST only (405 in a browser). Takes a transaction to analyze.
       4. `/anomaly` - POST only (405 in a browser).
       5. `/docs` - Shows API documentation. **Use 'Try it out' here** to test the POST routes (`/chat`, `/analyze`, `/anomaly`).
-4. Test using `pytest`. To evaluate the agents themselves with LLM graders, see `tests/README.md`.
+4. Test using `uv run pytest`. To evaluate the agents themselves with LLM graders, see `tests/README.md`.
 
 ## API
    POST /chat
