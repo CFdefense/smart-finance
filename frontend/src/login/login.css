@@ -121,6 +121,24 @@ main {
 }
 
 .material-symbols-outlined {
+  font-variation-settings:
+    'FILL' 0,
+    'wght' 400,
+    'GRAD' 0,
+    'opsz' 24;
+}
+
+.visibility {
+  color: grey;
+  font-size: 30px;
+}
+
+.visibility_off {
+  color: grey;
+  font-size: 30px;
+}
+
+.savings {
   color: #f4a4c0;
   font-size: 120px;
 }
@@ -131,8 +149,8 @@ main {
 }
 
 .login {
+  padding-top: 10px;
   padding-bottom: 10px;
-  margin-top: 1em;
   font-size: 1.5rem;
   width: 400px;
 }
@@ -161,6 +179,28 @@ main {
 
 .login-button:hover {
   background-color: rgb(187, 205, 254);
+}
+
+.password-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.password-visibility {
+  position: absolute;
+  right: 10px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #666;
+  transition: color 0.2s ease;
+  padding-right: 30px;
 }
 
 @media screen and (max-width: 1000px) {

@@ -97,6 +97,11 @@ export class UserProfile implements OnInit {
   passwordMessage = signal('');
   errorMessage = signal('');
 
+  // toggles password visibility
+  hideCurrent = true;
+  hideNew = true;
+  hideConfirm = true;
+
   /**
    * Loads the user's profile when the component initializes.
    */

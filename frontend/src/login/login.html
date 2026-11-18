@@ -1,14 +1,14 @@
 <head>
   <link
     rel="stylesheet"
-    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=savings" />
+    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=savings,visibility,visibility_off" />
 </head>
 
 <main class="main">
   <div class="content">
     <div class="left-side">
       <h1>Finance Budgeting App</h1>
-      <span class="material-symbols-outlined">savings</span>
+      <span class="material-symbols-outlined savings">savings</span>
     </div>
 
     <div class="divider" role="separator" aria-label="Divider"></div>
@@ -18,6 +18,8 @@
         <div>
           <label class="login-label" for="email">Log into account</label>
         </div>
+
+        <br />
 
         <div>
           <input
@@ -31,16 +33,39 @@
             required />
 
           <br />
+          <br />
 
-          <input
-            type="password"
-            id="password"
-            name="password"
-            class="login"
-            placeholder="password"
-            autocomplete="current-password"
-            [(ngModel)]="password"
-            required />
+          <div class="password-wrapper">
+            <input
+              matInput
+              [type]="hide ? 'password' : 'text'"
+              id="password"
+              name="password"
+              class="login"
+              placeholder="password"
+              autocomplete="current-password"
+              [(ngModel)]="password"
+              required />
+            <button
+              type="button"
+              class="password-visibility"
+              (click)="hide = !hide"
+              [attr.aria-label]="hide ? 'Hide password' : 'Show password'">
+              @if (hide) {
+                <span
+                  class="material-symbols-outlined visibility_off"
+                  [class]="hide ? 'visibility_off' : 'visibility_off'">
+                  visibility_off
+                </span>
+              } @else {
+                <span
+                  class="material-symbols-outlined visibility"
+                  [class]="hide ? 'visibility_off' : 'visibility'">
+                  visibility
+                </span>
+              }
+            </button>
+          </div>
         </div>
 
         <br />
