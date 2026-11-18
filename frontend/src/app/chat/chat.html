@@ -1,0 +1,254 @@
+<!-- Floating assistant stays independent of dashboard content. -->
+<section class="chat-widget" aria-label="AI financial assistant">
+  @if (!expanded()) {
+    <button
+      class="chat-launcher"
+      type="button"
+      (click)="toggleWindow()"
+      aria-label="Open AI financial assistant">
+      <span class="material-symbols-outlined" aria-hidden="true">smart_toy</span>
+      <span>AI Assistant</span>
+    </button>
+  } @else {
+    <div class="chat-window">
+      <!-- Window header and main actions. -->
+      <header class="chat-header">
+        <div class="chat-heading">
+          <span class="material-symbols-outlined" aria-hidden="true">smart_toy</span>
+          <div>
+            <h2>Finance Assistant</h2>
+            <p>Ask about your finances</p>
+          </div>
+        </div>
+
+        <div class="header-actions">
+          <button
+            type="button"
+            (click)="newChat()"
+            [disabled]="sending() || loadingConversation()"
+            aria-label="New conversation"
+            title="New conversation">
+            <span class="material-symbols-outlined">edit_square</span>
+          </button>
+
+          <button
+            type="button"
+            (click)="toggleHistory()"
+            aria-label="Conversation history"
+            [attr.aria-expanded]="showingHistory()"
+            title="Conversation history">
+            <span class="material-symbols-outlined">history</span>
+          </button>
+
+          <button
+            type="button"
+            (click)="toggleWindow()"
+            aria-label="Minimize assistant"
+            title="Minimize">
+            <span class="material-symbols-outlined">remove</span>
+          </button>
+        </div>
+      </header>
+
+      @if (showingHistory()) {
+        <!-- Saved conversations are retrieved from PostgreSQL. -->
+        <section class="history-panel" aria-label="Previous conversations">
+          <div class="history-heading">
+            <h3>Previous conversations</h3>
+            <button type="button" (click)="toggleHistory()">Back</button>
+          </div>
+
+          @if (loadingSessions()) {
+            <p class="panel-message">Loading conversations...</p>
+          }
+
+          @if (historyError()) {
+            <p class="error-message" role="alert">
+              {{ historyError() }}
+            </p>
+          }
+
+          @if (!loadingSessions() && sessions().length === 0) {
+            <p class="panel-message">No previous conversations yet.</p>
+          }
+
+          <div class="session-list">
+            @for (session of sessions(); track session.id) {
+              <div class="session-row" [class.selected]="activeSessionId() === session.id">
+                <button
+                  class="session-open"
+                  type="button"
+                  (click)="openSession(session.id)"
+                  [disabled]="sending() || loadingConversation()">
+                  <span class="material-symbols-outlined" aria-hidden="true">
+                    chat_bubble_outline
+                  </span>
+                  <span class="session-title">
+                    {{ session.title || 'New conversation' }}
+                  </span>
+                </button>
+
+                @if (confirmDeleteId() === session.id) {
+                  <div class="delete-confirmation">
+                    <button
+                      type="button"
+                      class="confirm-delete"
+                      (click)="deleteSession(session.id)"
+                      [disabled]="deletingSessionId() !== null">
+                      Delete
+                    </button>
+                    <button type="button" (click)="confirmDeleteId.set(null)">Cancel</button>
+                  </div>
+                } @else {
+                  <button
+                    type="button"
+                    class="delete-button"
+                    (click)="requestDelete(session.id)"
+                    [disabled]="sending() || deletingSessionId() !== null"
+                    aria-label="Delete conversation"
+                    title="Delete conversation">
+                    <span class="material-symbols-outlined">delete_outline</span>
+                  </button>
+                }
+              </div>
+            }
+          </div>
+        </section>
+      } @else {
+        <!-- Current conversation and temporary streaming messages. -->
+        <div
+          #messageList
+          class="message-list"
+          role="log"
+          aria-label="Chat messages"
+          (scroll)="onMessagesScroll()">
+          @if (
+            messages().length === 0 &&
+            !pendingMessage() &&
+            !failedMessage() &&
+            !loadingConversation()
+          ) {
+            <div class="chat-welcome">
+              <span class="material-symbols-outlined" aria-hidden="true">
+                account_balance_wallet
+              </span>
+              <h3>How can I help?</h3>
+              <p>Ask about spending, budgets, savings goals, or general financial questions.</p>
+            </div>
+          }
+
+          @if (loadingConversation()) {
+            <p class="panel-message">Opening conversation...</p>
+          }
+
+          @for (message of messages(); track message.id) {
+            <div
+              class="message"
+              [class.user-message]="message.role === 'user'"
+              [class.assistant-message]="message.role === 'assistant'">
+              <p>{{ message.content }}</p>
+            </div>
+          }
+
+          <!-- Show the user's message immediately, before it is saved. -->
+          @if (pendingMessage()) {
+            <div class="message user-message">
+              <p>{{ pendingMessage() }}</p>
+            </div>
+          }
+
+          <!--
+  An unsuccessful question remains visible for context,
+  but is explicitly marked unsaved.
+
+  The composer contains the original text so the user
+  can edit or retry it without retyping.
+-->
+          @if (failedMessage()) {
+            <div class="failed-turn">
+              <div class="message user-message failed-user-message">
+                <p>{{ failedMessage() }}</p>
+              </div>
+
+              <p class="failed-caption">
+                <span class="material-symbols-outlined" aria-hidden="true">error_outline</span>
+                Message not saved. Your question is ready to retry.
+              </p>
+            </div>
+          }
+
+          @if (sending()) {
+            <div class="live-response">
+              @if (activity().length > 0) {
+                <div class="activity-list" aria-label="Assistant activity">
+                  @for (item of activity(); track item) {
+                    <div class="activity-item">
+                      <span class="material-symbols-outlined" aria-hidden="true">
+                        travel_explore
+                      </span>
+                      <span>{{ item }}</span>
+                    </div>
+                  }
+                </div>
+              }
+
+              @if (currentStatus()) {
+                <p class="stream-status" role="status">
+                  <span class="loading-dot"></span>
+                  {{ currentStatus() }}
+                </p>
+              }
+
+              @if (streamedText()) {
+                <div class="message assistant-message streaming-message">
+                  <p>
+                    {{ streamedText() }}
+                    <span class="stream-cursor" aria-hidden="true"></span>
+                  </p>
+                </div>
+              } @else if (!currentStatus()) {
+                <p class="stream-status" role="status">
+                  <span class="loading-dot"></span>
+                  Generating response...
+                </p>
+              }
+            </div>
+          }
+
+          @if (errorMessage()) {
+            <p class="error-message" role="alert">
+              {{ errorMessage() }}
+            </p>
+          }
+        </div>
+
+        <!-- Input remains available, but duplicate sends are blocked. -->
+        <form class="chat-composer" (submit)="$event.preventDefault(); send()">
+          <label for="chat-input" class="sr-only">Your message</label>
+
+          <textarea
+            id="chat-input"
+            rows="2"
+            maxlength="2000"
+            placeholder="Ask about your finances..."
+            [value]="draft()"
+            (input)="draft.set($any($event.target).value)"
+            (keydown)="onComposerKeydown($event)"
+            [disabled]="sending() || loadingConversation()"></textarea>
+
+          <button
+            type="submit"
+            class="send-button"
+            aria-label="Send message"
+            [disabled]="!draft().trim() || sending() || loadingConversation()">
+            <span class="material-symbols-outlined" aria-hidden="true">arrow_upward</span>
+          </button>
+        </form>
+
+        <p class="chat-disclaimer">
+          AI responses may be inaccurate. Verify important financial information.
+        </p>
+      }
+    </div>
+  }
+</section>

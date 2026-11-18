@@ -1,0 +1,17 @@
+- description: Chat answers from the user's own data without searching the web
+  vars:
+    persona: arthur@test.com
+    agent: chat
+    search_results:
+      - title: Unrelated
+        url: https://example.test/unrelated
+        content: Savings account balances vary widely.
+    message: How much is in my Plaid Saving account right now?
+    forbid_tools: [web_search]
+    must_contain: ["14,500"]
+    expected: Says Plaid Saving holds $14,500, taken from the user's own data.
+  assert:
+    - { type: python, value: "file://graders.py:tools_not_called" }
+    - { type: python, value: "file://graders.py:output_contains" }
+    - { type: python, value: "file://graders.py:accuracy" }
+    - { type: python, value: "file://graders.py:goal" }

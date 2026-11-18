@@ -8,8 +8,7 @@ from langgraph.prebuilt import InjectedState
 
 from agent.data_models import Category
 from agent.formatting import money
-from agent.safety import sanitize
-from agent.tools.formatting import cap
+from agent.tools.helpers import cap, label
 from db import load_transactions
 
 _FETCH_LIMIT = 200
@@ -39,7 +38,7 @@ def get_transactions(
         if t.transaction_id != current_id and (category is None or t.category == category)
     ][:limit]
     lines = [
-        f"- {t.date.isoformat()} {sanitize(t.name, 60)[0]}: {money(t.amount)} [{t.category or 'OTHER'}]"
+        f"- {t.date.isoformat()} {label(t.name)}: {money(t.amount)} [{t.category or 'OTHER'}]"
         for t in rows
     ]
     return cap(f"Transactions in the last {days} days:\n" + ("\n".join(lines) or "- none"))

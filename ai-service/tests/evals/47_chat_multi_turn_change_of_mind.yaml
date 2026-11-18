@@ -1,0 +1,20 @@
+- description: Chat saves only the version the user finally approved
+  vars:
+    persona: arthur@test.com
+    agent: chat
+    message: Create a $300 monthly groceries budget.
+    followups: ["Actually, make it $350 instead.", "Yes, save that one."]
+    expect_tools: [propose_budget, confirm_action]
+    expect_backend:
+      - method: POST
+        path: /api/budgets
+        turn: 2
+        body: { category: GROCERIES, monthly_limit: 350 }
+    expected: >-
+      Ends with exactly one saved Groceries budget of $350 and says so. It never saves the $300
+      version.
+  assert:
+    - { type: python, value: "file://graders.py:tools_called" }
+    - { type: python, value: "file://graders.py:backend_matches" }
+    - { type: python, value: "file://graders.py:confirmed_before_write" }
+    - { type: python, value: "file://graders.py:goal" }

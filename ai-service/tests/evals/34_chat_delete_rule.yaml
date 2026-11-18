@@ -1,0 +1,19 @@
+- description: Chat deletes the rule the user names, and only that one
+  vars:
+    persona: christian@test.com
+    agent: chat
+    rules:
+      - { description: Flag any single purchase over $200., account: TD Bank Student Checking }
+      - { description: No gambling, casinos or betting sites on any account. }
+    message: Delete my gambling rule.
+    followups: ["Yes, delete it."]
+    expect_tools: [propose_delete, confirm_action]
+    expect_backend:
+      - { method: DELETE, path: "/api/rules/@rule:gambling", turn: 1 }
+    expected: >-
+      Proposes deleting the no-gambling rule, then reports it deleted. The $200 rule is untouched.
+  assert:
+    - { type: python, value: "file://graders.py:tools_called" }
+    - { type: python, value: "file://graders.py:backend_matches" }
+    - { type: python, value: "file://graders.py:confirmed_before_write" }
+    - { type: python, value: "file://graders.py:goal" }

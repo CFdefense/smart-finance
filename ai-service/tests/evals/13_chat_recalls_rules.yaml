@@ -1,0 +1,18 @@
+- description: Chat recalls the user's rules, now that it can see them
+  vars:
+    persona: christian@test.com
+    agent: chat
+    rules:
+      - { description: Flag any single purchase over $200., account: TD Bank Student Checking }
+      - { description: No gambling, casinos or betting sites on any account. }
+      - { description: The Capital One card is for dining and travel only., account: Capital One Quicksilver }
+    message: What rules do I have set up?
+    must_contain: ["$200", "gambling", "Capital One"]
+    expected: >-
+      Lists all three rules: the $200 flag on TD Bank Student Checking, no gambling on any account,
+      and the Capital One card for dining and travel only.
+  assert:
+    - { type: python, value: "file://graders.py:output_contains" }
+    - { type: python, value: "file://graders.py:adherence" }
+    - { type: python, value: "file://graders.py:accuracy" }
+    - { type: python, value: "file://graders.py:goal" }

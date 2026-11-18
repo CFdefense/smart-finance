@@ -1,0 +1,21 @@
+- description: Chat raises a savings goal's target after the user agrees
+  vars:
+    persona: arthur@test.com
+    agent: chat
+    goals:
+      - { name: Rainy day, description: Emergency cushion., account: Plaid Saving, target_amount: 20000, days_until_target: 300 }
+    message: Change my Rainy day goal so the target is $25,000.
+    followups: ["Yes, go ahead."]
+    expect_tools: [propose_update, confirm_action]
+    expect_backend:
+      - method: PUT
+        path_prefix: /api/goals/
+        turn: 1
+        body: { target_amount: 25000 }
+    expected: >-
+      Proposes raising the Rainy day target from $20,000 to $25,000, then reports it updated.
+  assert:
+    - { type: python, value: "file://graders.py:tools_called" }
+    - { type: python, value: "file://graders.py:backend_matches" }
+    - { type: python, value: "file://graders.py:confirmed_before_write" }
+    - { type: python, value: "file://graders.py:goal" }

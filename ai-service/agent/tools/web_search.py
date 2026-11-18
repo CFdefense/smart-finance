@@ -8,7 +8,7 @@ from langchain_core.tools import tool
 
 from agent.logging import TOOL
 from agent.safety import fence
-from agent.tools.formatting import cap
+from agent.tools.helpers import cap
 
 _log = logging.getLogger(TOOL)
 

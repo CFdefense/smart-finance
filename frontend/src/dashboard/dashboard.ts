@@ -17,9 +17,10 @@ import {
 import { Subscription } from 'rxjs';
 import type { OnDestroy } from '@angular/core';
 import { GoalsService, type Goal } from '../app/services/goals.service';
+import { ChatWidget } from '../app/chat/chat';
 
 @Component({
-  imports: [CurrencyPipe, DecimalPipe],
+  imports: [CurrencyPipe, DecimalPipe, ChatWidget],
   selector: 'app-root',
   styleUrl: './dashboard.css',
   templateUrl: './dashboard.html',

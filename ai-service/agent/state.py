@@ -13,6 +13,7 @@ class ChatState(TypedDict):
     """Represent the state of a chat conversation with message history to handle tool calls."""
 
     user_id: int
+    request_id: str  # one id per chat request; the confirm gate compares it with the proposal's
     context: str
     messages: Annotated[list[Any], add_messages]
 

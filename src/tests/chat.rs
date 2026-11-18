@@ -358,6 +358,148 @@ async fn send_message_validation_rejects_empty_and_oversized() {
     cleanup(&pool, &email).await;
 }
 
+// ─── Delete session tests ────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn delete_session_removes_session_and_messages() {
+    let app = test_app().await;
+    let pool = test_pool().await;
+    let email = unique_email("chat_delete");
+    let cookie = authenticated_cookie(app.clone(), &email).await;
+
+    // Create a real session for our authenticated test user.
+    let (create_status, session) = call(&app, "POST", "/api/chat/sessions", &cookie, None).await;
+
+    assert_eq!(create_status, StatusCode::CREATED);
+
+    let session_id = session["id"].as_i64().expect("session ID");
+
+    // Insert messages directly to verify database cascading deletion.
+    // This does not require an external AI service or OpenAI API key.
+    sqlx::query(
+        "INSERT INTO chat_messages (session_id, role, content) \
+         VALUES ($1, 'user', 'Hello'), \
+                ($1, 'assistant', 'Hi there!')",
+    )
+    .bind(session_id)
+    .execute(&pool)
+    .await
+    .expect("insert test messages");
+
+    // Delete the conversation through the HTTP API.
+    let (delete_status, _) = call(
+        &app,
+        "DELETE",
+        &format!("/api/chat/sessions/{session_id}"),
+        &cookie,
+        None,
+    )
+    .await;
+
+    assert_eq!(delete_status, StatusCode::NO_CONTENT);
+
+    // The deleted conversation must no longer be retrievable.
+    let (get_status, _) = call(
+        &app,
+        "GET",
+        &format!("/api/chat/sessions/{session_id}"),
+        &cookie,
+        None,
+    )
+    .await;
+
+    assert_eq!(get_status, StatusCode::NOT_FOUND);
+
+    // Confirm the database removed the associated messages, too.
+    let remaining_messages: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM chat_messages WHERE session_id = $1")
+            .bind(session_id)
+            .fetch_one(&pool)
+            .await
+            .expect("count remaining messages");
+
+    assert_eq!(remaining_messages, 0);
+
+    cleanup(&pool, &email).await;
+}
+
+#[tokio::test]
+async fn delete_session_rejects_foreign_user() {
+    let app = test_app().await;
+    let pool = test_pool().await;
+
+    let owner_email = unique_email("chat_delete_owner");
+    let other_email = unique_email("chat_delete_other");
+
+    let owner_cookie = authenticated_cookie(app.clone(), &owner_email).await;
+    let other_cookie = authenticated_cookie(app.clone(), &other_email).await;
+
+    // User A creates a conversation.
+    let (create_status, session) =
+        call(&app, "POST", "/api/chat/sessions", &owner_cookie, None).await;
+
+    assert_eq!(create_status, StatusCode::CREATED);
+
+    let session_id = session["id"].as_i64().expect("session ID");
+    let uri = format!("/api/chat/sessions/{session_id}");
+
+    // User B must not be able to delete User A's conversation.
+    let (delete_status, _) = call(&app, "DELETE", &uri, &other_cookie, None).await;
+
+    assert_eq!(delete_status, StatusCode::NOT_FOUND);
+
+    // Verify the owner's conversation still exists.
+    let (get_status, _) = call(&app, "GET", &uri, &owner_cookie, None).await;
+
+    assert_eq!(get_status, StatusCode::OK);
+
+    cleanup(&pool, &owner_email).await;
+    cleanup(&pool, &other_email).await;
+}
+
+#[tokio::test]
+async fn delete_session_requires_authentication() {
+    let app = test_app().await;
+
+    let (status, _) = call(&app, "DELETE", "/api/chat/sessions/1", "", None).await;
+
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn delete_session_nonexistent_and_invalid_ids() {
+    let app = test_app().await;
+    let pool = test_pool().await;
+    let email = unique_email("chat_delete_invalid");
+    let cookie = authenticated_cookie(app.clone(), &email).await;
+
+    // A correctly formatted but nonexistent ID returns 404.
+    let (missing_status, _) = call(
+        &app,
+        "DELETE",
+        "/api/chat/sessions/2147483647",
+        &cookie,
+        None,
+    )
+    .await;
+
+    assert_eq!(missing_status, StatusCode::NOT_FOUND);
+
+    // A non-integer ID returns 400, like the existing GET route.
+    let (invalid_status, _) = call(
+        &app,
+        "DELETE",
+        "/api/chat/sessions/not-a-number",
+        &cookie,
+        None,
+    )
+    .await;
+
+    assert_eq!(invalid_status, StatusCode::BAD_REQUEST);
+
+    cleanup(&pool, &email).await;
+}
+
 // ─── Streaming / Relay tests ─────────────────────────────────────────────────
 
 #[tokio::test]

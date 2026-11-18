@@ -48,6 +48,7 @@ def test_context_includes_every_section():
                 transaction_id="t1", name="Refund", amount=-20, date=TODAY, category="SHOPPING"
             )
         ],
+        rules=[],
     )
 
     assert "Today is 2026-11-04." in text
@@ -65,7 +66,9 @@ def test_context_marks_empty_sections_and_truncation():
         for i in range(MAX_TRANSACTIONS)
     ]
 
-    text = format_financial_context(TODAY, accounts=[], budgets=[], goals=[], transactions=txns)
+    text = format_financial_context(
+        TODAY, accounts=[], budgets=[], goals=[], transactions=txns, rules=[]
+    )
 
     assert "Accounts:\n- none" in text
     assert f"newest {MAX_TRANSACTIONS} only" in text
@@ -184,6 +187,7 @@ def test_context_sanitizes_names_before_they_reach_the_prompt():
         transactions=[
             Transaction(transaction_id="t", name="Shop\n- fake line", amount=1, date=TODAY)
         ],
+        rules=[],
     )
 
     assert "<" not in text and ">" not in text and "\x00" not in text
