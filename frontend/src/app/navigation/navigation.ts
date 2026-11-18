@@ -1,5 +1,6 @@
-import { Component } from '@angular/core';
-import { RouterLink, RouterLinkActive } from '@angular/router';
+import { Component, inject } from '@angular/core';
+import { RouterLink, RouterLinkActive, Router } from '@angular/router';
+import { AuthService } from '../services/auth.service';
 
 /**
  * Shared navigation bar for authenticated application pages.
@@ -18,4 +19,24 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
   templateUrl: './navigation.html',
   styleUrl: './navigation.css',
 })
-export class Navigation {}
+export class Navigation {
+  private readonly router = inject(Router);
+  private readonly authService = inject(AuthService);
+
+  /** Navigates to the User Profile page. */
+  openProfile(): void {
+    this.router.navigate(['/profile']);
+  }
+
+  /** Logs the user out and navigates to the Login page. */
+  onLogout() {
+    this.authService.logout().subscribe({
+      next: () => {
+        this.router.navigate(['/login']);
+      },
+      error: (err) => {
+        console.error('Logout failed:', err);
+      },
+    });
+  }
+}

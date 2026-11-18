@@ -8,10 +8,10 @@
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 20px;
+  gap: 25px;
 
-  padding: 16px 32px;
-  background-color: #ffffff;
+  padding: 19px 32px;
+  background-image: radial-gradient(circle, rgb(172, 193, 245), rgb(100, 141, 252));
   border-bottom: 1px solid #e5e7eb;
 }
 
@@ -23,19 +23,19 @@
   align-items: center;
   gap: 10px;
 
-  color: #1f2937;
+  color: white;
   white-space: nowrap;
 }
 
 .navigation-brand .material-symbols-outlined {
   font-size: 30px;
-  color: #2563eb;
 }
 
 .brand-name {
-  font-size: 1.2rem;
+  font-size: 2.4rem;
   font-weight: 700;
   letter-spacing: -0.025em;
+  color: white;
 }
 
 /*
@@ -60,8 +60,29 @@
   padding: 10px 14px;
   border-radius: 8px;
 
-  color: #4b5563;
-  font-size: 0.95rem;
+  /* color: #4b5563; */
+  color: white;
+  font-size: 1.3rem;
+  font-weight: 500;
+  text-decoration: none;
+
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.profile-navigation {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+
+  padding: 10px 14px;
+  border-radius: 8px;
+
+  /* color: #4b5563; */
+  color: white;
+  font-size: 1.3rem;
   font-weight: 500;
   text-decoration: none;
 
@@ -71,7 +92,7 @@
 }
 
 .navigation-link .material-symbols-outlined {
-  font-size: 21px;
+  font-size: 30px;
 }
 
 /*
@@ -92,6 +113,12 @@ a.navigation-link:hover {
   font-weight: 600;
 }
 
+.profile-navigation.active {
+  color: #1d4ed8;
+  background-color: #eff6ff;
+  font-weight: 600;
+}
+
 /*
  * Visible keyboard focus makes navigation
  * accessible without a mouse.
@@ -106,8 +133,9 @@ a.navigation-link:focus-visible {
  * clickable until their pages are implemented.
  */
 .navigation-link.disabled {
-  color: #9ca3af;
+  color: #e1e1e1;
   cursor: default;
+  
 }
 
 /*
@@ -137,4 +165,127 @@ a.navigation-link:focus-visible {
   .navigation-link .material-symbols-outlined {
     font-size: 23px;
   }
+}
+
+.account {
+  font-size: 30px;
+}
+
+.profile-option {
+  display: flex;
+  align-items: center;
+}
+
+.logout-option {
+  display: flex;
+  align-items: center;
+}
+
+.profile-dropdown {
+  justify-content: flex-end;
+  position: relative;
+  display: inline-block;
+  align-content: center;
+  padding: 4px;
+}
+
+.profile-dropdown:hover .profile-navigation{
+  background-color: #f3f4f6;
+  color: #111827;
+  border-radius: 6px;
+}
+
+.profile-dropdown-content {
+  display: none;
+  position: absolute;
+  background-color: #ffffff;
+  min-width: 160px;
+  box-shadow: 0px 8px 16px 0px rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  z-index: 1;
+  margin-top: 2px;
+  align-items: center;
+}
+
+.profile-dropdown-content a {
+  color: #333333;
+  padding: 12px 1px 20px 5px;
+  text-decoration: none;
+  display: block;
+  font-family: sans-serif;
+  font-size: 1.5rem;
+  transition: background 0.2s;
+  align-items: center;
+}
+
+.profile-dropdown a:hover {
+  background-color: #f1f1f1;
+}
+
+.profile-dropdown:hover .profile-dropdown-content {
+  display: block;
+}
+
+/*
+ * Profile dropdown container.
+ *
+ * Acts as the positioning reference for the menu.
+ */
+ .profile-dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+/*
+ * Position the menu beneath the profile icon.
+ *
+ * right: 0 is important: it prevents the menu
+ * from extending off the right edge of the page.
+ */
+.profile-dropdown-content {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  left: auto;
+
+  width: 190px;
+  min-width: 190px;
+  box-sizing: border-box;
+  margin-top: 0;
+
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  z-index: 100;
+}
+
+/*
+ * Consistent sizing for menu actions.
+ */
+.profile-dropdown-content a,
+.profile-dropdown-content button {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 12px 14px;
+
+  font-family:
+    Inter,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #374151;
+  text-decoration: none;
+
+  cursor: pointer;
+}
+
+/* Highlight the hovered menu item. */
+.profile-option:hover,
+.logout-option:hover {
+  background-color: #f3f4f6;
 }

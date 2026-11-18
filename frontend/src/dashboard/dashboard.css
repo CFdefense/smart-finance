@@ -15,10 +15,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 24px;
-
   width: min(1100px, calc(100% - 32px));
-  margin: 0 auto;
-  padding: 28px 0 24px;
+  padding: 28px 0px 0px 0px;
 }
 
 /* Adapt the header for narrower screens. */
@@ -45,8 +43,8 @@
     Arial,
     sans-serif;
 
-  /* Responsive: 1.75rem on smaller screens, up to 2.25rem. */
-  font-size: clamp(1.75rem, 3vw, 2.25rem);
+  /* Responsive: 2rem on smaller screens, up to 3rem. */
+  font-size: clamp(2rem, 4vw, 3rem);
 
   font-weight: 650;
   line-height: 1.2;
@@ -74,80 +72,11 @@
     'opsz' 24;
 }
 
-.account {
-  color: #434343;
-  font-size: 40px;
-  background-color: white;
-  border-radius: 10px;
-  box-shadow: 4px 8px 15px 2px rgba(0, 0, 0, 0.2);
-  transition: background 0.3s;
-}
-
-.person {
-  color: #434343;
-  font-size: 40px;
-  position: relative;
-}
-
-.logout {
-  color: #434343;
-  font-size: 40px;
-  position: relative;
-}
-
 .add {
   color: white;
   font-size: 35px;
   position: relative;
   align-items: center;
-}
-
-.profile-option {
-  display: flex;
-  align-items: center;
-}
-
-.logout-option {
-  display: flex;
-  align-items: center;
-}
-
-.profile-dropdown {
-  justify-content: flex-end;
-  position: relative;
-  display: inline-block;
-  align-content: center;
-}
-
-.profile-dropdown-content {
-  display: none;
-  position: absolute;
-  background-color: #ffffff;
-  min-width: 160px;
-  box-shadow: 0px 8px 16px 0px rgba(0, 0, 0, 0.2);
-  border-radius: 4px;
-  z-index: 1;
-  margin-top: 2px;
-  align-items: center;
-}
-
-.profile-dropdown-content a {
-  color: #333333;
-  padding: 12px 1px 20px 5px;
-  text-decoration: none;
-  display: block;
-  font-family: sans-serif;
-  font-size: 1.5rem;
-  transition: background 0.2s;
-  align-items: center;
-}
-
-.profile-dropdown a:hover {
-  background-color: #f1f1f1;
-}
-
-.profile-dropdown:hover .profile-dropdown-content {
-  display: block;
 }
 
 /*
@@ -162,46 +91,8 @@
   flex-direction: column;
   gap: 24px;
 
-  width: min(1100px, calc(100% - 32px));
+  width: min(1200px, calc(100% - 32px));
   margin: 0 auto 48px;
-}
-
-.budget-buttons {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 16px;
-  padding: 0;
-}
-
-.create-budget {
-  /* background: linear-gradient(135deg, #48a0ff, #0077f6); */
-  background: linear-gradient(135deg, #ccdaff, #7c9fff);
-  color: white;
-  padding: 25px 30px;
-  border: none;
-  border-radius: 10px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  font-family:
-    'Inter Tight',
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    Roboto,
-    Helvetica,
-    Arial,
-    sans-serif,
-    'Apple Color Emoji',
-    'Segoe UI Emoji',
-    'Segoe UI Symbol';
-  font-size: 1.75rem;
-}
-
-.create-budget:hover {
-  /* background: #0f65c0; */
-  background: #7c9fff;
 }
 
 .totals-and-remaining {
@@ -215,8 +106,8 @@
 .total-budget {
   /* background-color: rgba(195, 232, 248, 0.5); */
   background-color: #dde5fc;
-  width: auto;
-  min-width: 0;
+  height: 60%;
+  width: 70%;
   padding: 30px;
   border-radius: 10px;
   box-shadow: 4px 8px 15px 2px rgba(0, 0, 0, 0.2);
@@ -227,7 +118,7 @@
   background-color: white;
   /* color: rgb(124, 182, 223); */
   color: #96b0fc;
-  font-size: 60px;
+  font-size: 35px;
   border-radius: 8px;
   justify-content: left;
 }
@@ -261,18 +152,19 @@
 
 .total-budget-title {
   color: rgb(92, 92, 92);
-  font-size: 1.75rem;
+  font-size: 1.3rem;
 }
 
 .total-budget-amount {
   color: black;
-  font-size: 2.5rem;
+  font-size: 1.5rem;
 }
 
 .actual-spent {
   /* background-color: rgba(135, 213, 247, 0.5); */
   background-color: #c4d5fc;
-  width: auto;
+  height: 60%;
+  width: 70%;
   min-width: 0;
   padding: 30px;
   border-radius: 10px;
@@ -284,25 +176,26 @@
   background-color: white;
   /* color: rgb(90, 165, 218); */
   color: #7e96d0;
-  font-size: 60px;
+  font-size: 35px;
   border-radius: 8px;
   justify-content: left;
 }
 
 .actual-spent-title {
   color: rgb(92, 92, 92);
-  font-size: 1.75rem;
+  font-size: 1.3rem;
 }
 
 .actual-spent-amount {
   color: black;
-  font-size: 2.5rem;
+  font-size: 1.5rem;
 }
 
 .remaining-budget {
   /* background-color: rgba(68, 164, 205, 0.5); */
   background-color: #a2b7e9;
-  width: auto;
+  height: 60%;
+  width: 70%;
   min-width: 0;
   padding: 30px;
   border-radius: 10px;
@@ -314,19 +207,19 @@
   background-color: white;
   /* color: rgb(61, 116, 155); */
   color: #50669a;
-  font-size: 60px;
+  font-size: 35px;
   border-radius: 8px;
   justify-content: left;
 }
 
 .remaining-budget-title {
   color: rgb(92, 92, 92);
-  font-size: 1.75rem;
+  font-size: 1.3rem;
 }
 
 .remaining-budget-amount {
   color: black;
-  font-size: 2.5rem;
+  font-size: 1.5rem;
 }
 
 /*
@@ -471,14 +364,15 @@
 
 .accounts-heading h2 {
   margin: 0 0 6px;
-  font-size: 1.35rem;
+  font-size: 1.6rem;
   color: #1f2937;
+  padding-bottom: 5px;
 }
 
 .accounts-heading p {
   margin: 0;
   color: #64748b;
-  font-size: 0.9rem;
+  font-size: 1.3rem;
 }
 
 .accounts-heading > .material-symbols-outlined {
@@ -539,7 +433,7 @@
 
 .account-description,
 .transaction-description {
-  font-size: 0.84rem;
+  font-size: 1.2rem;
   color: #64748b;
 }
 
@@ -602,7 +496,7 @@
   gap: 12px;
   margin-top: 20px;
   color: #64748b;
-  font-size: 0.875rem;
+  font-size: 1.2rem;
 }
 
 .pagination-buttons {
@@ -698,14 +592,15 @@
 
 .chart-heading h2 {
   margin: 0 0 5px;
-  font-size: 1.15rem;
+  font-size: 1.6rem;
   color: #1f2937;
+  padding-bottom: 5px;
 }
 
 .chart-heading p {
   margin: 0;
   color: #64748b;
-  font-size: 0.85rem;
+  font-size: 1.3rem;
 }
 
 .chart-heading > .material-symbols-outlined {
@@ -747,7 +642,7 @@
 
 .chart-message {
   color: #64748b;
-  font-size: 0.9rem;
+  font-size: 1.2rem;
   line-height: 1.6;
 }
 
@@ -761,7 +656,7 @@
 
 .chart-hint {
   margin-top: 8px;
-  font-size: 0.8rem;
+  font-size: 1.2rem;
 }
 
 /* Stack the charts on narrow screens. */
@@ -831,7 +726,7 @@
 .expense-legend-name {
   min-width: 0;
   color: #475569;
-  font-size: 0.88rem;
+  font-size: 1.2rem;
 }
 
 .expense-color-dot {
@@ -847,7 +742,7 @@
   align-items: baseline;
   gap: 10px;
   white-space: nowrap;
-  font-size: 0.88rem;
+  font-size: 1.2rem;
   color: #1f2937;
 }
 
@@ -866,7 +761,8 @@
   display: block;
   margin-top: 14px;
   margin-bottom: 5px;
-  font-size: 0.8rem;
+  padding-bottom: 5px;
+  font-size: 1.3rem;
   font-weight: 600;
   color: #475569;
 }
@@ -879,7 +775,7 @@
   border-radius: 8px;
   background: white;
   color: #1f2937;
-  font-size: 0.85rem;
+  font-size: 1.2rem;
   cursor: pointer;
 }
 
@@ -913,14 +809,16 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 5px;
-  margin-top: 12px;
-  margin-bottom: 12px;
+  margin-top: 14px;
+  margin-bottom: 5px;
+  padding-bottom: 5px;
 }
 
 .expense-month-control label {
-  font-size: 0.8rem;
+  font-size: 1.3rem;
   font-weight: 600;
   color: #475569;
+  padding-bottom: 5px
 }
 
 .expense-month-control select {
@@ -933,7 +831,7 @@
   background: #fff;
   color: #1f2937;
   font: inherit;
-  font-size: 0.85rem;
+  font-size: 1.2rem;
   cursor: pointer;
 }
 
@@ -976,13 +874,14 @@
 .dashboard-progress-header h2 {
   margin: 0 0 6px;
   color: #1e293b;
-  font-size: 1.4rem;
+  font-size: 1.6rem;
+  padding-bottom: 5px;
 }
 
 .dashboard-progress-header p {
   margin: 0;
   color: #64748b;
-  font-size: 0.88rem;
+  font-size: 1.3rem;
 }
 
 .dashboard-progress-header button {
@@ -993,10 +892,11 @@
   color: #334155;
   font-weight: 600;
   cursor: pointer;
+  background-color: #f4f8ff;
 }
 
 .dashboard-progress-header button:hover {
-  background: #f1f5f9;
+  background: #e5e9ed;
 }
 
 .dashboard-progress-item {
@@ -1046,7 +946,7 @@
 .dashboard-progress-warning,
 .dashboard-progress-success {
   margin: 8px 0 0;
-  font-size: 0.82rem;
+  font-size: 1.2rem;
   color: #64748b;
 }
 
@@ -1064,6 +964,7 @@
   margin: 16px 0;
   color: #64748b;
   line-height: 1.5;
+  font-size: 1.2rem;
 }
 
 @media (max-width: 800px) {
@@ -1127,15 +1028,16 @@
   margin: 0;
   color: #1e293b;
   font-family: inherit;
-  font-size: 1.4rem;
+  font-size: 1.6rem;
   font-weight: 700;
+  padding-bottom: 5px;
 }
 
 .net-worth-value {
   margin: 8px 0;
   color: #1e293b;
   font-family: inherit;
-  font-size: clamp(2.2rem, 4vw, 3.2rem);
+  font-size: clamp(2.2rem, 4vw, 2.2rem);
   font-weight: 750;
   letter-spacing: -0.035em;
   line-height: 1.15;
@@ -1158,7 +1060,7 @@
 .net-worth-note {
   margin: 0;
   color: #64748b;
-  font-size: 0.86rem;
+  font-size: 1.3rem;
   line-height: 1.5;
 }
 

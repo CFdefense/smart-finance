@@ -1,48 +1,21 @@
 <main class="main">
-  <div class="header">
-    <div>
-      <!-- Show a personalized greeting using the user's profile. -->
-      @if (profileLoading()) {
-        <h1 class="title">Welcome back</h1>
-      } @else if (firstName()) {
-        <h1 class="title">Welcome back, {{ firstName() }}</h1>
-      } @else {
-        <h1 class="title">Welcome back</h1>
-      }
-    </div>
-    <div class="profile-dropdown">
-      <div class="icons">
-        <span class="material-symbols-outlined account">account_circle</span>
-      </div>
-      <div class="profile-dropdown-content">
-        <div class="profile-option">
-          <span
-            class="material-symbols-outlined person"
-            role="button"
-            tabindex="0"
-            (click)="openProfile()">
-            person
-          </span>
-          <a tabindex="0" role="button" (click)="openProfile()">Profile</a>
-        </div>
-        <div class="logout-option">
-          <span
-            class="material-symbols-outlined logout"
-            role="button"
-            tabindex="0"
-            (click)="onLogout()">
-            logout
-          </span>
-          <a tabindex="0" role="button" (click)="onLogout()">Logout</a>
-        </div>
-      </div>
-    </div>
-  </div>
   <div class="parent">
+    <div class="header">
+      <div>
+        <!-- Show a personalized greeting using the user's profile. -->
+        @if (profileLoading()) {
+          <h1 class="title">Welcome back</h1>
+        } @else if (firstName()) {
+          <h1 class="title">Welcome back, {{ firstName() }}</h1>
+        } @else {
+          <h1 class="title">Welcome back</h1>
+        }
+      </div>
+    </div>
     <!--
-  Current linked-account net worth.
-  This belongs at the very top of the financial dashboard.
--->
+    Current linked-account net worth.
+    This belongs at the very top of the financial dashboard.
+    -->
     <section class="net-worth-card" aria-labelledby="net-worth-heading">
       <div class="net-worth-content">
         <div class="net-worth-label">
@@ -484,6 +457,49 @@
       </article>
     </section>
 
+    <!-- Monthly budget summary, displayed below the charts. -->
+    <div class="totals-and-remaining">
+      <div class="total-budget">
+        <span class="material-symbols-outlined attach-money">attach_money</span>
+        <p class="total-budget-title">Total Budget</p>
+        <p class="total-budget-amount">
+          @if (budgetsLoading()) {
+            Loading...
+          } @else if (budgetsError()) {
+            Unavailable
+          } @else {
+            {{ totalBudget() | currency }}
+          }
+        </p>
+      </div>
+      <div class="actual-spent">
+        <span class="material-symbols-outlined payments">payments</span>
+        <p class="actual-spent-title">Actual Spent</p>
+        <p class="actual-spent-amount">
+          @if (budgetsLoading()) {
+            Loading...
+          } @else if (budgetsError()) {
+            Unavailable
+          } @else {
+            {{ totalSpent() | currency }}
+          }
+        </p>
+      </div>
+      <div class="remaining-budget">
+        <span class="material-symbols-outlined account-balance-wallet">account_balance_wallet</span>
+        <p class="remaining-budget-title">Remaining Budget</p>
+        <p class="remaining-budget-amount">
+          @if (budgetsLoading()) {
+            Loading...
+          } @else if (budgetsError()) {
+            Unavailable
+          } @else {
+            {{ totalRemaining() | currency }}
+          }
+        </p>
+      </div>
+    </div>
+
     <!-- =====================================================
      DASHBOARD PROGRESS OVERVIEW
 
@@ -499,7 +515,11 @@
             <p>Spending compared with your monthly limits</p>
           </div>
 
-          <button type="button" (click)="openBudgets()">Manage</button>
+          <!-- <button type="button" (click)="openBudgets()">Manage</button> -->
+          <button type="button" class="create-budget" (click)="openBudgets()">
+            <span class="material-symbols-outlined add" aria-hidden="true">account_balance_wallet</span>
+            Manage Budgets
+          </button>
         </div>
 
         @if (budgetsLoading()) {
@@ -555,7 +575,11 @@
             <p>Progress toward your financial targets</p>
           </div>
 
-          <button type="button" (click)="openGoals()">Manage</button>
+          <!-- <button type="button" (click)="openGoals()">Manage</button> -->
+          <button type="button" class="set-goals" (click)="openGoals()">
+            <span class="material-symbols-outlined target" aria-hidden="true">target</span>
+              Manage Goals
+          </button>
         </div>
 
         @if (dashboardGoalsLoading()) {
@@ -602,62 +626,5 @@
         }
       </article>
     </section>
-
-    <div class="budget-buttons">
-      <!-- Open the Budgets page to create, edit, or delete budgets. -->
-      <button type="button" class="create-budget" (click)="openBudgets()">
-        <span class="material-symbols-outlined add" aria-hidden="true">account_balance_wallet</span>
-        Manage Budgets
-      </button>
-
-      <!-- Open the Goals page to manage financial goals. -->
-      <button type="button" class="set-goals" (click)="openGoals()">
-        <span class="material-symbols-outlined target" aria-hidden="true">target</span>
-        Manage Goals
-      </button>
-    </div>
-
-    <!-- Monthly budget summary, displayed below the charts. -->
-    <div class="totals-and-remaining">
-      <div class="total-budget">
-        <span class="material-symbols-outlined attach-money">attach_money</span>
-        <p class="total-budget-title">Total Budget</p>
-        <p class="total-budget-amount">
-          @if (budgetsLoading()) {
-            Loading...
-          } @else if (budgetsError()) {
-            Unavailable
-          } @else {
-            {{ totalBudget() | currency }}
-          }
-        </p>
-      </div>
-      <div class="actual-spent">
-        <span class="material-symbols-outlined payments">payments</span>
-        <p class="actual-spent-title">Actual Spent</p>
-        <p class="actual-spent-amount">
-          @if (budgetsLoading()) {
-            Loading...
-          } @else if (budgetsError()) {
-            Unavailable
-          } @else {
-            {{ totalSpent() | currency }}
-          }
-        </p>
-      </div>
-      <div class="remaining-budget">
-        <span class="material-symbols-outlined account-balance-wallet">account_balance_wallet</span>
-        <p class="remaining-budget-title">Remaining Budget</p>
-        <p class="remaining-budget-amount">
-          @if (budgetsLoading()) {
-            Loading...
-          } @else if (budgetsError()) {
-            Unavailable
-          } @else {
-            {{ totalRemaining() | currency }}
-          }
-        </p>
-      </div>
-    </div>
   </div>
 </main>
