@@ -48,7 +48,6 @@ services:
         - network.host
       args:
         DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:5432/${POSTGRES_DB}
-        DOMAIN: ${DOMAIN:-localhost} # Cookie domain, compiled in. On the VM: the VM's IP.
     env_file: ../.env
     environment:
       BIND_ADDRESS: 0.0.0.0:3001 # Listen on all interfaces inside the container.

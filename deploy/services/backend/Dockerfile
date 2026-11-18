@@ -30,14 +30,10 @@ COPY src ./src
 # DATABASE_URL: sqlx's query! macros connect to a live, already-migrated
 #   Postgres WHILE COMPILING to type-check every SQL query. No database = no
 #   build. (This is why deploy.sh starts and migrates the db first.)
-# DOMAIN: read at compile time (option_env!) and used as the login cookie's
-#   Domain. It must equal the host people type in the browser (e.g. the VM's
-#   IP), or the browser throws the login cookie away.
 #
 # APP_ENV is deliberately NOT set: "production" would mark cookies Secure,
 # and browsers refuse Secure cookies over plain http://.
 ARG DATABASE_URL
-ARG DOMAIN=localhost
 
 # Compile only the server binary, optimised (--release); --locked makes cargo
 # use exactly the versions in Cargo.lock.
