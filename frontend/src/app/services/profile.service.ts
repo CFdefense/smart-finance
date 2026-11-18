@@ -1,6 +1,7 @@
 import { inject, Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { API_BASE_URL } from '../api-config';
 
 import type {
   UserProfile,
@@ -22,7 +23,7 @@ export type {
 })
 export class ProfileService {
   private readonly http = inject(HttpClient);
-  private readonly baseUrl = 'http://localhost:3001/api/user';
+  private readonly baseUrl = `${API_BASE_URL}/user`;
 
   /**
    * Retrieves the authenticated user's profile information.

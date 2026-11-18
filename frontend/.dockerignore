@@ -1,0 +1,6 @@
+# Used when the build context is frontend/ (the frontend image).
+# These are installed/generated inside the image, so don't send them.
+node_modules/
+dist/
+.angular/
+coverage/

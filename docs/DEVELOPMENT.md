@@ -106,3 +106,21 @@ Copy `.env.example` to `.env`. The defaults match the Docker Compose Postgres se
 | `FRONTEND_URL` | Allowed CORS origin |
 | `BIND_ADDRESS` | Server bind address (e.g. `127.0.0.1:3001`) |
 | `RUST_LOG` | Log level (e.g. `debug`, `info`) |
+
+## Deploying with Docker
+
+### Deploy
+
+```bash
+bash deploy/deploy.sh # branch optional, ex. bash deploy/deploy.sh containerize
+```
+
+The script runs these steps, and the order matters:
+
+1. `git switch <branch>` and `git pull --ff-only origin <branch>`.
+2. Start the database and wait until it is healthy (`up -d --wait db`).
+3. Run migrations (`sqlx migrate run`).
+4. Run seeder (no reset).
+5. Build the backend image.
+6. Build the other images and start everything.
+

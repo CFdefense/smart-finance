@@ -48,7 +48,6 @@ impl CookieStore for Cookies {
 /// Token format: `user-<id>.<exp_unix_seconds>.sign`.
 /// Expiry: 3 days from now, or `UNIX_EPOCH` when `expired = true`.
 fn set_cookie(user_id: i32, is_expired: bool, cookies: &mut impl CookieStore, key: &Key) {
-    let domain = option_env!("DOMAIN").unwrap_or("localhost");
     let on_production = option_env!("APP_ENV").unwrap_or("development") == "production";
 
     let (expires, max_age) = if is_expired {
@@ -62,8 +61,9 @@ fn set_cookie(user_id: i32, is_expired: bool, cookies: &mut impl CookieStore, ke
 
     debug!("set_cookie: production={on_production}");
 
+    // No Domain attribute: the cookie is "host-only", so the browser sends it
+    // back to exactly the host it came from (localhost, the VM's IP, ...).
     let cookie = Cookie::build(("auth-token", token))
-        .domain(domain.to_string())
         .path("/")
         .secure(on_production)
         .http_only(true)
@@ -679,9 +679,9 @@ mod test {
     }
 
     #[test]
-    fn set_cookie_domain_defaults_to_localhost() {
+    fn set_cookie_is_host_only() {
         let mut store = MockCookies::default();
         set_cookie(1, false, &mut store, &test_key());
-        assert_eq!(store.added[0].domain(), Some("localhost"));
+        assert_eq!(store.added[0].domain(), None);
     }
 }
