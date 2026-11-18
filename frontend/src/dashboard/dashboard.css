@@ -91,7 +91,7 @@
   flex-direction: column;
   gap: 24px;
 
-  width: min(1200px, calc(100% - 32px));
+  width: min(1300px, calc(100% - 32px));
   margin: 0 auto 48px;
 }
 
@@ -101,6 +101,7 @@
   align-items: stretch;
   gap: 20px;
   padding: 0;
+  justify-items: center;
 }
 
 .total-budget {
@@ -152,7 +153,7 @@
 
 .total-budget-title {
   color: rgb(92, 92, 92);
-  font-size: 1.3rem;
+  font-size: 1.4rem;
 }
 
 .total-budget-amount {
@@ -183,7 +184,7 @@
 
 .actual-spent-title {
   color: rgb(92, 92, 92);
-  font-size: 1.3rem;
+  font-size: 1.4rem;
 }
 
 .actual-spent-amount {
@@ -214,7 +215,7 @@
 
 .remaining-budget-title {
   color: rgb(92, 92, 92);
-  font-size: 1.3rem;
+  font-size: 1.4rem;
 }
 
 .remaining-budget-amount {
@@ -268,7 +269,7 @@
 .create-budget .material-symbols-outlined,
 .set-goals .material-symbols-outlined {
   color: inherit;
-  font-size: 23px;
+  font-size: 2rem;
 }
 
 /*
@@ -372,11 +373,11 @@
 .accounts-heading p {
   margin: 0;
   color: #64748b;
-  font-size: 1.3rem;
+  font-size: 1.4rem;
 }
 
 .accounts-heading > .material-symbols-outlined {
-  font-size: 30px;
+  font-size: 2rem;
   color: #6284e2;
 }
 
@@ -428,12 +429,12 @@
 .transaction-details strong {
   overflow-wrap: anywhere;
   color: #1f2937;
-  font-size: 0.98rem;
+  font-size: 1.4rem;
 }
 
 .account-description,
 .transaction-description {
-  font-size: 1.2rem;
+  font-size: 1.4rem;
   color: #64748b;
 }
 
@@ -444,10 +445,12 @@
   flex-shrink: 0;
   color: #1f2937;
   white-space: nowrap;
+  font-size: 1.4rem;
 }
 
 .account-value .material-symbols-outlined {
   color: #64748b;
+  font-size: 2.3rem;
 }
 
 /*
@@ -461,7 +464,7 @@
 
 .account-transactions h3 {
   margin: 0 0 15px;
-  font-size: 1rem;
+  font-size: 1.3rem;
   color: #334155;
 }
 
@@ -482,7 +485,7 @@
 .transaction-amount {
   flex-shrink: 0;
   color: #334155;
-  font-size: 0.95rem;
+  font-size: 1.3rem;
 }
 
 .transaction-amount.incoming {
@@ -600,17 +603,17 @@
 .chart-heading p {
   margin: 0;
   color: #64748b;
-  font-size: 1.3rem;
+  font-size: 1.4rem;
 }
 
 .chart-heading > .material-symbols-outlined {
   color: #6284e2;
-  font-size: 27px;
+  font-size: 2rem;
 }
 
 .net-worth-graph {
   display: block;
-  width: 100%;
+  width: 110%;
   height: auto;
   overflow: visible;
 }
@@ -622,7 +625,7 @@
 }
 
 .chart-axis-label {
-  font-size: 13px;
+  font-size: 1rem;
   fill: #64748b;
 }
 
@@ -685,7 +688,7 @@
 }
 
 .expense-donut-container {
-  width: min(100%, 250px);
+  width: min(100%, 280px);
 }
 
 .expense-donut {
@@ -696,12 +699,12 @@
 
 .expense-donut-label {
   fill: #64748b;
-  font-size: 12px;
+  font-size: 1.1rem;
 }
 
 .expense-donut-total {
   fill: #1f2937;
-  font-size: 19px;
+  font-size: 1.1rem;
   font-weight: 700;
 }
 
@@ -762,7 +765,7 @@
   margin-top: 14px;
   margin-bottom: 5px;
   padding-bottom: 5px;
-  font-size: 1.3rem;
+  font-size: 1.4rem;
   font-weight: 600;
   color: #475569;
 }
@@ -815,7 +818,7 @@
 }
 
 .expense-month-control label {
-  font-size: 1.3rem;
+  font-size: 1.4rem;
   font-weight: 600;
   color: #475569;
   padding-bottom: 5px;
@@ -875,13 +878,13 @@
   margin: 0 0 6px;
   color: #1e293b;
   font-size: 1.6rem;
-  padding-bottom: 5px;
+  padding-bottom: 10px;
 }
 
 .dashboard-progress-header p {
   margin: 0;
   color: #64748b;
-  font-size: 1.3rem;
+  font-size: 1.4rem;
 }
 
 .dashboard-progress-header button {
@@ -913,7 +916,7 @@
   gap: 12px;
   margin-bottom: 9px;
   color: #1e293b;
-  font-size: 0.9rem;
+  font-size: 1.4rem;
 }
 
 .dashboard-progress-track {
@@ -1028,7 +1031,7 @@
   margin: 0;
   color: #1e293b;
   font-family: inherit;
-  font-size: 1.6rem;
+  font-size: 1.7rem;
   font-weight: 700;
   padding-bottom: 5px;
 }
@@ -1049,7 +1052,7 @@
   flex-wrap: wrap;
   gap: 12px 26px;
   color: #475569;
-  font-size: 0.95rem;
+  font-size: 1.4rem;
   font-weight: 500;
 }
 
@@ -1060,7 +1063,7 @@
 .net-worth-note {
   margin: 0;
   color: #64748b;
-  font-size: 1.3rem;
+  font-size: 1.4rem;
   line-height: 1.5;
 }
 
