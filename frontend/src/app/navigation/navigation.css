@@ -135,7 +135,6 @@ a.navigation-link:focus-visible {
 .navigation-link.disabled {
   color: #e1e1e1;
   cursor: default;
-  
 }
 
 /*
@@ -189,7 +188,7 @@ a.navigation-link:focus-visible {
   padding: 4px;
 }
 
-.profile-dropdown:hover .profile-navigation{
+.profile-dropdown:hover .profile-navigation {
   background-color: #f3f4f6;
   color: #111827;
   border-radius: 6px;
@@ -231,7 +230,7 @@ a.navigation-link:focus-visible {
  *
  * Acts as the positioning reference for the menu.
  */
- .profile-dropdown {
+.profile-dropdown {
   position: relative;
   display: inline-block;
 }

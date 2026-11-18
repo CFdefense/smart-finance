@@ -65,7 +65,8 @@
         <br />
         <div class="password-wrapper">
           <input
-            matInput [type]="hide ? 'password' : 'text'"
+            matInput
+            [type]="hide ? 'password' : 'text'"
             id="password"
             type="password"
             name="password"
@@ -74,23 +75,31 @@
             placeholder="Create a password"
             autocomplete="new-password"
             required />
-            <button
-              type="button"
-              class="password-visibility"
-              (click)="hide = !hide"
-              [attr.aria-label]="hide ? 'Hide password' : 'Show password'"
-            >
-              @if (hide) {
-                <span class="material-symbols-outlined visibility_off" [class]="hide ? 'visibility_off' : 'visibility_off'">visibility_off</span>
-              } @else {
-                <span class="material-symbols-outlined visibility" [class]="hide ? 'visibility_off' : 'visibility'">visibility</span>
-              }
-            </button>
+          <button
+            type="button"
+            class="password-visibility"
+            (click)="hide = !hide"
+            [attr.aria-label]="hide ? 'Hide password' : 'Show password'">
+            @if (hide) {
+              <span
+                class="material-symbols-outlined visibility_off"
+                [class]="hide ? 'visibility_off' : 'visibility_off'">
+                visibility_off
+              </span>
+            } @else {
+              <span
+                class="material-symbols-outlined visibility"
+                [class]="hide ? 'visibility_off' : 'visibility'">
+                visibility
+              </span>
+            }
+          </button>
         </div>
         <br />
         <div class="password-wrapper">
           <input
-            matInput [type]="hideConfirm ? 'password' : 'text'"
+            matInput
+            [type]="hideConfirm ? 'password' : 'text'"
             id="confirmPassword"
             type="password"
             name="confirmPassword"
@@ -103,12 +112,19 @@
             type="button"
             class="password-visibility"
             (click)="hideConfirm = !hideConfirm"
-            [attr.aria-label]="hideConfirm ? 'Hide password' : 'Show password'"
-          >
+            [attr.aria-label]="hideConfirm ? 'Hide password' : 'Show password'">
             @if (hideConfirm) {
-              <span class="material-symbols-outlined visibility_off" [class]="hideConfirm ? 'visibility_off' : 'visibility_off'">visibility_off</span>
+              <span
+                class="material-symbols-outlined visibility_off"
+                [class]="hideConfirm ? 'visibility_off' : 'visibility_off'">
+                visibility_off
+              </span>
             } @else {
-              <span class="material-symbols-outlined visibility" [class]="hideConfirm ? 'visibility_off' : 'visibility'">visibility</span>
+              <span
+                class="material-symbols-outlined visibility"
+                [class]="hideConfirm ? 'visibility_off' : 'visibility'">
+                visibility
+              </span>
             }
           </button>
         </div>

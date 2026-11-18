@@ -260,7 +260,8 @@
               <label for="currentPassword" class="profile">Current Password</label>
               <div class="password-wrapper">
                 <input
-                  matInput [type]="hideCurrent ? 'password' : 'text'"
+                  matInput
+                  [type]="hideCurrent ? 'password' : 'text'"
                   id="currentPassword"
                   name="currentPassword"
                   type="password"
@@ -272,12 +273,19 @@
                   type="button"
                   class="password-visibility"
                   (click)="hideCurrent = !hideCurrent"
-                  [attr.aria-label]="hideCurrent ? 'Hide password' : 'Show password'"
-                >
+                  [attr.aria-label]="hideCurrent ? 'Hide password' : 'Show password'">
                   @if (hideCurrent) {
-                    <span class="material-symbols-outlined visibility_off" [class]="hideCurrent ? 'visibility_off' : 'visibility_off'">visibility_off</span>
+                    <span
+                      class="material-symbols-outlined visibility_off"
+                      [class]="hideCurrent ? 'visibility_off' : 'visibility_off'">
+                      visibility_off
+                    </span>
                   } @else {
-                    <span class="material-symbols-outlined visibility" [class]="hideCurrent ? 'visibility_off' : 'visibility'">visibility</span>
+                    <span
+                      class="material-symbols-outlined visibility"
+                      [class]="hideCurrent ? 'visibility_off' : 'visibility'">
+                      visibility
+                    </span>
                   }
                 </button>
               </div>
@@ -285,7 +293,8 @@
               <label for="newPassword" class="profile">New Password</label>
               <div class="password-wrapper">
                 <input
-                  matInput [type]="hideNew ? 'password' : 'text'"
+                  matInput
+                  [type]="hideNew ? 'password' : 'text'"
                   id="newPassword"
                   name="newPassword"
                   type="password"
@@ -297,12 +306,19 @@
                   type="button"
                   class="password-visibility"
                   (click)="hideNew = !hideNew"
-                  [attr.aria-label]="hideNew ? 'Hide password' : 'Show password'"
-                >
+                  [attr.aria-label]="hideNew ? 'Hide password' : 'Show password'">
                   @if (hideNew) {
-                    <span class="material-symbols-outlined visibility_off" [class]="hideNew ? 'visibility_off' : 'visibility_off'">visibility_off</span>
+                    <span
+                      class="material-symbols-outlined visibility_off"
+                      [class]="hideNew ? 'visibility_off' : 'visibility_off'">
+                      visibility_off
+                    </span>
                   } @else {
-                    <span class="material-symbols-outlined visibility" [class]="hideNew ? 'visibility_off' : 'visibility'">visibility</span>
+                    <span
+                      class="material-symbols-outlined visibility"
+                      [class]="hideNew ? 'visibility_off' : 'visibility'">
+                      visibility
+                    </span>
                   }
                 </button>
               </div>
@@ -310,7 +326,8 @@
               <label for="confirmPassword" class="profile">Confirm New Password</label>
               <div class="password-wrapper">
                 <input
-                  matInput [type]="hideConfirm ? 'password' : 'text'"
+                  matInput
+                  [type]="hideConfirm ? 'password' : 'text'"
                   id="confirmPassword"
                   name="confirmPassword"
                   type="password"
@@ -322,12 +339,19 @@
                   type="button"
                   class="password-visibility"
                   (click)="hideConfirm = !hideConfirm"
-                  [attr.aria-label]="hideConfirm ? 'Hide password' : 'Show password'"
-                >
+                  [attr.aria-label]="hideConfirm ? 'Hide password' : 'Show password'">
                   @if (hideConfirm) {
-                    <span class="material-symbols-outlined visibility_off" [class]="hideConfirm ? 'visibility_off' : 'visibility_off'">visibility_off</span>
+                    <span
+                      class="material-symbols-outlined visibility_off"
+                      [class]="hideConfirm ? 'visibility_off' : 'visibility_off'">
+                      visibility_off
+                    </span>
                   } @else {
-                    <span class="material-symbols-outlined visibility" [class]="hideConfirm ? 'visibility_off' : 'visibility'">visibility</span>
+                    <span
+                      class="material-symbols-outlined visibility"
+                      [class]="hideConfirm ? 'visibility_off' : 'visibility'">
+                      visibility
+                    </span>
                   }
                 </button>
               </div>
