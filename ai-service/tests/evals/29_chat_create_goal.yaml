@@ -1,0 +1,20 @@
+- description: Chat creates a savings goal on the right account
+  vars:
+    persona: arthur@test.com
+    agent: chat
+    message: I want a savings goal called Rainy day. Save $20,000 in my Plaid Saving account by one year from today.
+    followups: ["Yes, create it."]
+    expect_tools: [propose_goal, confirm_action]
+    expect_backend:
+      - method: POST
+        path: /api/goals
+        turn: 1
+        body: { name: Rainy day, account_id: "@account:Plaid Saving", target_amount: 20000, target_date: "*" }
+    expected: >-
+      Proposes a Rainy day goal of $20,000 on Plaid Saving with a date about a year away, then
+      reports it saved.
+  assert:
+    - { type: python, value: "file://graders.py:tools_called" }
+    - { type: python, value: "file://graders.py:backend_matches" }
+    - { type: python, value: "file://graders.py:confirmed_before_write" }
+    - { type: python, value: "file://graders.py:goal" }

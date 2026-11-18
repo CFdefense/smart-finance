@@ -1,7 +1,8 @@
 import logging
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from typing import Any
 
+from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
@@ -9,15 +10,17 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode
 from pydantic import SecretStr
 
+from agent.backend_api import BackendApi, backend_from_env
 from agent.data_models import ChatRequest, ChatResponse
 from agent.logging import BASE, AgentCallbackHandler, bind_run, clear_run, log_route, new_run_id
 from agent.nodes import load_context, make_respond
+from agent.pending import PendingActionStore
 from agent.state import ChatState
-from agent.tools import web_search
+from agent.tools import ANALYTICS_TOOLS, READ_TOOLS, make_write_tools, web_search
 
 _log = logging.getLogger(f"{BASE}.chat")
 
-MAX_TOOL_ROUNDS = 4
+MAX_TOOL_ROUNDS = 6
 _UNAVAILABLE = "Sorry, the assistant is having trouble right now. Please try again shortly."
 _GAVE_UP = "I couldn't finish looking that up. Please try asking again."
 
@@ -63,9 +66,27 @@ def build_messages(request: ChatRequest) -> list[Any]:
 class ChatAgent:
     """Agent responsible for handling user requests with financial context."""
 
-    def __init__(self, openai_key: str, model: str):
+    # Observers added to every run (the eval harness traces tool calls with one).
+    _extra_callbacks: Sequence[BaseCallbackHandler] = ()
+
+    def __init__(
+        self,
+        openai_key: str,
+        model: str,
+        backend_api: BackendApi | None = None,
+        pending: PendingActionStore | None = None,
+        extra_callbacks: Sequence[BaseCallbackHandler] | None = None,
+    ):
         """Create and compile the conversational graph."""
-        tools = [web_search]
+        self.pending = pending if pending is not None else PendingActionStore()
+        self.backend = backend_api if backend_api is not None else backend_from_env()
+        self._extra_callbacks = tuple(extra_callbacks or ())
+        tools = [
+            web_search,
+            *READ_TOOLS,
+            *ANALYTICS_TOOLS,
+            *make_write_tools(self.pending, self.backend),
+        ]
         llm = ChatOpenAI(api_key=SecretStr(openai_key), model=model)
         self._graph = build_chat_graph(llm.bind_tools(tools), tools)
 
@@ -79,10 +100,14 @@ class ChatAgent:
                 result = self._graph.invoke(
                     {
                         "user_id": request.user_id,
+                        "request_id": run_id,
                         "context": "",
                         "messages": build_messages(request),
                     },
-                    config={"callbacks": [AgentCallbackHandler()], "run_name": "chat"},
+                    config={
+                        "callbacks": [AgentCallbackHandler(), *self._extra_callbacks],
+                        "run_name": "chat",
+                    },
                 )
             except Exception as exc:
                 _log.error("chat.crashed type=%s", type(exc).__name__)
@@ -103,7 +128,7 @@ class ChatAgent:
         a threadpool (FastAPI's, for a sync stream) gives every step its own context copy.
         """
         run_id = new_run_id()
-        events = self._stream_events(request)
+        events = self._stream_events(request, run_id)
         try:
             while True:
                 bind_run(run_id, None, request.user_id)
@@ -116,7 +141,7 @@ class ChatAgent:
             events.close()
             clear_run()
 
-    def _stream_events(self, request: ChatRequest) -> Iterator[dict[str, Any]]:
+    def _stream_events(self, request: ChatRequest, run_id: str) -> Iterator[dict[str, Any]]:
         """
         Answer the user as a stream of events. Never raises.
 
@@ -134,8 +159,16 @@ class ChatAgent:
         streamed_round = False  # tokens already sent for the current respond round
         try:
             for mode, data in self._graph.stream(
-                {"user_id": request.user_id, "context": "", "messages": messages},
-                config={"callbacks": [AgentCallbackHandler()], "run_name": "chat"},
+                {
+                    "user_id": request.user_id,
+                    "request_id": run_id,
+                    "context": "",
+                    "messages": messages,
+                },
+                config={
+                    "callbacks": [AgentCallbackHandler(), *self._extra_callbacks],
+                    "run_name": "chat",
+                },
                 stream_mode=["messages", "updates"],
             ):
                 if mode == "messages":

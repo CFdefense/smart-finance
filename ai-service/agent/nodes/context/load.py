@@ -6,7 +6,7 @@ from datetime import date, timedelta
 from agent.logging import NODE, traced_node
 from agent.nodes.context.format import MAX_TRANSACTIONS, RECENT_DAYS, format_financial_context
 from agent.state import ChatState, StateUpdate
-from db import load_accounts, load_budgets, load_goals, load_transactions
+from db import load_accounts, load_all_rules, load_budgets, load_goals, load_transactions
 
 _log = logging.getLogger(NODE)
 
@@ -22,6 +22,7 @@ def load_financial_context(user_id: int) -> str:
         transactions=load_transactions(
             user_id, since=today - timedelta(days=RECENT_DAYS), limit=MAX_TRANSACTIONS
         ),
+        rules=load_all_rules(user_id),
     )
 
 

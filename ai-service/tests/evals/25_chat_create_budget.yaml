@@ -1,0 +1,19 @@
+- description: Chat proposes a budget, then saves it after the user agrees
+  vars:
+    persona: arthur@test.com
+    agent: chat
+    message: Set up a $400 monthly budget called Groceries for my grocery spending.
+    followups: ["Yes, go ahead and save it."]
+    expect_tools: [propose_budget, confirm_action]
+    expect_backend:
+      - method: POST
+        path: /api/budgets
+        turn: 1
+        body: { name: "*", category: GROCERIES, monthly_limit: 400 }
+    expected: >-
+      First asks the user to confirm a $400 monthly Groceries budget, then reports it was saved.
+  assert:
+    - { type: python, value: "file://graders.py:tools_called" }
+    - { type: python, value: "file://graders.py:backend_matches" }
+    - { type: python, value: "file://graders.py:confirmed_before_write" }
+    - { type: python, value: "file://graders.py:goal" }

@@ -5,7 +5,7 @@ import sys
 import httpx
 
 from agent.tools import web_search
-from agent.tools.formatting import MAX_TOOL_CHARS
+from agent.tools.helpers import MAX_TOOL_CHARS
 
 # `agent.tools.web_search` is both the tool and its module name; the tool shadows the module.
 web_search_mod = sys.modules["agent.tools.web_search"]

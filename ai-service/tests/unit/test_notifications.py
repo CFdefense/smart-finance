@@ -30,11 +30,6 @@ def _patch_prefs(monkeypatch, prefs: NotificationPreferences):
     monkeypatch.setattr(dispatcher_module, "load_preferences", lambda user_id: prefs)
 
 
-# ---------------------------------------------------------------------------
-# Email routing
-# ---------------------------------------------------------------------------
-
-
 def test_sends_email_when_enabled(monkeypatch, fake_email):
     """Email is dispatched when email_notifications is True."""
     _patch_prefs(
@@ -74,11 +69,6 @@ def test_skips_email_when_disabled(monkeypatch, fake_email):
     send_notification(1, "Hello!")
 
     assert fake_email.calls == []
-
-
-# ---------------------------------------------------------------------------
-# SMS-via-email-gateway routing
-# ---------------------------------------------------------------------------
 
 
 def test_sends_sms_via_gateway_when_enabled(monkeypatch, fake_email):
@@ -152,11 +142,6 @@ def test_sms_skipped_without_gateway(monkeypatch, fake_email):
     send_notification(1, "Hello!")
 
     assert fake_email.calls == []
-
-
-# ---------------------------------------------------------------------------
-# Combined and edge cases
-# ---------------------------------------------------------------------------
 
 
 def test_sends_both_when_both_enabled(monkeypatch, fake_email):

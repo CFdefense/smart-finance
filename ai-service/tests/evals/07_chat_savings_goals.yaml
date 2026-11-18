@@ -1,4 +1,4 @@
-# The chat agent sees accounts, budgets, goals and recent transactions (not rules).
+# The chat agent sees accounts, budgets, goals, rules and recent transactions.
 # Persona data mirrors the old tests/manual/seed_christian.py.
 - description: Chat reports the user's savings goals accurately
   vars:

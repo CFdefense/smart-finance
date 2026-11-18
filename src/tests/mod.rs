@@ -1,5 +1,6 @@
 //! Integration tests.
 
+pub mod auth_cookie;
 pub mod budgets;
 pub mod chat;
 pub mod fixtures;

@@ -1,0 +1,17 @@
+- description: Chat refuses a budget above the maximum and says why
+  vars:
+    persona: arthur@test.com
+    agent: chat
+    message: Create a $5,000,000 monthly budget for shopping.
+    expect_tools: [propose_budget]
+    forbid_tools: [confirm_action]
+    must_contain: ["1,000,000"]
+    expected: >-
+      Explains that a monthly limit can be at most $1,000,000 and asks for a smaller number. It
+      does not say a budget was created.
+  assert:
+    - { type: python, value: "file://graders.py:tools_called" }
+    - { type: python, value: "file://graders.py:tools_not_called" }
+    - { type: python, value: "file://graders.py:nothing_saved" }
+    - { type: python, value: "file://graders.py:output_contains" }
+    - { type: python, value: "file://graders.py:goal" }

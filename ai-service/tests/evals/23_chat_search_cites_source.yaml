@@ -1,0 +1,16 @@
+- description: Chat says where web information came from
+  vars:
+    persona: arthur@test.com
+    agent: chat
+    search_results:
+      - title: What is an HSA?
+        url: https://www.irs.gov/publications/p969
+        content: A health savings account (HSA) lets people with a high-deductible health plan save pre-tax money for medical costs. Withdrawals for qualified medical expenses are tax-free.
+    message: What is an HSA and why would I want one?
+    expect_tools: [web_search]
+    expected: >-
+      Explains that an HSA is a pre-tax account for medical costs with tax-free qualified
+      withdrawals, and mentions that the information came from a web source (the IRS).
+  assert:
+    - { type: python, value: "file://graders.py:tools_called" }
+    - { type: python, value: "file://graders.py:goal" }

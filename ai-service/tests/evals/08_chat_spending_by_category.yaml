@@ -1,0 +1,25 @@
+- description: Chat totals spending per category over the last 30 days
+  vars:
+    persona: arthur@test.com
+    agent: chat
+    seed_transactions:
+      - { name: Whole Foods, amount: 84.20, account: Plaid Credit Card, category: GROCERIES, days_ago: 3 }
+      - { name: Trader Joe's, amount: 61.35, account: Plaid Credit Card, category: GROCERIES, days_ago: 10 }
+      - { name: Whole Foods, amount: 112.45, account: Plaid Credit Card, category: GROCERIES, days_ago: 17 }
+      - { name: Chipotle, amount: 14.50, account: Plaid Credit Card, category: FOOD_DINING, days_ago: 2 }
+      - { name: Sweetgreen, amount: 16.25, account: Plaid Credit Card, category: FOOD_DINING, days_ago: 5 }
+      - { name: Nobu, amount: 142.00, account: Plaid Credit Card, category: FOOD_DINING, days_ago: 8 }
+      - { name: Whole Foods, amount: 500.00, account: Plaid Credit Card, category: GROCERIES, days_ago: 75 }
+    message: Break down my spending by category for the last 30 days.
+    expect_tools: [spending_by_category]
+    must_contain: ["258", "172.75", "430.75"]
+    must_not_contain: ["758"]
+    expected: >-
+      Reports groceries of $258.00, food and dining of $172.75 and a total of $430.75, and does
+      not count the $500 grocery purchase from 75 days ago.
+  assert:
+    - { type: python, value: "file://graders.py:tools_called" }
+    - { type: python, value: "file://graders.py:output_contains" }
+    - { type: python, value: "file://graders.py:output_excludes" }
+    - { type: python, value: "file://graders.py:accuracy" }
+    - { type: python, value: "file://graders.py:goal" }

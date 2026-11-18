@@ -1,0 +1,22 @@
+- description: Chat names the merchant the user spent the most at
+  vars:
+    persona: arthur@test.com
+    agent: chat
+    seed_transactions:
+      - { name: Whole Foods, amount: 84.20, account: Plaid Credit Card, category: GROCERIES, days_ago: 3 }
+      - { name: Trader Joe's, amount: 61.35, account: Plaid Credit Card, category: GROCERIES, days_ago: 10 }
+      - { name: Whole Foods, amount: 112.45, account: Plaid Credit Card, category: GROCERIES, days_ago: 17 }
+      - { name: Chipotle, amount: 14.50, account: Plaid Credit Card, category: FOOD_DINING, days_ago: 2 }
+      - { name: Sweetgreen, amount: 16.25, account: Plaid Credit Card, category: FOOD_DINING, days_ago: 5 }
+      - { name: Nobu, amount: 142.00, account: Plaid Credit Card, category: FOOD_DINING, days_ago: 8 }
+    message: Where did I spend the most money in the last 30 days? Give me my top three places.
+    expect_tools: [spending_by_merchant]
+    must_contain: ["Whole Foods", "196.65", "Nobu", "142"]
+    expected: >-
+      Ranks Whole Foods first with $196.65 over two purchases, then Nobu with $142.00, then
+      Trader Joe's with $61.35.
+  assert:
+    - { type: python, value: "file://graders.py:tools_called" }
+    - { type: python, value: "file://graders.py:output_contains" }
+    - { type: python, value: "file://graders.py:accuracy" }
+    - { type: python, value: "file://graders.py:goal" }

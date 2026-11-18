@@ -1,4 +1,4 @@
-"""promptfoo provider: prepare the persona's database, run the agent, return output + facts."""
+"""promptfoo provider: prepare the database, run the agent, return output, facts and its actions."""
 
 import sys
 from pathlib import Path
@@ -21,12 +21,19 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
         persona_db = evaldb.ensure_persona(admin, test_vars["__evalId"], case.persona)
         accounts = evaldb.account_ids(persona_db.url, persona_db.user_id)
         evaldb.reset(persona_db.url, persona_db.user_id, case, accounts)
-        output = runner.run(case, persona_db.url, persona_db.user_id, accounts)
+        result = runner.run(case, persona_db.url, persona_db.user_id, accounts)
         with runner.database(persona_db.url):
-            snapshot = facts.snapshot(persona_db.user_id)
+            snapshot = facts.snapshot(persona_db.user_id, agent=case.agent)
     except DefinitionError as exc:
         return {"error": f"invalid test definition: {exc}"}
     return {
-        "output": output,
-        "metadata": {"facts": snapshot, "persona": case.persona["email"], "agent": case.agent},
+        "output": result.output,
+        "metadata": {
+            "facts": snapshot,
+            "persona": case.persona["email"],
+            "agent": case.agent,
+            "accounts": accounts,
+            "tool_calls": result.tool_calls,
+            "backend_calls": result.backend_calls,
+        },
     }

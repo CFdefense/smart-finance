@@ -6,12 +6,16 @@ from datetime import date
 import pytest
 
 from db import (
+    category_totals,
     get_connection,
     load_accounts,
+    load_all_rules,
     load_budgets,
     load_goals,
     load_preferences,
     load_transactions,
+    merchant_totals,
+    net_flow,
 )
 
 # (name, amount, category, date)
@@ -135,3 +139,152 @@ def test_load_preferences_raises_for_unknown_user(user_with_data):
     assert load_preferences(user_id).email.startswith("test-")
     with pytest.raises(ValueError):
         load_preferences(user_id + 999_999)
+
+
+def test_load_budgets_and_goals_include_ids(user_with_data):
+    """Budgets and goals carry their ids, and goals their account id."""
+    user_id, tag = user_with_data
+
+    [budget] = load_budgets(user_id, today=date(2026, 10, 20))
+    [goal] = load_goals(user_id)
+
+    assert isinstance(budget.id, int)
+    assert isinstance(goal.id, int) and goal.account_id == f"acc-{tag}"
+
+
+def test_load_all_rules_returns_enabled_rules_for_any_account(user_with_data):
+    """Enabled rules come back with their account ids; disabled and other users' rules do not."""
+    user_id, tag = user_with_data
+    with get_connection() as conn:
+        rule_id = conn.execute(
+            "INSERT INTO rules (user_id, description) VALUES (%s, 'No gambling') RETURNING id",
+            (user_id,),
+        ).fetchone()[0]
+        conn.execute(
+            "INSERT INTO rule_accounts (rule_id, account_id) VALUES (%s, %s)",
+            (rule_id, f"acc-{tag}"),
+        )
+        conn.execute(
+            "INSERT INTO rules (user_id, description, enabled) VALUES (%s, 'Old', false)",
+            (user_id,),
+        )
+
+    rules = load_all_rules(user_id)
+
+    assert [(r.description, r.account_ids) for r in rules] == [("No gambling", [f"acc-{tag}"])]
+    assert load_all_rules(user_id + 999_999) == []
+
+
+def test_category_totals_sum_only_money_out_in_the_window(user_with_data):
+    """Positive amounts per category inside [start, end); the refund and the September TV are out."""
+    user_id, _ = user_with_data
+
+    totals = category_totals(user_id, date(2026, 10, 1), date(2026, 11, 1))
+
+    assert totals == {"GROCERIES": 60, "FOOD_DINING": 20}
+    assert list(totals) == ["GROCERIES", "FOOD_DINING"]  # biggest first
+
+
+def test_category_totals_end_is_exclusive(user_with_data):
+    """A transaction on the end date is not counted."""
+    user_id, _ = user_with_data
+
+    assert category_totals(user_id, date(2026, 10, 1), date(2026, 10, 2)) == {"FOOD_DINING": 5}
+
+
+def test_merchant_totals_group_and_limit(user_with_data):
+    """Merchants are ranked by total spend and limited."""
+    user_id, _ = user_with_data
+
+    top = merchant_totals(user_id, date(2026, 9, 1), date(2026, 11, 1), limit=2)
+
+    assert [(m.name, m.total, m.count) for m in top] == [("tv", 900, 1), ("groceries", 60, 1)]
+
+
+def test_net_flow_is_deposits_minus_withdrawals_on_depository_accounts(user_with_data):
+    """Money in minus money out; the refund counts as money in."""
+    user_id, _ = user_with_data
+
+    assert net_flow(user_id, date(2026, 10, 1), date(2026, 11, 1)) == -60
+
+
+def test_net_flow_can_be_limited_to_one_account(user_with_data):
+    """Passing an account id counts only that account; an unknown account counts nothing."""
+    user_id, tag = user_with_data
+    window = (date(2026, 10, 1), date(2026, 11, 1))
+
+    assert net_flow(user_id, *window, f"acc-{tag}") == net_flow(user_id, *window)
+    assert net_flow(user_id, *window, "not-an-account") == 0
+
+
+def test_net_flow_for_one_account_never_reaches_another_users_account(user_with_data):
+    """Another user asking about this user's account id gets nothing."""
+    user_id, tag = user_with_data
+
+    assert net_flow(user_id + 999_999, date(2026, 1, 1), date(2027, 1, 1), f"acc-{tag}") == 0
+
+
+def test_net_flow_separates_two_accounts_of_one_user(user_with_data):
+    """Each account's flow is its own; the unfiltered total is their sum."""
+    user_id, tag = user_with_data
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO plaid_accounts (account_id, item_id, name, account_type, current_balance)"
+            " VALUES (%s, %s, 'Savings', 'depository', 500)",
+            (f"sav-{tag}", f"item-{tag}"),
+        )
+        conn.execute(
+            "INSERT INTO plaid_transactions (transaction_id, account_id, name, amount, date) "
+            "VALUES (%s, %s, 'Transfer in', -250, %s)",
+            (f"xfer-{tag}", f"sav-{tag}", date(2026, 10, 15)),
+        )
+    window = (date(2026, 10, 1), date(2026, 11, 1))
+
+    assert net_flow(user_id, *window, f"sav-{tag}") == 250
+    assert net_flow(user_id, *window, f"acc-{tag}") == -60
+    assert net_flow(user_id, *window) == 190
+
+
+def test_analytics_never_include_other_users(user_with_data):
+    """Another user id sees nothing."""
+    user_id, _ = user_with_data
+    other = user_id + 999_999
+
+    assert category_totals(other, date(2026, 1, 1), date(2027, 1, 1)) == {}
+    assert merchant_totals(other, date(2026, 1, 1), date(2027, 1, 1), 5) == []
+    assert net_flow(other, date(2026, 1, 1), date(2027, 1, 1)) == 0
+
+
+def test_load_transactions_filters_by_category(user_with_data):
+    """Only the requested category comes back, and the limit applies after the filter."""
+    user_id, _ = user_with_data
+
+    assert [t.name for t in load_transactions(user_id, category="FOOD_DINING")] == [
+        "refund",
+        "lunch",
+        "coffee",
+    ]
+    assert [t.name for t in load_transactions(user_id, category="FOOD_DINING", limit=1)] == [
+        "refund"
+    ]
+    assert load_transactions(user_id, category="TRAVEL") == []
+
+
+def test_load_transactions_filters_by_merchant_ignoring_case(user_with_data):
+    """The merchant filter is a case-insensitive 'contains' match."""
+    user_id, _ = user_with_data
+
+    assert [t.name for t in load_transactions(user_id, merchant="GROCER")] == ["groceries"]
+    assert [t.name for t in load_transactions(user_id, merchant="LUN", category="FOOD_DINING")] == [
+        "lunch"
+    ]
+
+
+def test_load_transactions_merchant_wildcards_match_literally(user_with_data):
+    """`%` and `_` in the merchant text are not wildcards."""
+    user_id, _ = user_with_data
+
+    assert load_transactions(user_id, merchant="%") == []
+    assert load_transactions(user_id, merchant="c_ffee") == []
+    assert load_transactions(user_id, merchant="a\\b") == []
+    assert [t.name for t in load_transactions(user_id, merchant="coffee")] == ["coffee"]

@@ -1,0 +1,15 @@
+- description: Chat saves nothing when the user declines a proposal
+  vars:
+    persona: arthur@test.com
+    agent: chat
+    message: Create a $200 monthly entertainment budget.
+    followups: ["No, never mind."]
+    expect_tools: [propose_budget]
+    forbid_tools: [confirm_action]
+    expected: >-
+      In the second message it accepts the decision, says nothing was saved, and does not push.
+  assert:
+    - { type: python, value: "file://graders.py:tools_called" }
+    - { type: python, value: "file://graders.py:tools_not_called" }
+    - { type: python, value: "file://graders.py:nothing_saved" }
+    - { type: python, value: "file://graders.py:goal" }
