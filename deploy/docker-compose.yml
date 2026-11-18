@@ -53,8 +53,9 @@ services:
     environment:
       BIND_ADDRESS: 0.0.0.0:3001 # Listen on all interfaces inside the container.
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      AI_SERVICE_URL: http://ai-service:8000 # 127.0.0.1 inside the container would be the backend itself.
     ports:
-      - "3001:3001" # Reachable from the VPN; the browser calls the API directly.
+      - "127.0.0.1:3001:3001" # VM only; the browser reaches the API through nginx on :80.
     depends_on:
       db:
         condition: service_healthy
@@ -70,10 +71,8 @@ services:
       # lives outside ../frontend.
       additional_contexts:
         deploy: ./services/frontend
-      args:
-        API_URL: ${API_URL:-http://localhost:3001/api} # Baked into the JS at build time.
     ports:
-      - "80:80" # Reachable from the VPN.
+      - "80:80" # Reachable from the VPN. nginx also forwards /api to the backend.
     depends_on:
       - backend
     restart: unless-stopped
