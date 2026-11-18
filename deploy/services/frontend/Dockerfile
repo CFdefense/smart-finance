@@ -23,14 +23,12 @@ RUN npm ci
 # dist/, etc.).
 COPY . .
 
-# The backend URL the BROWSER will call. It is baked into the JavaScript at
-# build time, so changing it means rebuilding this image.
-ARG API_URL=http://localhost:3001/api
-
 # Production build. --define replaces the API_URL constant used in
-# src/app/api-config.ts with this literal string (the inner quotes make it a
-# JavaScript string). Output goes to dist/frontend/browser.
-RUN npx ng build --define "API_URL='${API_URL}'"
+# src/app/api-config.ts with the relative URL /api (the inner quotes make it a
+# JavaScript string). The browser sends /api requests to the host that served
+# the page, and nginx forwards them to the backend, so the image works on any
+# host without a rebuild. Output goes to dist/frontend/browser.
+RUN npx ng build --define "API_URL='/api'"
 
 # ---------- Stage 2: serve ----------
 # Pinned nginx on Alpine: a small, fast web server for static files.

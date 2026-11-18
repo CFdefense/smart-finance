@@ -2,6 +2,8 @@ import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 
+import { API_BASE_URL } from '../api-config';
+
 import type {
   ChatSession,
   ChatSessionWithMessages,
@@ -18,7 +20,7 @@ import type {
 @Injectable({ providedIn: 'root' })
 export class ChatService {
   private readonly http = inject(HttpClient);
-  private readonly baseUrl = 'http://localhost:3001/api/chat';
+  private readonly baseUrl = `${API_BASE_URL}/chat`;
   private readonly options = { withCredentials: true };
 
   /** List the signed-in user's conversations, newest first. */

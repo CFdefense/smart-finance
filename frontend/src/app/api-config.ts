@@ -5,8 +5,10 @@
  * builder replaces with a literal string (the `define` option in angular.json).
  *  - `ng serve` / `ng test` / plain `ng build` use the default from angular.json:
  *    http://localhost:3001/api
- *  - The Docker build overrides it: `ng build --define "API_URL='<url>'"`
- *    (see deploy/services/frontend/Dockerfile).
+ *  - The Docker build sets it to the relative URL `/api` (see
+ *    deploy/services/frontend/Dockerfile). The browser then calls the same host
+ *    that served the page, and nginx forwards /api to the backend
+ *    (deploy/services/frontend/nginx.conf).
  */
 declare const API_URL: string;
 

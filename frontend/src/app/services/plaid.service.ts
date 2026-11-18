@@ -58,7 +58,7 @@ export class PlaidService {
    */
   getNetWorthHistory(): Observable<NetWorthHistoryResponse> {
     return this.http.get<NetWorthHistoryResponse>(
-      'http://localhost:3001/api/accounts/net-worth/history',
+      `${API_BASE_URL}/accounts/net-worth/history`,
       {
         withCredentials: true,
       },
