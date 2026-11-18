@@ -57,12 +57,9 @@ export class PlaidService {
    * withCredentials sends the authentication cookie.
    */
   getNetWorthHistory(): Observable<NetWorthHistoryResponse> {
-    return this.http.get<NetWorthHistoryResponse>(
-      `${API_BASE_URL}/accounts/net-worth/history`,
-      {
-        withCredentials: true,
-      },
-    );
+    return this.http.get<NetWorthHistoryResponse>(`${API_BASE_URL}/accounts/net-worth/history`, {
+      withCredentials: true,
+    });
   }
 
   /**
