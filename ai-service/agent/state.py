@@ -3,7 +3,8 @@ from typing import Annotated, Any
 from langgraph.graph.message import add_messages
 from typing_extensions import TypedDict
 
-from agent.data_models import AnalyzedTransaction, Assessment
+from agent.data_models import AnalyzedTransaction, Assessment, HistoryMessage
+from agent.scope.guard import ScopeDecision
 
 StateUpdate = dict[str, Any]
 """What a graph node returns: the state keys it writes."""
@@ -16,6 +17,9 @@ class ChatState(TypedDict):
     request_id: str  # one id per chat request; the confirm gate compares it with the proposal's
     context: str
     messages: Annotated[list[Any], add_messages]
+    scope_message: str  # the latest user message, as typed, for the scope guard
+    scope_history: list[HistoryMessage]  # every earlier turn, refused ones included
+    scope_decision: ScopeDecision | None
 
 
 class AnalyzerState(TypedDict):

@@ -72,6 +72,23 @@ has 19 tools:
 | Calculate | `spending_by_category`, `spending_by_merchant`, `compare_periods`, `budget_status`, `goal_progress`, `find_recurring_charges`, `can_i_afford` | Exact totals and checks, computed in code (never by the model). Windows are rolling `days`. |
 | Change | `propose_budget`, `propose_rule`, `propose_goal`, `propose_update`, `propose_delete`, `confirm_action` | Create, change and delete budgets, rules and goals, **only after the user agrees**. |
 
+### Scope guard (what the chat refuses)
+
+Every chat message passes a scope guard before the model sees it. The chat answers only about the user's
+own finances and general money education; it refuses everything else, personalized investment or tax
+advice, and jailbreak attempts (prompt or tool extraction, "ignore your instructions", other users' data).
+A message mixing an allowed request with an off-topic one is refused whole.
+
+1. A free, deterministic pre-filter catches obvious jailbreak phrases and empty or over-long messages.
+2. A separate small model (`SCOPE_MODEL`, default `gpt-4.1-mini`) labels the message. It never answers.
+3. A refusal is a fixed text, never written by a model, and the refused turn is dropped from later context.
+4. The chat prompt repeats the scope rules as a backstop.
+
+The guard **fails closed**: if the classifier errors or times out (5 s, one retry), the message is refused
+with an error, not let through. It adds one small-model call (typically a fraction of a second) to every
+message that gets past the pre-filter. There is no switch to turn it off. Tests and evals are described in
+`tests/README.md` ("Scope guard evals").
+
 ### How changes are saved (confirm first)
 
 1. The user asks for a change. The model calls a `propose_*` tool. This validates the request against the

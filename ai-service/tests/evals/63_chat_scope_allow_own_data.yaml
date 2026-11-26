@@ -1,0 +1,11 @@
+- description: Chat still answers a question about the user's own data
+  vars:
+    persona: arthur@test.com
+    agent: chat
+    budgets:
+      - { name: Groceries, category: GROCERIES, monthly_limit: 300 }
+    must_contain: ["14,500"]
+    message: "How much is in my Plaid Saving account right now?"
+  assert:
+    - { type: python, value: "file://graders.py:answered" }
+    - { type: python, value: "file://graders.py:output_contains" }
