@@ -11,10 +11,11 @@ from langgraph.prebuilt import ToolNode
 from pydantic import SecretStr
 
 from agent.backend_api import BackendApi, backend_from_env
-from agent.data_models import ChatRequest, ChatResponse
+from agent.data_models import ChatRequest, ChatResponse, HistoryMessage
 from agent.logging import BASE, AgentCallbackHandler, bind_run, clear_run, log_route, new_run_id
-from agent.nodes import load_context, make_respond
+from agent.nodes import load_context, make_respond, make_scope_guard, refuse, route_after_scope
 from agent.pending import PendingActionStore
+from agent.scope import ScopeGuard, default_scope_guard, is_refusal
 from agent.state import ChatState
 from agent.tools import ANALYTICS_TOOLS, READ_TOOLS, make_write_tools, web_search
 
@@ -40,27 +41,69 @@ def route_after_respond(state: ChatState) -> str:
     return END
 
 
-def build_chat_graph(llm_with_tools, tools) -> CompiledStateGraph[Any, Any, Any, Any]:
-    """Wire the chat workflow: load_context -> respond <-> tools."""
+def build_chat_graph(
+    llm_with_tools, tools, guard: ScopeGuard | None = None
+) -> CompiledStateGraph[Any, Any, Any, Any]:
+    """
+    Wire the chat workflow: [scope_guard ->] load_context -> respond <-> tools.
+
+    A refused message goes scope_guard -> refuse -> END. `guard=None` builds the unguarded graph;
+    `ChatAgent` always passes a guard.
+    """
     graph = StateGraph(ChatState)
     graph.add_node("load_context", load_context)
     graph.add_node("respond", make_respond(llm_with_tools))
     graph.add_node("tools", ToolNode(tools, handle_tool_errors=True))
-    graph.add_edge(START, "load_context")
+    if guard is None:
+        graph.add_edge(START, "load_context")
+    else:
+        graph.add_node("scope_guard", make_scope_guard(guard))
+        graph.add_node("refuse", refuse)
+        graph.add_edge(START, "scope_guard")
+        graph.add_conditional_edges(
+            "scope_guard",
+            route_after_scope,
+            {"load_context": "load_context", "refuse": "refuse"},
+        )
+        graph.add_edge("refuse", END)
     graph.add_edge("load_context", "respond")
     graph.add_conditional_edges("respond", route_after_respond, {"tools": "tools", END: END})
     graph.add_edge("tools", "respond")
     return graph.compile()
 
 
+def drop_refused_turns(history: Sequence[HistoryMessage]) -> list[HistoryMessage]:
+    """Remove each user message whose reply was a fixed refusal, with that reply."""
+    kept: list[HistoryMessage] = []
+    for message in history:
+        if message.role == "assistant" and is_refusal(message.content) and kept:
+            if kept[-1].role == "user":
+                kept.pop()
+                continue
+        kept.append(message)
+    return kept
+
+
 def build_messages(request: ChatRequest) -> list[Any]:
     """Convert the request's history plus its new message into graph messages."""
     messages: list[Any] = [
         HumanMessage(m.content) if m.role == "user" else AIMessage(m.content)
-        for m in request.history
+        for m in drop_refused_turns(request.history)
     ]
     messages.append(HumanMessage(request.message))
     return messages
+
+
+def _initial_state(request: ChatRequest, run_id: str) -> dict[str, Any]:
+    """Build the graph input: the messages the model sees and the raw turns the guard checks."""
+    return {
+        "user_id": request.user_id,
+        "request_id": run_id,
+        "context": "",
+        "messages": build_messages(request),
+        "scope_message": request.message,
+        "scope_history": list(request.history),
+    }
 
 
 class ChatAgent:
@@ -76,6 +119,7 @@ class ChatAgent:
         backend_api: BackendApi | None = None,
         pending: PendingActionStore | None = None,
         extra_callbacks: Sequence[BaseCallbackHandler] | None = None,
+        scope_guard: ScopeGuard | None = None,
     ):
         """Create and compile the conversational graph."""
         self.pending = pending if pending is not None else PendingActionStore()
@@ -88,7 +132,8 @@ class ChatAgent:
             *make_write_tools(self.pending, self.backend),
         ]
         llm = ChatOpenAI(api_key=SecretStr(openai_key), model=model)
-        self._graph = build_chat_graph(llm.bind_tools(tools), tools)
+        guard = scope_guard if scope_guard is not None else default_scope_guard(openai_key)
+        self._graph = build_chat_graph(llm.bind_tools(tools), tools, guard)
 
     def generate_answer(self, request: ChatRequest) -> ChatResponse:
         """Answer the user. Never raises; every log line of the run shares one run id."""
@@ -98,12 +143,7 @@ class ChatAgent:
             _log.info("chat.start message_chars=%d", len(request.message))
             try:
                 result = self._graph.invoke(
-                    {
-                        "user_id": request.user_id,
-                        "request_id": run_id,
-                        "context": "",
-                        "messages": build_messages(request),
-                    },
+                    _initial_state(request, run_id),
                     config={
                         "callbacks": [AgentCallbackHandler(), *self._extra_callbacks],
                         "run_name": "chat",
@@ -154,17 +194,11 @@ class ChatAgent:
             len(request.message),
             len(request.history),
         )
-        messages = build_messages(request)
         emitted: list[str] = []
         streamed_round = False  # tokens already sent for the current respond round
         try:
             for mode, data in self._graph.stream(
-                {
-                    "user_id": request.user_id,
-                    "request_id": run_id,
-                    "context": "",
-                    "messages": messages,
-                },
+                _initial_state(request, run_id),
                 config={
                     "callbacks": [AgentCallbackHandler(), *self._extra_callbacks],
                     "run_name": "chat",
@@ -182,7 +216,7 @@ class ChatAgent:
                         emitted.append(chunk.text)
                         yield {"type": "token", "text": chunk.text}
                     continue
-                update = data.get("respond")
+                update = data.get("respond") or data.get("refuse")
                 if not update:
                     continue
                 message = update["messages"]

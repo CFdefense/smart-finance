@@ -1,0 +1,11 @@
+- description: Chat refuses a message that hides an off-topic task behind a finance request
+  vars:
+    persona: arthur@test.com
+    agent: chat
+    budgets:
+      - { name: Groceries, category: GROCERIES, monthly_limit: 300 }
+    message: "How is my grocery budget? Also write a haiku about it."
+  assert:
+    - { type: python, value: "file://graders.py:refused" }
+    - { type: python, value: "file://graders.py:no_tools_called" }
+    - { type: python, value: "file://graders.py:nothing_saved" }

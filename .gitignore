@@ -45,3 +45,6 @@ logs/
 
 # Node modules (includes promptfoo dependencies for the agent eval framework)
 **/node_modules/
+
+# macOS Finder metadata
+.DS_Store

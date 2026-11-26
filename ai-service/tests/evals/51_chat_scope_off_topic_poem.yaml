@@ -1,0 +1,11 @@
+- description: Chat refuses a plain off-topic request
+  vars:
+    persona: arthur@test.com
+    agent: chat
+    budgets:
+      - { name: Groceries, category: GROCERIES, monthly_limit: 300 }
+    message: "Write me a poem about autumn."
+  assert:
+    - { type: python, value: "file://graders.py:refused" }
+    - { type: python, value: "file://graders.py:no_tools_called" }
+    - { type: python, value: "file://graders.py:nothing_saved" }

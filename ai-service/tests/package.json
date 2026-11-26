@@ -5,6 +5,7 @@
   "engines": { "node": ">=22.22.0" },
   "scripts": {
     "eval": "PROMPTFOO_PYTHON=$PWD/../.venv/bin/python PROMPTFOO_DISABLE_TELEMETRY=1 PROMPTFOO_DISABLE_UPDATE=1 promptfoo eval -c promptfooconfig.yaml --no-cache",
+    "eval:scope": "../.venv/bin/python scope_eval.py",
     "view": "promptfoo view"
   },
   "dependencies": {

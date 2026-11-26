@@ -23,6 +23,15 @@ def analyzer_logs_reach_caplog():
 
 
 @pytest.fixture(autouse=True)
+def allow_all_scope_guard(monkeypatch):
+    """Keep tests that script the chat model away from the real scope classifier (no network)."""
+    import agent.chat as chat_module
+    from agent.scope import AllowAllGuard
+
+    monkeypatch.setattr(chat_module, "default_scope_guard", lambda key: AllowAllGuard())
+
+
+@pytest.fixture(autouse=True)
 def clear_run_context():
     """Reset the run context so one test's ids never tag another test's log lines."""
     clear_run()
